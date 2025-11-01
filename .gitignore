@@ -1,13 +1,35 @@
-.pio
-.cache
-.pioenvs
-.piolibdeps
-.idea
-.vscode
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+.cache/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/
 !.vscode/extensions.json
+
+# PlatformIO project overrides
 /platformio_override.ini
-/build_output
+/build_output/
+
+# OS
 .DS_Store
-.gitignore
-.clang-format
-node_modules
+Thumbs.db
+
+# Build artifacts
+*.o
+*.elf
+*.hex
+*.bin
+*.log
+
+# Misc
+node_modules/

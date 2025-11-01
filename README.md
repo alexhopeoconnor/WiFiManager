@@ -3,6 +3,8 @@
 
 Espressif ESPx WiFi Connection manager with fallback web configuration portal
 
+> **Note**: This is a fork maintained for internal use. The original project is maintained by [tzapu](https://github.com/tzapu/WiFiManager). This fork is optimized for PlatformIO usage.
+
 :warning: This Documentation is out of date, see notes below
 
 <a name="release"></a>
@@ -34,7 +36,7 @@ Works with the [ESP8266 Arduino](https://github.com/esp8266/Arduino) and [ESP32 
 
 ### Known Issues
 
-* Documentation needs to be updated, see [https://github.com/tzapu/WiFiManager/issues/500](https://github.com/tzapu/WiFiManager/issues/500)
+* Documentation needs to be updated, see [upstream issue #500](https://github.com/tzapu/WiFiManager/issues/500)
 -------
 
 ## Contents
@@ -116,26 +118,58 @@ Works with the [ESP8266 Arduino](https://github.com/esp8266/Arduino) and [ESP32 
 ## Quick Start
 
 ### Installing
-You can either install through the Arduino Library Manager or checkout the latest changes or a release from github
 
-#### Install through Library Manager
-__Currently version 0.8+ works with release 2.4.0 or newer of the [ESP8266 core for Arduino](https://github.com/esp8266/Arduino)__
- - in Arduino IDE got to Sketch/Include Library/Manage Libraries
-  ![Manage Libraries](http://i.imgur.com/9BkEBkR.png)
+This fork is optimized for PlatformIO. The recommended installation methods are:
 
- - search for WiFiManager
-  ![WiFiManager package](http://i.imgur.com/18yIai8.png)
+#### Install Using PlatformIO (Recommended)
 
- - click Install and start [using it](#using)
+[PlatformIO](https://platformio.org/) is the recommended ecosystem for IoT development with ESP8266/ESP32.
 
-####  Checkout from github
-__Github version works with release 2.4.0 or newer of the [ESP8266 core for Arduino](https://github.com/esp8266/Arduino)__
-- Checkout library to your Arduino libraries folder
+**Option 1: Using local path (recommended for forks)**
+
+Add to your `platformio.ini`:
+```ini
+[env:your_environment]
+platform = espressif8266  ; or espressif32
+board = d1_mini  ; your board
+framework = arduino
+lib_deps = 
+    path = ../../../WiFiManager  ; Relative path to this library
+```
+
+**Option 2: From Git repository**
+
+Add to your `platformio.ini`:
+```ini
+[env:your_environment]
+platform = espressif8266
+board = d1_mini
+framework = arduino
+lib_deps = 
+    https://github.com/alexhopeoconnor/WiFiManager.git
+```
+
+**Option 3: Using PlatformIO Library Manager**
+
+If you want to use the upstream version from the PlatformIO library registry:
+```ini
+lib_deps = 
+    WiFiManager
+```
+
+#### Arduino IDE Installation
+
+> **Note**: This fork is optimized for PlatformIO. For Arduino IDE usage, consider using the [original library](https://github.com/tzapu/WiFiManager) or install manually.
+
+To use this fork in Arduino IDE:
+1. Clone this repository to your Arduino libraries folder
+2. Rename the folder to `WiFiManager`
+3. Restart Arduino IDE
 
 ### Using
 - Include in your sketch
 ```cpp
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include <WiFiManager.h>
 ```
 
 - Initialize library, in your setup function add, NOTEif you are using non blocking you will make sure you create this in global scope or handle appropriatly , it will not work if in setup and using non blocking mode.
@@ -160,31 +194,7 @@ wifiManager.autoConnect();
 After you write your sketch and start the ESP, it will try to connect to WiFi. If it fails it starts in Access Point mode.
 While in AP mode, connect to it then open a browser to the gateway IP, default 192.168.4.1, configure wifi, save and it should reboot and connect.
 
-Also see [examples](https://github.com/tzapu/WiFiManager/tree/master/examples).
-
-#### Install Using PlatformIO
-
-[PlatformIO](https://platformio.org/) is an emerging ecosystem for IoT development, and 
-is an alternative to using the Arduino IDE. Install `WiFiManager`
-using the platformio [library manager](https://docs.platformio.org/en/latest/librarymanager/index.html#librarymanager) in your editor, 
-or using the [PlatformIO Core CLI](https://docs.platformio.org/en/latest/core/index.html),
-or by adding it to your `platformio.ini` as shown below (recommended approach).
-
-The simplest way is to open the `platformio.ini` file at the root of your project, and `WifiManager` to the common top-level env
-`lib_deps` key like so:
-
-```
-[env]
-lib_deps =
-	WiFiManager
-```
-
-
-```
-[env]
-lib_deps =
-	https://github.com/tzapu/WiFiManager.git
-```
+Also see [examples](examples/) in this repository.
 
 ## Documentation
 
