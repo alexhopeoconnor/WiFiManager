@@ -24,4 +24,8 @@ SOFTWARE.
 
 This is a fork of tzapu/WiFiManager (https://github.com/tzapu/WiFiManager)
 Original work Copyright (c) 2015 tzapu
-This fork maintained for internal use and optimized for PlatformIO
+
+This software has been modified and includes contributions Copyright (c) 2024
+alexhopeoconnor (https://github.com/alexhopeoconnor/WiFiManager). The original
+license and copyright notice above must be preserved in all copies as required
+by the MIT License.
