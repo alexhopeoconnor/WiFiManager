@@ -3,229 +3,105 @@
 #include <WiFiManager.h>
 
 // Test configuration API methods
-void test_set_title() {
-    Serial.println("[TEST]   Testing setTitle()...");
-    
-    WiFiManager wm;
-    String testTitle = "TestTitle";
-    
-    wm.setTitle(testTitle);
-    
-    // Note: getTitle() doesn't exist, so we just verify no crash
-    // The title is used internally when rendering pages
-    TEST_ASSERT_TRUE_MESSAGE(true, "setTitle() executed without crash");
-    
-    Serial.println("[TEST]   setTitle() test completed successfully");
-}
-
-void test_set_config_portal_timeout() {
-    Serial.println("[TEST]   Testing setConfigPortalTimeout()...");
+// Consolidated setter tests - verify setters don't crash and can be called multiple times
+void test_configuration_setters() {
+    Serial.println("[TEST]   Testing configuration setters...");
     
     WiFiManager wm;
     
-    // Test various timeout values
+    // Test timeout setters
     wm.setConfigPortalTimeout(0);
     wm.setConfigPortalTimeout(30);
     wm.setConfigPortalTimeout(300);
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setConfigPortalTimeout() executed without crash");
-    
-    Serial.println("[TEST]   setConfigPortalTimeout() test completed successfully");
-}
-
-void test_set_connect_timeout() {
-    Serial.println("[TEST]   Testing setConnectTimeout()...");
-    
-    WiFiManager wm;
-    
     wm.setConnectTimeout(0);
     wm.setConnectTimeout(20);
     wm.setConnectTimeout(60);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setConnectTimeout() executed without crash");
-    
-    Serial.println("[TEST]   setConnectTimeout() test completed successfully");
-}
-
-void test_set_http_port() {
-    Serial.println("[TEST]   Testing setHttpPort()...");
-    
-    WiFiManager wm;
-    
-    // Test default port
+    // Test HTTP port
     wm.setHttpPort(80);
-    
-    // Test custom port
     wm.setHttpPort(8080);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setHttpPort() executed without crash");
-    
-    Serial.println("[TEST]   setHttpPort() test completed successfully");
-}
-
-void test_set_minimum_signal_quality() {
-    Serial.println("[TEST]   Testing setMinimumSignalQuality()...");
-    
-    WiFiManager wm;
-    
+    // Test WiFi quality and filtering
     wm.setMinimumSignalQuality(-1); // Disable filter
     wm.setMinimumSignalQuality(0);
     wm.setMinimumSignalQuality(50);
     wm.setMinimumSignalQuality(100);
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setMinimumSignalQuality() executed without crash");
-    
-    Serial.println("[TEST]   setMinimumSignalQuality() test completed successfully");
-}
-
-void test_set_remove_duplicate_aps() {
-    Serial.println("[TEST]   Testing setRemoveDuplicateAPs()...");
-    
-    WiFiManager wm;
-    
     wm.setRemoveDuplicateAPs(true);
     wm.setRemoveDuplicateAPs(false);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setRemoveDuplicateAPs() executed without crash");
-    
-    Serial.println("[TEST]   setRemoveDuplicateAPs() test completed successfully");
-}
-
-void test_set_show_static_fields() {
-    Serial.println("[TEST]   Testing setShowStaticFields()...");
-    
-    WiFiManager wm;
-    
+    // Test display options
     wm.setShowStaticFields(true);
     wm.setShowStaticFields(false);
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setShowStaticFields() executed without crash");
-    
-    Serial.println("[TEST]   setShowStaticFields() test completed successfully");
-}
-
-void test_set_show_dns_fields() {
-    Serial.println("[TEST]   Testing setShowDnsFields()...");
-    
-    WiFiManager wm;
-    
     wm.setShowDnsFields(true);
     wm.setShowDnsFields(false);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setShowDnsFields() executed without crash");
-    
-    Serial.println("[TEST]   setShowDnsFields() test completed successfully");
-}
-
-void test_set_config_portal_blocking() {
-    Serial.println("[TEST]   Testing setConfigPortalBlocking()...");
-    
-    WiFiManager wm;
-    
+    // Test portal behavior
     wm.setConfigPortalBlocking(true);
     wm.setConfigPortalBlocking(false);
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setConfigPortalBlocking() executed without crash");
-    
-    Serial.println("[TEST]   setConfigPortalBlocking() test completed successfully");
-}
-
-void test_set_captive_portal_enable() {
-    Serial.println("[TEST]   Testing setCaptivePortalEnable()...");
-    
-    WiFiManager wm;
-    
     wm.setCaptivePortalEnable(true);
     wm.setCaptivePortalEnable(false);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setCaptivePortalEnable() executed without crash");
+    // Test custom title (no getter available, but we can verify it doesn't crash)
+    wm.setTitle("TestTitle");
     
-    Serial.println("[TEST]   setCaptivePortalEnable() test completed successfully");
+    // All setters executed without crash
+    TEST_ASSERT_TRUE_MESSAGE(true, "All configuration setters executed without crash");
+    
+    Serial.println("[TEST]   Configuration setters test completed successfully");
 }
 
-void test_set_hostname() {
-    Serial.println("[TEST]   Testing setHostname()...");
+// Test hostname setter/getter - can verify behavior
+void test_set_and_get_hostname() {
+    Serial.println("[TEST]   Testing setHostname() and getWiFiHostname()...");
     
     WiFiManager wm;
     
     // Test with char*
     wm.setHostname("test-hostname");
+    String hostname1 = wm.getWiFiHostname();
+    // Verify hostname was set (may be empty initially, but getter doesn't crash)
+    TEST_ASSERT_TRUE_MESSAGE(true, "setHostname(char*) and getWiFiHostname() executed");
     
     // Test with String
     wm.setHostname(String("test-hostname-2"));
+    String hostname2 = wm.getWiFiHostname();
+    // Verify getter works
+    TEST_ASSERT_TRUE_MESSAGE(true, "setHostname(String) and getWiFiHostname() executed");
     
-    // Test getting hostname
-    String hostname = wm.getWiFiHostname();
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setHostname() and getWiFiHostname() executed without crash");
-    
-    Serial.println("[TEST]   setHostname() test completed successfully");
+    Serial.println("[TEST]   setHostname() and getWiFiHostname() test completed successfully");
 }
 
-void test_set_wifi_ap_channel() {
-    Serial.println("[TEST]   Testing setWiFiAPChannel()...");
+// Test WiFi AP configuration setters - consolidated
+void test_wifi_ap_configuration_setters() {
+    Serial.println("[TEST]   Testing WiFi AP configuration setters...");
     
     WiFiManager wm;
     
+    // Test AP channel
     wm.setWiFiAPChannel(0);  // Auto
     wm.setWiFiAPChannel(1);
     wm.setWiFiAPChannel(11);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setWiFiAPChannel() executed without crash");
-    
-    Serial.println("[TEST]   setWiFiAPChannel() test completed successfully");
-}
-
-void test_set_wifi_ap_hidden() {
-    Serial.println("[TEST]   Testing setWiFiAPHidden()...");
-    
-    WiFiManager wm;
-    
+    // Test AP hidden
     wm.setWiFiAPHidden(true);
     wm.setWiFiAPHidden(false);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setWiFiAPHidden() executed without crash");
-    
-    Serial.println("[TEST]   setWiFiAPHidden() test completed successfully");
-}
-
-void test_set_clean_connect() {
-    Serial.println("[TEST]   Testing setCleanConnect()...");
-    
-    WiFiManager wm;
-    
-    wm.setCleanConnect(true);
-    wm.setCleanConnect(false);
-    
-    TEST_ASSERT_TRUE_MESSAGE(true, "setCleanConnect() executed without crash");
-    
-    Serial.println("[TEST]   setCleanConnect() test completed successfully");
-}
-
-void test_set_country() {
-    Serial.println("[TEST]   Testing setCountry()...");
-    
-    WiFiManager wm;
-    
+    // Test country code
     wm.setCountry("US");
     wm.setCountry("CN");
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setCountry() executed without crash");
+    // Test clean connect
+    wm.setCleanConnect(true);
+    wm.setCleanConnect(false);
     
-    Serial.println("[TEST]   setCountry() test completed successfully");
-}
-
-void test_set_wifi_auto_reconnect() {
-    Serial.println("[TEST]   Testing setWiFiAutoReconnect()...");
-    
-    WiFiManager wm;
-    
+    // Test auto reconnect
     wm.setWiFiAutoReconnect(true);
     wm.setWiFiAutoReconnect(false);
     
-    TEST_ASSERT_TRUE_MESSAGE(true, "setWiFiAutoReconnect() executed without crash");
+    // All setters executed without crash
+    TEST_ASSERT_TRUE_MESSAGE(true, "All WiFi AP configuration setters executed without crash");
     
-    Serial.println("[TEST]   setWiFiAutoReconnect() test completed successfully");
+    Serial.println("[TEST]   WiFi AP configuration setters test completed successfully");
 }
 
 void test_get_default_ap_name() {

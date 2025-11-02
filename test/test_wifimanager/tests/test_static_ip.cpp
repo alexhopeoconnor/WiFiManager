@@ -3,6 +3,7 @@
 #include <WiFiManager.h>
 
 // Test static IP configuration
+// Test AP static IP configuration - verifies IP is actually applied
 void test_set_ap_static_ip_config() {
     Serial.println("[TEST]   Testing setAPStaticIPConfig()...");
     
@@ -15,20 +16,17 @@ void test_set_ap_static_ip_config() {
     // Set AP static IP
     wm.setAPStaticIPConfig(ip, gw, sn);
     
-    // Verify no crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "setAPStaticIPConfig() executed without crash");
-    
-    // Start portal and verify IP is set
     // Use non-blocking mode
     wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
+    // Start portal and verify IP is actually set
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     delay(200); // Give time for IP to be configured
     
+    // Verify AP IP matches what we configured
     IPAddress apIP = WiFi.softAPIP();
     TEST_ASSERT_EQUAL(ip, apIP);
     
@@ -37,26 +35,9 @@ void test_set_ap_static_ip_config() {
     Serial.println("[TEST]   setAPStaticIPConfig() test completed successfully");
 }
 
-void test_set_sta_static_ip_config() {
-    Serial.println("[TEST]   Testing setSTAStaticIPConfig()...");
-    
-    WiFiManager wm;
-    
-    IPAddress ip(192, 168, 1, 100);
-    IPAddress gw(192, 168, 1, 1);
-    IPAddress sn(255, 255, 255, 0);
-    
-    // Set STA static IP
-    wm.setSTAStaticIPConfig(ip, gw, sn);
-    
-    // Verify no crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "setSTAStaticIPConfig() executed without crash");
-    
-    Serial.println("[TEST]   setSTAStaticIPConfig() test completed successfully");
-}
-
-void test_set_sta_static_ip_config_with_dns() {
-    Serial.println("[TEST]   Testing setSTAStaticIPConfig() with DNS...");
+// Test STA static IP configuration - consolidated
+void test_sta_static_ip_configuration() {
+    Serial.println("[TEST]   Testing STA static IP configuration...");
     
     WiFiManager wm;
     
@@ -65,48 +46,20 @@ void test_set_sta_static_ip_config_with_dns() {
     IPAddress sn(255, 255, 255, 0);
     IPAddress dns(8, 8, 8, 8);
     
-    // Set STA static IP with DNS
+    // Test setSTAStaticIPConfig without DNS
+    wm.setSTAStaticIPConfig(ip, gw, sn);
+    
+    // Test setSTAStaticIPConfig with DNS
     wm.setSTAStaticIPConfig(ip, gw, sn, dns);
     
     // Verify no crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "setSTAStaticIPConfig() with DNS executed without crash");
+    TEST_ASSERT_TRUE_MESSAGE(true, "STA static IP configuration setters executed without crash");
     
-    Serial.println("[TEST]   setSTAStaticIPConfig() with DNS test completed successfully");
+    Serial.println("[TEST]   STA static IP configuration test completed successfully");
 }
 
-void test_show_static_fields() {
-    Serial.println("[TEST]   Testing setShowStaticFields()...");
-    
-    WiFiManager wm;
-    
-    // Test enabling static fields
-    wm.setShowStaticFields(true);
-    
-    // Test disabling static fields
-    wm.setShowStaticFields(false);
-    
-    // Verify no crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "setShowStaticFields() executed without crash");
-    
-    Serial.println("[TEST]   setShowStaticFields() test completed successfully");
-}
-
-void test_show_dns_fields() {
-    Serial.println("[TEST]   Testing setShowDnsFields()...");
-    
-    WiFiManager wm;
-    
-    // Test enabling DNS fields
-    wm.setShowDnsFields(true);
-    
-    // Test disabling DNS fields
-    wm.setShowDnsFields(false);
-    
-    // Verify no crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "setShowDnsFields() executed without crash");
-    
-    Serial.println("[TEST]   setShowDnsFields() test completed successfully");
-}
+// Note: test_show_static_fields and test_show_dns_fields removed - 
+// already covered in test_configuration_setters() in test_configuration.cpp
 
 void test_ap_static_ip_application() {
     Serial.println("[TEST]   Testing AP static IP application...");

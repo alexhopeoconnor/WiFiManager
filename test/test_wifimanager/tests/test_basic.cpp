@@ -39,16 +39,19 @@ void test_reset_settings() {
     Serial.println("[TEST]   resetSettings() test completed successfully");
 }
 
-// Test disconnect without erasing credentials
+// Test disconnect - verify it doesn't crash and can be called multiple times
 void test_disconnect() {
     Serial.println("[TEST]   Testing disconnect()...");
     
     WiFiManager wm;
     
     // Disconnect should not crash even if not connected
-    wm.disconnect();
+    bool result1 = wm.disconnect();
     
-    // Disconnect returns true/false, just verify no crash
+    // Can be called multiple times safely
+    bool result2 = wm.disconnect();
+    
+    // Verify no crash (results may be true/false depending on WiFi state)
     TEST_ASSERT_TRUE_MESSAGE(true, "disconnect() executed without crash");
     
     Serial.println("[TEST]   disconnect() test completed successfully");

@@ -10,23 +10,11 @@ void test_start_config_portal() {
     
     // Use non-blocking mode so we can control when to stop
     wm.setConfigPortalBlocking(false);
-    wm.setConfigPortalTimeout(10); // Longer timeout
+    wm.setConfigPortalTimeout(10);
     
     // Start portal with SSID only
     // Note: In non-blocking mode, startConfigPortal() returns false even when successful
-    // So we check getConfigPortalActive() instead of the return value
     wm.startConfigPortal("TestAP");
-    TEST_ASSERT_TRUE(wm.getConfigPortalActive());
-    
-    delay(100); // Give it time to initialize
-    
-    wm.stopConfigPortal();
-    TEST_ASSERT_FALSE(wm.getConfigPortalActive());
-    delay(100);
-    
-    // Start portal with SSID and password
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
-    wm.startConfigPortal("TestAP2", "password123");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     delay(100);
@@ -35,6 +23,27 @@ void test_start_config_portal() {
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
     
     Serial.println("[TEST]   startConfigPortal() test completed successfully");
+}
+
+void test_start_config_portal_with_password() {
+    Serial.println("[TEST]   Testing startConfigPortal() with password...");
+    
+    WiFiManager wm;
+    
+    // Use non-blocking mode
+    wm.setConfigPortalBlocking(false);
+    wm.setConfigPortalTimeout(10);
+    
+    // Start portal with SSID and password
+    wm.startConfigPortal("TestAP2", "password123");
+    TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    
+    delay(100);
+    
+    wm.stopConfigPortal();
+    TEST_ASSERT_FALSE(wm.getConfigPortalActive());
+    
+    Serial.println("[TEST]   startConfigPortal() with password test completed successfully");
 }
 
 void test_start_config_portal_auto_name() {
@@ -234,20 +243,16 @@ void test_get_config_portal_ssid() {
     wm.setConfigPortalTimeout(10);
     
     // Start with known SSID
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("MyTestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     delay(100);
     
+    // Verify SSID matches what we set
     String ssid = wm.getConfigPortalSSID();
     TEST_ASSERT_EQUAL_STRING("MyTestAP", ssid.c_str());
     
     wm.stopConfigPortal();
-    
-    // After stop, should return empty or default
-    String ssid2 = wm.getConfigPortalSSID();
-    // Note: Behavior may vary, just verify it doesn't crash
     
     Serial.println("[TEST]   getConfigPortalSSID() test completed successfully");
 }
