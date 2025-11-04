@@ -61,7 +61,7 @@
 // #define esp32autoreconnect    // implement esp32 autoreconnect event listener kludge, @DEPRECATED
 // autoreconnect is WORKING https://github.com/espressif/arduino-esp32/issues/653#issuecomment-405604766
 
-#define WM_WEBSERVERSHIM      // use webserver shim lib
+// WM_WEBSERVERSHIM no longer needed - using ESPAsyncWebServer
 
 #define WM_G(string_literal)  (String(FPSTR(string_literal)).c_str())
 
@@ -71,7 +71,7 @@
       #include "user_interface.h"
     }
     #include <ESP8266WiFi.h>
-    #include <ESP8266WebServer.h>
+    #include <ESPAsyncTCP.h>
 
     #ifdef WM_MDNS
         #include <ESP8266mDNS.h>
@@ -85,19 +85,10 @@
     #include <WiFi.h>
     #include <esp_wifi.h>  
     #include <Update.h>
+    #include <AsyncTCP.h>
     
     #define WIFI_getChipId() (uint32_t)ESP.getEfuseMac()
     #define WM_WIFIOPEN   WIFI_AUTH_OPEN
-
-    #ifndef WEBSERVER_H
-        #ifdef WM_WEBSERVERSHIM
-            #include <WebServer.h>
-        #else
-            #include <ESP8266WebServer.h>
-            // Forthcoming official ? probably never happening
-            // https://github.com/esp8266/ESPWebServer
-        #endif
-    #endif
 
     #ifdef WM_ERASE_NVS
        #include <nvs.h>
@@ -130,6 +121,7 @@
 #endif
 
 #include <DNSServer.h>
+#include <ESPAsyncWebServer.h>
 #include <memory>
 #include <unordered_map>
 #include <string>
@@ -512,32 +504,26 @@ class WiFiManager
 
 
     std::unique_ptr<DNSServer>        dnsServer;
-
-    #if defined(ESP32) && defined(WM_WEBSERVERSHIM)
-        using WM_WebServer = WebServer;
-    #else
-        using WM_WebServer = ESP8266WebServer;
-    #endif
-    
-    std::unique_ptr<WM_WebServer> server;
+    std::unique_ptr<AsyncWebServer>  server;
 
   public:
-  // Define WiFiManagerRequestArgs here after WM_WebServer is available
+  // Define WiFiManagerRequestArgs here after AsyncWebServer is available
   class WiFiManagerRequestArgs {
   public:
       std::unordered_map<std::string, std::string> args;
       
-      // Constructor - builds from WM_WebServer (ESP8266WebServer or WebServer)
-      WiFiManagerRequestArgs(WM_WebServer* server) {
-          if (server) {
-              for (uint8_t i = 0; i < server->args(); i++) {
-                  String argName = server->argName(i);
-                  String argValue = server->arg(i);
-                  args[std::string(argName.c_str())] = std::string(argValue.c_str());
+      // Constructor - builds from AsyncWebServerRequest
+      WiFiManagerRequestArgs(AsyncWebServerRequest* request) {
+          if (request) {
+              size_t paramCount = request->params();
+              for (size_t i = 0; i < paramCount; i++) {
+                  const AsyncWebParameter* p = request->getParam(i);
+                  args[std::string(p->name().c_str())] = std::string(p->value().c_str());
               }
           }
       }
       
+      // Legacy constructor for backward compatibility (if needed during transition)
       WiFiManagerRequestArgs() {}
       
       // Check if argument exists
@@ -608,9 +594,18 @@ class WiFiManager
     unsigned long _lastscan               = 0; // ms for timing wifi scans
     unsigned long _startscan              = 0; // ms for timing wifi scans
     unsigned long _startconn              = 0; // ms for timing wifi connects
+    
+    // async reboot/abort scheduling
+    bool          _rebootScheduled        = false; // flag for scheduled reboot
+    unsigned long _rebootTime             = 0; // ms when reboot should occur
+    bool          _abortScheduled        = false; // flag for scheduled abort
+    unsigned long _abortTime              = 0; // ms when abort should occur
 
     // defaults
     const uint8_t  DNS_PORT               = 53;
+    const unsigned long REBOOT_DELAY_MS   = 1000; // delay before reboot after response sent
+    const unsigned long EXIT_DELAY_MS     = 2000; // delay before abort after response sent
+    const unsigned long ERASE_REBOOT_DELAY_MS = 2000; // delay before reboot after erase response sent
     String        _apName                 = "no-net";
     String        _apPassword             = "";
     String        _ssid                   = ""; // var temp ssid
@@ -742,33 +737,30 @@ protected:
 
     // webserver handlers
 public:
-    void          handleNotFound();
+    void          handleNotFound(AsyncWebServerRequest *request);
 protected:
-    void          HTTPSend(const String &content);
-    void          handleRoot();
-    void          handleWifi(boolean scan);
-    void          handleWifiSave();
-    void          handleInfo();
-    void          handleReset();
-
-    void          handleExit();
-    void          handleClose();
-    // void          handleErase();
-    void          handleErase(boolean opt);
-    void          handleParam();
-    void          handleWiFiStatus();
-    void          handleRequest();
-    void          handleParamSave();
+    void          handleRoot(AsyncWebServerRequest *request);
+    void          handleWifi(AsyncWebServerRequest *request, boolean scan);
+    void          handleWifiSave(AsyncWebServerRequest *request);
+    void          handleInfo(AsyncWebServerRequest *request);
+    void          handleReset(AsyncWebServerRequest *request);
+    void          handleExit(AsyncWebServerRequest *request);
+    void          handleClose(AsyncWebServerRequest *request);
+    void          handleErase(AsyncWebServerRequest *request, boolean opt);
+    void          handleParam(AsyncWebServerRequest *request);
+    void          handleWiFiStatus(AsyncWebServerRequest *request);
+    void          handleRequest(AsyncWebServerRequest *request);
+    void          handleParamSave(AsyncWebServerRequest *request);
     void          doParamSave(WiFiManagerRequestArgs requestArgs);
 
-    boolean       captivePortal();
+    boolean       captivePortal(AsyncWebServerRequest *request);
     boolean       configPortalHasTimeout();
     uint8_t       processConfigPortal();
     void          stopCaptivePortal();
 	// OTA Update handler
-	void          handleUpdate();
-	void          handleUpdating();
-	void          handleUpdateDone();
+	void          handleUpdate(AsyncWebServerRequest *request);
+	void          handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
+	void          handleUpdateDone(AsyncWebServerRequest *request);
 
 
     // wifi platform abstractions
