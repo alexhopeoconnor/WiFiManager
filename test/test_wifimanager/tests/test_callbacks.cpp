@@ -29,8 +29,10 @@ void pre_save_config_callback() {
     pre_save_config_callback_fired = true;
 }
 
-void save_params_callback() {
+void save_params_callback(WiFiManager::WiFiManagerRequestArgs requestArgs) {
     save_params_callback_fired = true;
+    // Test that we can access request args
+    (void)requestArgs; // Suppress unused variable warning
 }
 
 void pre_save_params_callback() {

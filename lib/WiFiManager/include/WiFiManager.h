@@ -131,6 +131,8 @@
 
 #include <DNSServer.h>
 #include <memory>
+#include <unordered_map>
+#include <string>
 
 
 // Include wm strings vars
@@ -195,6 +197,8 @@
 #define WFM_NO_LABEL 0
 #define WFM_LABEL_DEFAULT 1
 
+// WiFiManagerRequestArgs is defined as a nested class inside WiFiManager (after WM_WebServer is defined)
+
 class WiFiManagerParameter {
   public:
     /** 
@@ -247,6 +251,9 @@ class WiFiManagerParameter {
 class WiFiManager
 {
   public:
+    // Forward declare nested class - defined later after WM_WebServer is available
+    class WiFiManagerRequestArgs;
+    
     WiFiManager(Print& consolePort);
     WiFiManager();
     ~WiFiManager();
@@ -319,7 +326,7 @@ class WiFiManager
     void          setPreSaveParamsCallback( std::function<void()> func );
 
     //called when saving either params-in-wifi or params page
-    void          setSaveParamsCallback( std::function<void()> func );
+    void          setSaveParamsCallback( std::function<void(WiFiManagerRequestArgs)> func );
 
     //called just before doing OTA update
     void          setPreOtaUpdateCallback( std::function<void()> func );
@@ -514,6 +521,70 @@ class WiFiManager
     
     std::unique_ptr<WM_WebServer> server;
 
+  public:
+  // Define WiFiManagerRequestArgs here after WM_WebServer is available
+  class WiFiManagerRequestArgs {
+  public:
+      std::unordered_map<std::string, std::string> args;
+      
+      // Constructor - builds from WM_WebServer (ESP8266WebServer or WebServer)
+      WiFiManagerRequestArgs(WM_WebServer* server) {
+          if (server) {
+              for (uint8_t i = 0; i < server->args(); i++) {
+                  String argName = server->argName(i);
+                  String argValue = server->arg(i);
+                  args[std::string(argName.c_str())] = std::string(argValue.c_str());
+              }
+          }
+      }
+      
+      WiFiManagerRequestArgs() {}
+      
+      // Check if argument exists
+      bool hasArg(const char* name) const {
+          return args.find(std::string(name)) != args.end();
+      }
+      
+      bool hasArg(const String& name) const {
+          return hasArg(name.c_str());
+      }
+      
+      // Get argument value as String
+      String getArg(const char* name, const String& defaultValue = "") const {
+          auto it = args.find(std::string(name));
+          if (it != args.end()) {
+              return String(it->second.c_str());
+          }
+          return defaultValue;
+      }
+      
+      String getArg(const String& name, const String& defaultValue = "") const {
+          return getArg(name.c_str(), defaultValue);
+      }
+      
+      // Type conversion helpers
+      int getArgAsInt(const char* name, int defaultValue = 0) const {
+          String value = getArg(name);
+          return value.length() > 0 ? value.toInt() : defaultValue;
+      }
+      
+      float getArgAsFloat(const char* name, float defaultValue = 0.0f) const {
+          String value = getArg(name);
+          return value.length() > 0 ? value.toFloat() : defaultValue;
+      }
+      
+      bool getArgAsBool(const char* name, bool defaultValue = false) const {
+          String value = getArg(name);
+          if (value.length() == 0) return defaultValue;
+          return value == "1" || value.equalsIgnoreCase("true") || 
+                 value.equalsIgnoreCase("on") || value.equalsIgnoreCase("yes");
+      }
+      
+      size_t count() const {
+          return args.size();
+      }
+  };
+
   protected:
     // vars
     std::vector<uint8_t> _menuIds;
@@ -688,7 +759,7 @@ protected:
     void          handleWiFiStatus();
     void          handleRequest();
     void          handleParamSave();
-    void          doParamSave();
+    void          doParamSave(WiFiManagerRequestArgs requestArgs);
 
     boolean       captivePortal();
     boolean       configPortalHasTimeout();
@@ -841,7 +912,7 @@ protected:
     std::function<void()> _savewificallback;
     std::function<void()> _presavewificallback;
     std::function<void()> _presaveparamscallback;
-    std::function<void()> _saveparamscallback;
+    std::function<void(WiFiManagerRequestArgs)> _saveparamscallback;
     std::function<void()> _resetcallback;
     std::function<void()> _preotaupdatecallback;
     std::function<void()> _configportaltimeoutcallback;

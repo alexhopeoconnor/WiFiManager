@@ -1826,6 +1826,9 @@ void WiFiManager::handleWifiSave() {
   #endif
   handleRequest();
 
+  // BUILD REQUEST ARGS STRUCT EARLY - captures all arguments while request is active
+  WiFiManagerRequestArgs requestArgs(server.get());
+
   //SAVE/connect here
   _ssid = server->arg(F("s")).c_str();
   _pass = server->arg(F("p")).c_str();
@@ -1888,7 +1891,7 @@ void WiFiManager::handleWifiSave() {
     _presavewificallback();  // @CALLBACK 
   }
 
-  if(_paramsInWifi) doParamSave();
+  if(_paramsInWifi) doParamSave(requestArgs);
 
   String page;
 
@@ -1924,7 +1927,10 @@ void WiFiManager::handleParamSave() {
   #endif
   handleRequest();
 
-  doParamSave();
+  // BUILD REQUEST ARGS STRUCT
+  WiFiManagerRequestArgs requestArgs(server.get());
+
+  doParamSave(requestArgs);
 
   String page = getHTTPHead(FPSTR(S_titleparamsaved), FPSTR(C_param)); // @token titleparamsaved
   page += FPSTR(HTTP_PARAMSAVED);
@@ -1938,7 +1944,7 @@ void WiFiManager::handleParamSave() {
   #endif
 }
 
-void WiFiManager::doParamSave(){
+void WiFiManager::doParamSave(WiFiManagerRequestArgs requestArgs){
    // @todo use new callback for before paramsaves, is this really needed?
   if ( _presaveparamscallback != NULL) {
     _presaveparamscallback();  // @CALLBACK
@@ -1958,13 +1964,38 @@ void WiFiManager::doParamSave(){
         #endif
         break; // @todo might not be needed anymore
       }
-      //read parameter from server
-      String name = (String)FPSTR(S_parampre)+(String)i;
+      
       String value;
-      if(server->hasArg(name)) {
-        value = server->arg(name);
+      
+      // Check if this is a custom HTML parameter (ID is null)
+      if (_params[i]->getID() == nullptr) {
+        // For custom HTML parameters, try to get from RequestArgs
+        String name = (String)FPSTR(S_parampre)+(String)i;
+        
+        // Try RequestArgs first
+        if (requestArgs.hasArg(name)) {
+          value = requestArgs.getArg(name);
+        } else {
+          // Fallback to server for now (will be removed when DeviceFramework uses RequestArgs)
+          if(server->hasArg(name)) {
+            value = server->arg(name);
+          } else {
+            continue; // Skip if not found
+          }
+        }
       } else {
-        value = server->arg(_params[i]->getID());
+        // Regular parameter - use existing logic
+        String name = (String)FPSTR(S_parampre)+(String)i;
+        if(server->hasArg(name)) {
+          value = server->arg(name);
+        } else {
+          value = server->arg(_params[i]->getID());
+        }
+        
+        // Also check RequestArgs as fallback for custom params that might share ID
+        if (value.length() == 0 && requestArgs.hasArg(_params[i]->getID())) {
+          value = requestArgs.getArg(_params[i]->getID());
+        }
       }
 
       //store it in params array
@@ -1979,7 +2010,7 @@ void WiFiManager::doParamSave(){
   }
 
    if ( _saveparamscallback != NULL) {
-    _saveparamscallback();  // @CALLBACK
+    _saveparamscallback(requestArgs);  // @CALLBACK - PASS RequestArgs
   }
    
 }
@@ -2869,9 +2900,9 @@ void WiFiManager::setConfigResetCallback( std::function<void()> func ) {
 /**
  * setSaveParamsCallback, set a save params callback on params save in wifi or params pages
  * @access public
- * @param {[type]} void (*func)(void)
+ * @param {[type]} void (*func)(WiFiManagerRequestArgs)
  */
-void WiFiManager::setSaveParamsCallback( std::function<void()> func ) {
+void WiFiManager::setSaveParamsCallback( std::function<void(WiFiManagerRequestArgs)> func ) {
   _saveparamscallback = func;
 }
 
