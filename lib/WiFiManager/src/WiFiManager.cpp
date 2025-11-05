@@ -11,6 +11,7 @@
  */
 
 #include "WiFiManager.h"
+#include "templates/WiFiPollingJS.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -1381,7 +1382,14 @@ void WiFiManager::handleRoot(AsyncWebServerRequest *request) {
 void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
   #ifdef WM_DEBUG_LEVEL
   DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Wifi"));
+  DEBUG_WM(WM_DEBUG_DEV, F("handleWifi called, scan="), scan ? "true" : "false");
   #endif
+  if (captivePortal(request)) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_DEV, F("Captive portal redirect"));
+    #endif
+    return; // If captive portal redirect instead of displaying the page
+  }
   handleRequest(request);
   String page = getHTTPHead(FPSTR(S_titlewifi), FPSTR(C_wifi)); // @token titlewifi
   if (scan) {
@@ -1440,112 +1448,29 @@ void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
   if(_showBack) page += FPSTR(HTTP_BACKBTN);
   reportStatus(page);
   
-  // Add JavaScript for AJAX polling
-  page += F("<script>");
-  page += F("let scanPollInterval = null;");
-  page += F("let isPolling = false;");
-  page += F("");
-  page += F("function refreshScan() {");
-  page += F("  // Trigger scan via refresh parameter");
-  page += F("  fetch('/wifi?refresh=1', {method: 'GET'}).then(() => {");
-  page += F("    startPolling();");
-  page += F("  });");
-  page += F("}");
-  page += F("");
-  page += F("function startPolling() {");
-  page += F("  if(isPolling) return;");
-  page += F("  isPolling = true;");
-  page += F("  document.getElementById('refresh-btn').disabled = true;");
-  page += F("  document.getElementById('refresh-btn').textContent = 'Scanning...';");
-  page += F("  updateScanStatus();");
-  page += F("  scanPollInterval = setInterval(updateScanStatus, 1000);");
-  page += F("}");
-  page += F("");
-  page += F("function stopPolling() {");
-  page += F("  if(scanPollInterval) {");
-  page += F("    clearInterval(scanPollInterval);");
-  page += F("    scanPollInterval = null;");
-  page += F("  }");
-  page += F("  isPolling = false;");
-  page += F("  document.getElementById('refresh-btn').disabled = false;");
-  page += F("  document.getElementById('refresh-btn').textContent = 'Refresh';");
-  page += F("}");
-  page += F("");
-  page += F("function updateScanStatus() {");
-  page += F("  fetch('/wifi/scanstatus')");
-  page += F("    .then(response => response.json())");
-  page += F("    .then(data => {");
-  page += F("      if(data.scanning) {");
-  page += F("        // Still scanning, show status");
-  page += F("        document.getElementById('scan-results').innerHTML = 'Scanning for networks...<br/><br/>';");
-  page += F("      } else {");
-  page += F("        // Scan complete, update network list");
-  page += F("        stopPolling();");
-  page += F("        updateNetworkList(data);");
-  page += F("      }");
-  page += F("    })");
-  page += F("    .catch(error => {");
-  page += F("      console.error('Error polling scan status:', error);");
-  page += F("      stopPolling();");
-  page += F("    });");
-  page += F("}");
-  page += F("");
-  page += F("function updateNetworkList(data) {");
-  page += F("  let html = '';");
-  page += F("  if(data.count === 0) {");
-  page += F("    html = 'No networks found. Refresh to scan again.<br/><br/>';");
-  page += F("  } else if(data.networks && data.networks.length > 0) {");
-  page += F("    data.networks.forEach(function(network) {");
-  page += F("      // Match existing HTML structure from getScanItemOut()");
-  page += F("      let qualityIcon = getQualityIcon(network.quality);");
-  page += F("      let qualityPercent = network.quality + '%';");
-  page += F("      let encrypted = network.enc_type !== 0 ? '<span class=\"l\">🔒</span>' : '';");
-  page += F("      html += '<div><a href=\"#p\" onclick=\"c(this)\" data-ssid=\"' + escapeHtml(network.ssid) + '\">' + escapeHtml(network.ssid) + '</a>';");
-  page += F("      html += '<div role=\"img\" aria-label=\"' + qualityPercent + '\" title=\"' + qualityPercent + '\" class=\"q q-' + network.quality + '\"></div>';");
-  page += F("      html += '<div class=\"q\">' + qualityPercent + '</div>';");
-  page += F("      html += encrypted;");
-  page += F("      html += '</div>';");
-  page += F("    });");
-  page += F("  }");
-  page += F("  document.getElementById('scan-results').innerHTML = html;");
-  page += F("}");
-  page += F("");
-  page += F("function escapeHtml(text) {");
-  page += F("  const map = {");
-  page += F("    '&': '&amp;',");
-  page += F("    '<': '&lt;',");
-  page += F("    '>': '&gt;',");
-  page += F("    '\"': '&quot;',");
-  page += F("    \"'\": '&#039;'");
-  page += F("  };");
-  page += F("  return text.replace(/[&<>\"']/g, m => map[m]);");
-  page += F("}");
-  page += F("");
-  page += F("function getQualityIcon(quality) {");
-  page += F("  if(quality >= 75) return '▂▄▆█';");
-  page += F("  if(quality >= 50) return '▂▄▆▁';");
-  page += F("  if(quality >= 25) return '▂▄▁▁';");
-  page += F("  return '▂▁▁▁';");
-  page += F("}");
-  page += F("");
-  page += F("// Check if scan is in progress on page load");
-  page += F("window.addEventListener('load', function() {");
-  page += F("  fetch('/wifi/scanstatus')");
-  page += F("    .then(response => response.json())");
-  page += F("    .then(data => {");
-  page += F("      if(data.scanning) {");
-  page += F("        startPolling();");
-  page += F("      }");
-  page += F("    });");
-  page += F("});");
-  page += F("</script>");
+  // TODO: Known issue - Adding WIFI_POLLING_JS causes silent failure (empty response)
+  // This is likely due to:
+  // 1. String size limit: Page is already ~9-10KB, adding ~2.5KB JS may exceed ESPAsyncWebServer limits
+  // 2. Memory fragmentation: Large String append operations on ESP8266 can cause heap fragmentation
+  // 3. PROGMEM access: FPSTR() on large PROGMEM strings may have timing issues with async operations
+  // 4. Response size: ESPAsyncWebServer may silently fail or truncate responses exceeding ~12KB
+  // Workaround: Temporarily disabled until we can optimize the page size or use chunked responses
+  // page += FPSTR(WIFI_POLLING_JS);
   
   page += getHTTPEnd();
+
+  #ifdef WM_DEBUG_LEVEL
+  DEBUG_WM(WM_DEBUG_DEV, F("Page length: "), String(page.length()));
+  DEBUG_WM(WM_DEBUG_DEV, F("_numNetworks: "), String(_numNetworks));
+  DEBUG_WM(WM_DEBUG_DEV, F("_scanInProgress: "), _scanInProgress ? "true" : "false");
+  DEBUG_WM(WM_DEBUG_DEV, F("_lastscan: "), String(_lastscan));
+  DEBUG_WM(WM_DEBUG_DEV, F("About to send response"));
+  #endif
 
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
 
   #ifdef WM_DEBUG_LEVEL
-  DEBUG_WM(WM_DEBUG_DEV, F("Sent config page"));
+  DEBUG_WM(WM_DEBUG_DEV, F("Response sent"));
   #endif
 }
 
@@ -1615,16 +1540,8 @@ bool WiFiManager::WiFi_scanNetworks(){
   return WiFi_scanNetworks(false);
 }
  
-bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime,bool async){
-    // async parameter ignored - always async now
-    return WiFi_scanNetworks(millis()-_lastscan > cachetime);
-}
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime){
     return WiFi_scanNetworks(millis()-_lastscan > cachetime);
-}
-bool WiFiManager::WiFi_scanNetworks(bool force,bool async){
-    // async parameter ignored - always async now
-    return WiFi_scanNetworks(force);
 }
 bool WiFiManager::WiFi_scanNetworks(bool force){
     #ifdef WM_DEBUG_LEVEL
@@ -2742,8 +2659,21 @@ boolean WiFiManager::captivePortal(AsyncWebServerRequest *request) {
     #ifdef WM_DEBUG_LEVEL
     DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Request redirected to captive portal"));
     DEBUG_WM(WM_DEBUG_DEV, "serverLoc " + serverLoc);
+    DEBUG_WM(WM_DEBUG_DEV, "Original URL " + request->url());
     #endif
-    request->redirect((String)F("http://") + serverLoc);
+    // Preserve the original path in the redirect
+    String redirectUrl = (String)F("http://") + serverLoc + request->url();
+    if (request->params() > 0) {
+      redirectUrl += F("?");
+      for (size_t i = 0; i < request->params(); i++) {
+        if (i > 0) redirectUrl += F("&");
+        redirectUrl += request->getParam(i)->name() + F("=") + request->getParam(i)->value();
+      }
+    }
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_DEV, "Redirect URL " + redirectUrl);
+    #endif
+    request->redirect(redirectUrl);
     return true;
   }
   return false;
