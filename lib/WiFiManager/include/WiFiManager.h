@@ -256,11 +256,11 @@ class WiFiManager
     boolean       autoConnect(char const *apName, char const *apPassword = NULL);
 
     //manually start the config portal, autoconnect does this automatically on connect failure
-    boolean       startConfigPortal(); // auto generates apname
-    boolean       startConfigPortal(char const *apName, char const *apPassword = NULL);
+    void          startConfigPortal(); // auto generates apname
+    void          startConfigPortal(char const *apName, char const *apPassword = NULL);
 
-    //manually stop the config portal if started manually, stop immediatly if non blocking, flag abort if blocking
-    bool          stopConfigPortal();
+    //manually stop the config portal - immediately shuts down the portal
+    void          stopConfigPortal();
     
     //manually start the web portal, autoconnect does this automatically on connect failure    
     void          startWebPortal();
@@ -268,7 +268,7 @@ class WiFiManager
     //manually stop the web portal if started manually
     void          stopWebPortal();
 
-    // Run webserver processing, if setConfigPortalBlocking(false)
+    // Run webserver processing - must be called periodically when config portal is active
     boolean       process();
 
     // get the AP name of the config portal, so it can be used in the callback
@@ -328,7 +328,7 @@ class WiFiManager
 
     //sets timeout before AP,webserver loop ends and exits even if there has been no setup.
     //useful for devices that failed to connect at some point and got stuck in a webserver loop
-    //in seconds setConfigPortalTimeout is a new name for setTimeout, ! not used if setConfigPortalBlocking
+    //in seconds setConfigPortalTimeout is a new name for setTimeout
     void          setConfigPortalTimeout(unsigned long seconds);
     void          setTimeout(unsigned long seconds); // @deprecated, alias
 
@@ -363,11 +363,6 @@ class WiFiManager
     
     //if this is set, it will exit after config, even if connection is unsuccessful.
     void          setBreakAfterConfig(boolean shouldBreak);
-    
-    // if this is set, portal will be blocking and wait until save or exit, 
-    // is false user must manually `process()` to handle config portal,
-    // setConfigPortalTimeout is ignored in this mode, user is responsible for closing configportal
-    void          setConfigPortalBlocking(boolean shouldBlock);
     
     //add custom html at inside <head> for all pages
     void          setCustomHeadElement(const char* html);
@@ -639,7 +634,7 @@ class WiFiManager
     bool          _aggresiveReconn        = false; // use an agrressive reconnect strategy, WILL delay conxs
                                                    // on some conn failure modes will add delays and many retries to work around esp and ap bugs, ie, anti de-auth protections
                                                    // https://github.com/tzapu/WiFiManager/issues/1067
-    bool          _allowExit              = true; // allow exit in nonblocking, else user exit/abort calls will be ignored including cptimeout
+    bool          _allowExit              = true; // allow exit/abort calls - if false, user exit/abort calls will be ignored including cptimeout
 
     #ifdef ESP32
     wifi_event_id_t wm_event_id           = 0;
@@ -657,7 +652,6 @@ class WiFiManager
     boolean       _removeDuplicateAPs     = true;  // remove dup aps from wifiscan
     boolean       _showPassword           = false; // show or hide saved password on wifi form, might be a security issue!
     boolean       _shouldBreakAfterConfig = false; // stop configportal on save failure
-    boolean       _configPortalIsBlocking = true;  // configportal enters blocking loop 
     boolean       _enableCaptivePortal    = true;  // enable captive portal redirection
     boolean       _userpersistent         = true;  // users preffered persistence to restore
     boolean       _wifiAutoReconnect      = true;  // there is no platform getter for this, we must assume its true and make it so
@@ -849,9 +843,6 @@ protected:
     // if we decide to support this, these checks will need to be replaced with something client aware to check if client origin is ap or web
     // These state checks are critical and used for internal function checks
     boolean       webPortalActive     = false;
-    boolean       portalTimeoutResult = false;
-
-    boolean       portalAbortResult   = false;
     boolean       storeSTAmode        = true; // option store persistent STA mode in connectwifi 
     int           timer               = 0;    // timer for debug throttle for numclients, and portal timeout messages
     
