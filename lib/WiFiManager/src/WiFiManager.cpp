@@ -687,6 +687,10 @@ void WiFiManager::setupHTTPServer(){
     this->handleWiFiStatus(request);
   });
   
+  server->on(WM_G(R_scanstatus), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->handleWiFiScanStatus(request);
+  });
+  
   // OTA Update routes
   server->on(WM_G(R_update), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->handleUpdate(request);
@@ -727,7 +731,7 @@ void WiFiManager::setupDNSD(){
 void WiFiManager::setupConfigPortal() {
   setupHTTPServer();
   _lastscan = 0; // reset network scan cache
-  if(_preloadwifiscan) WiFi_scanNetworks(true,true); // preload wifiscan , async
+  if(_preloadwifiscan) WiFi_scanNetworks(true); // preload wifiscan (async)
 }
 
 boolean WiFiManager::startConfigPortal() {
@@ -892,6 +896,31 @@ boolean WiFiManager::process(){
     #if defined(WM_MDNS) && defined(ESP8266)
     MDNS.update();
     #endif
+    
+    // Poll WiFi scan status (non-blocking)
+    // Check if scan is in progress and poll for completion
+    if(_scanInProgress){
+      int8_t scanStatus = WiFi.scanComplete();
+      if(scanStatus >= 0){
+        // Scan completed
+        WiFi_scanComplete(scanStatus);
+      }
+      else if(scanStatus == WIFI_SCAN_FAILED){
+        // Scan failed
+        #ifdef WM_DEBUG_LEVEL
+        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed during polling"));
+        #endif
+        _scanInProgress = false;
+        _scanRequested = false;
+      }
+      // If WIFI_SCAN_RUNNING, continue polling next time (non-blocking)
+    }
+    
+    // Handle queued scan requests
+    if(_scanRequested && !_scanInProgress){
+      WiFi_scanNetworks(true);
+      _scanRequested = false;
+    }
 	
     if(webPortalActive || (configPortalActive && !_configPortalIsBlocking)){
       // if timed out or abort, break
@@ -1400,7 +1429,7 @@ void WiFiManager::handleRoot(AsyncWebServerRequest *request) {
   page += getHTTPEnd();
 
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
-  if(_preloadwifiscan) WiFi_scanNetworks(_scancachetime, true); // preload wifiscan throttled, async
+  if(_preloadwifiscan) WiFi_scanNetworks(_scancachetime); // preload wifiscan throttled (async)
   // @todo buggy, captive portals make a query on every page load, causing this to run every time in addition to the real page load
   // I dont understand why, when you are already in the captive portal, I guess they want to know that its still up and not done or gone
   // if we can detect these and ignore them that would be great, since they come from the captive portal redirect maybe there is a refferer
@@ -1421,8 +1450,22 @@ void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
     if (request->hasParam("refresh")) {
       forceRefresh = true;
     }
-    WiFi_scanNetworks(forceRefresh, false); //wifiscan, force if arg refresh
+    
+    // Always use cached data for immediate response (never block)
+    // Wrap scan output in container for AJAX updates
+    page += F("<div id=\"scan-results\">");
     page += getScanItemOut();
+    page += F("</div>");
+    
+    // Start async scan in background if needed (non-blocking)
+    if(forceRefresh || !_lastscan || (millis()-_lastscan > _scancachetime)){
+      if(!_scanInProgress){
+        WiFi_scanNetworks(true); // Start async scan
+      } else {
+        // Scan already in progress, will update via polling
+        _scanRequested = true; // Queue another scan if user wants refresh
+      }
+    }
   }
   String pitem = "";
 
@@ -1452,9 +1495,111 @@ void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
     page += getParamOut();
   }
   page += FPSTR(HTTP_FORM_END);
-  page += FPSTR(HTTP_SCAN_LINK);
+  // Replace refresh button with AJAX version
+  page += F("<br/><div class=\"c\"><button id=\"refresh-btn\" onclick=\"refreshScan()\">Refresh</button></div>");
   if(_showBack) page += FPSTR(HTTP_BACKBTN);
   reportStatus(page);
+  
+  // Add JavaScript for AJAX polling
+  page += F("<script>");
+  page += F("let scanPollInterval = null;");
+  page += F("let isPolling = false;");
+  page += F("");
+  page += F("function refreshScan() {");
+  page += F("  // Trigger scan via refresh parameter");
+  page += F("  fetch('/wifi?refresh=1', {method: 'GET'}).then(() => {");
+  page += F("    startPolling();");
+  page += F("  });");
+  page += F("}");
+  page += F("");
+  page += F("function startPolling() {");
+  page += F("  if(isPolling) return;");
+  page += F("  isPolling = true;");
+  page += F("  document.getElementById('refresh-btn').disabled = true;");
+  page += F("  document.getElementById('refresh-btn').textContent = 'Scanning...';");
+  page += F("  updateScanStatus();");
+  page += F("  scanPollInterval = setInterval(updateScanStatus, 1000);");
+  page += F("}");
+  page += F("");
+  page += F("function stopPolling() {");
+  page += F("  if(scanPollInterval) {");
+  page += F("    clearInterval(scanPollInterval);");
+  page += F("    scanPollInterval = null;");
+  page += F("  }");
+  page += F("  isPolling = false;");
+  page += F("  document.getElementById('refresh-btn').disabled = false;");
+  page += F("  document.getElementById('refresh-btn').textContent = 'Refresh';");
+  page += F("}");
+  page += F("");
+  page += F("function updateScanStatus() {");
+  page += F("  fetch('/wifi/scanstatus')");
+  page += F("    .then(response => response.json())");
+  page += F("    .then(data => {");
+  page += F("      if(data.scanning) {");
+  page += F("        // Still scanning, show status");
+  page += F("        document.getElementById('scan-results').innerHTML = 'Scanning for networks...<br/><br/>';");
+  page += F("      } else {");
+  page += F("        // Scan complete, update network list");
+  page += F("        stopPolling();");
+  page += F("        updateNetworkList(data);");
+  page += F("      }");
+  page += F("    })");
+  page += F("    .catch(error => {");
+  page += F("      console.error('Error polling scan status:', error);");
+  page += F("      stopPolling();");
+  page += F("    });");
+  page += F("}");
+  page += F("");
+  page += F("function updateNetworkList(data) {");
+  page += F("  let html = '';");
+  page += F("  if(data.count === 0) {");
+  page += F("    html = 'No networks found. Refresh to scan again.<br/><br/>';");
+  page += F("  } else if(data.networks && data.networks.length > 0) {");
+  page += F("    data.networks.forEach(function(network) {");
+  page += F("      // Match existing HTML structure from getScanItemOut()");
+  page += F("      let qualityIcon = getQualityIcon(network.quality);");
+  page += F("      let qualityPercent = network.quality + '%';");
+  page += F("      let encrypted = network.enc_type !== 0 ? '<span class=\"l\">🔒</span>' : '';");
+  page += F("      html += '<div><a href=\"#p\" onclick=\"c(this)\" data-ssid=\"' + escapeHtml(network.ssid) + '\">' + escapeHtml(network.ssid) + '</a>';");
+  page += F("      html += '<div role=\"img\" aria-label=\"' + qualityPercent + '\" title=\"' + qualityPercent + '\" class=\"q q-' + network.quality + '\"></div>';");
+  page += F("      html += '<div class=\"q\">' + qualityPercent + '</div>';");
+  page += F("      html += encrypted;");
+  page += F("      html += '</div>';");
+  page += F("    });");
+  page += F("  }");
+  page += F("  document.getElementById('scan-results').innerHTML = html;");
+  page += F("}");
+  page += F("");
+  page += F("function escapeHtml(text) {");
+  page += F("  const map = {");
+  page += F("    '&': '&amp;',");
+  page += F("    '<': '&lt;',");
+  page += F("    '>': '&gt;',");
+  page += F("    '\"': '&quot;',");
+  page += F("    \"'\": '&#039;'");
+  page += F("  };");
+  page += F("  return text.replace(/[&<>\"']/g, m => map[m]);");
+  page += F("}");
+  page += F("");
+  page += F("function getQualityIcon(quality) {");
+  page += F("  if(quality >= 75) return '▂▄▆█';");
+  page += F("  if(quality >= 50) return '▂▄▆▁';");
+  page += F("  if(quality >= 25) return '▂▄▁▁';");
+  page += F("  return '▂▁▁▁';");
+  page += F("}");
+  page += F("");
+  page += F("// Check if scan is in progress on page load");
+  page += F("window.addEventListener('load', function() {");
+  page += F("  fetch('/wifi/scanstatus')");
+  page += F("    .then(response => response.json())");
+  page += F("    .then(data => {");
+  page += F("      if(data.scanning) {");
+  page += F("        startPolling();");
+  page += F("      }");
+  page += F("    });");
+  page += F("});");
+  page += F("</script>");
+  
   page += getHTTPEnd();
 
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
@@ -1518,6 +1663,8 @@ String WiFiManager::getMenuOut(){
 void WiFiManager::WiFi_scanComplete(int networksFound){
   _lastscan = millis();
   _numNetworks = networksFound;
+  _scanInProgress = false;
+  _scanRequested = false;
   #ifdef WM_DEBUG_LEVEL
   DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC completed"), "in "+(String)(_lastscan - _startscan)+" ms");  
   DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC found:"),_numNetworks);
@@ -1525,18 +1672,22 @@ void WiFiManager::WiFi_scanComplete(int networksFound){
 }
 
 bool WiFiManager::WiFi_scanNetworks(){
-  return WiFi_scanNetworks(false,false);
+  return WiFi_scanNetworks(false);
 }
  
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime,bool async){
-    return WiFi_scanNetworks(millis()-_lastscan > cachetime,async);
+    // async parameter ignored - always async now
+    return WiFi_scanNetworks(millis()-_lastscan > cachetime);
 }
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime){
-    return WiFi_scanNetworks(millis()-_lastscan > cachetime,false);
+    return WiFi_scanNetworks(millis()-_lastscan > cachetime);
 }
 bool WiFiManager::WiFi_scanNetworks(bool force,bool async){
+    // async parameter ignored - always async now
+    return WiFi_scanNetworks(force);
+}
+bool WiFiManager::WiFi_scanNetworks(bool force){
     #ifdef WM_DEBUG_LEVEL
-    // DEBUG_WM(WM_DEBUG_DEV,"scanNetworks async:",async == true);
     // DEBUG_WM(WM_DEBUG_DEV,_numNetworks,(millis()-_lastscan ));
     // DEBUG_WM(WM_DEBUG_DEV,"scanNetworks force:",force == true);
     #endif
@@ -1553,77 +1704,88 @@ bool WiFiManager::WiFi_scanNetworks(bool force,bool async){
       force = true;
     }
 
+    // If scan already in progress, don't start another one
+    if(_scanInProgress){
+      #ifdef WM_DEBUG_LEVEL
+      DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan already in progress"));
+      #endif
+      return false; // Scan in progress, not complete yet
+    }
+
     if(force){
-      int8_t res;
       _startscan = millis();
-      if(async && _asyncScan){
-        #ifdef ESP8266
-          #ifndef WM_NOASYNC // no async available < 2.4.0
-          #ifdef WM_DEBUG_LEVEL
-          DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
-          #endif
-          using namespace std::placeholders; // for `_1`
-          WiFi.scanNetworksAsync(std::bind(&WiFiManager::WiFi_scanComplete,this,_1));
-          #else
-          DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan SYNC started"));
-          res = WiFi.scanNetworks();
-          #endif
-        #else
+      _scanRequestTime = millis();
+      
+      #ifdef ESP8266
+        #ifndef WM_NOASYNC // no async available < 2.4.0
         #ifdef WM_DEBUG_LEVEL
-          DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
-          #endif
-          res = WiFi.scanNetworks(true);
+        DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
+        #endif
+        using namespace std::placeholders; // for `_1`
+        WiFi.scanNetworksAsync(std::bind(&WiFiManager::WiFi_scanComplete,this,_1));
+        _scanInProgress = true;
+        return false; // Scan started, not complete yet
+        #else
+        // ESP8266 < 2.4.0 - no async available, but we can't block here
+        // Return false and let process() handle it
+        #ifdef WM_DEBUG_LEVEL
+        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] Async scan not available on this ESP8266 core"));
         #endif
         return false;
-      }
-      else{
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan SYNC started"));
-        res = WiFi.scanNetworks();
-      }
-      if(res == WIFI_SCAN_FAILED){
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed"));
         #endif
-      }  
-      else if(res == WIFI_SCAN_RUNNING){
+      #else // ESP32
         #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan waiting"));
+        DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
         #endif
-        while(WiFi.scanComplete() == WIFI_SCAN_RUNNING){
-          #ifdef WM_DEBUG_LEVEL
-          DEBUG_WM(WM_DEBUG_ERROR,".");
-          #endif
-          delay(100);
+        int8_t res = WiFi.scanNetworks(true);
+        if(res == WIFI_SCAN_RUNNING){
+          _scanInProgress = true;
+          return false; // Scan started, not complete yet
         }
-        _numNetworks = WiFi.scanComplete();
-      }
-      else if(res >=0 ) _numNetworks = res;
-      _lastscan = millis();
-      #ifdef WM_DEBUG_LEVEL
-      DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan completed"), "in "+(String)(_lastscan - _startscan)+" ms");
+        else if(res == WIFI_SCAN_FAILED){
+          #ifdef WM_DEBUG_LEVEL
+          DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed"));
+          #endif
+          _scanInProgress = false;
+          return false;
+        }
+        else if(res >= 0){
+          // Scan completed immediately (unlikely but possible)
+          _numNetworks = res;
+          _lastscan = millis();
+          _scanInProgress = false;
+          #ifdef WM_DEBUG_LEVEL
+          DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan completed immediately"), "in "+(String)(_lastscan - _startscan)+" ms");
+          #endif
+          return true;
+        }
+        return false;
       #endif
-      return true;
     }
     else {
       #ifdef WM_DEBUG_LEVEL
       DEBUG_WM(WM_DEBUG_VERBOSE,F("Scan is cached"),(String)(millis()-_lastscan )+" ms ago");
       #endif
+      return true; // Using cached data
     }
-    return false;
 }
 
 String WiFiManager::WiFiManager::getScanItemOut(){
     String page;
 
-    if(!_numNetworks) WiFi_scanNetworks(); // scan in case this gets called before any scans
-
+    // Never trigger scans from here - only use cached data
+    // If no cached data, show message (scan should be started elsewhere if needed)
     int n = _numNetworks;
     if (n == 0) {
       #ifdef WM_DEBUG_LEVEL
       DEBUG_WM(F("No networks found"));
       #endif
-      page += FPSTR(S_nonetworks); // @token nonetworks
-      page += F("<br/><br/>");
+      if(_scanInProgress){
+        page += F("Scanning for networks...<br/><br/>");
+      } else {
+        page += FPSTR(S_nonetworks); // @token nonetworks
+        page += F("<br/><br/>");
+      }
     }
     else {
       #ifdef WM_DEBUG_LEVEL
@@ -1858,6 +2020,110 @@ void WiFiManager::handleWiFiStatus(AsyncWebServerRequest *request){
     page = FPSTR(HTTP_JS);
   #endif
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
+}
+
+/**
+ * HTTPD CALLBACK WiFi scan status endpoint - returns JSON with scan status and network list
+ */
+void WiFiManager::handleWiFiScanStatus(AsyncWebServerRequest *request){
+  #ifdef WM_DEBUG_LEVEL
+  DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP WiFi scan status"));
+  #endif
+  handleRequest(request);
+  
+  String json = "{";
+  json += "\"scanning\":";
+  json += _scanInProgress ? "true" : "false";
+  json += ",\"count\":";
+  json += String(_numNetworks);
+  json += ",\"lastscan\":";
+  json += String(_lastscan);
+  
+  // If scan is complete and we have networks, include network list
+  if(!_scanInProgress && _numNetworks > 0){
+    json += ",\"networks\":[";
+    
+    int n = _numNetworks;
+    // Sort networks by RSSI (same logic as getScanItemOut)
+    int indices[n];
+    for (int i = 0; i < n; i++) {
+      indices[i] = i;
+    }
+    
+    // RSSI SORT
+    for (int i = 0; i < n; i++) {
+      for (int j = i + 1; j < n; j++) {
+        if (WiFi.RSSI(indices[j]) > WiFi.RSSI(indices[i])) {
+          std::swap(indices[i], indices[j]);
+        }
+      }
+    }
+    
+    // Remove duplicates (must be RSSI sorted)
+    if (_removeDuplicateAPs) {
+      String cssid;
+      for (int i = 0; i < n; i++) {
+        if (indices[i] == -1) continue;
+        cssid = WiFi.SSID(indices[i]);
+        for (int j = i + 1; j < n; j++) {
+          if (cssid == WiFi.SSID(indices[j])) {
+            indices[j] = -1; // set dup aps to index -1
+          }
+        }
+      }
+    }
+    
+    bool first = true;
+    // Display networks in JSON
+    for (int i = 0; i < n; i++) {
+      if (indices[i] == -1) continue; // skip dups
+      
+      String ssid = WiFi.SSID(indices[i]);
+      if(ssid == "") continue; // Skip empty SSIDs
+      
+      int rssi = WiFi.RSSI(indices[i]);
+      int rssiperc = getRSSIasQuality(rssi);
+      uint8_t enc_type = WiFi.encryptionType(indices[i]);
+      
+      // Apply minimum quality filter
+      if (_minimumQuality != -1 && _minimumQuality >= rssiperc) {
+        continue; // Skip if doesn't meet minimum quality
+      }
+      
+      if(!first) json += ",";
+      first = false;
+      
+      json += "{";
+      json += "\"ssid\":\"";
+      // Escape JSON special characters in SSID
+      String escapedSSID = ssid;
+      escapedSSID.replace("\\", "\\\\");
+      escapedSSID.replace("\"", "\\\"");
+      escapedSSID.replace("\n", "\\n");
+      escapedSSID.replace("\r", "\\r");
+      escapedSSID.replace("\t", "\\t");
+      json += escapedSSID;
+      json += "\"";
+      json += ",\"rssi\":";
+      json += String(rssi);
+      json += ",\"quality\":";
+      json += String(rssiperc);
+      json += ",\"encryption\":\"";
+      json += encryptionTypeStr(enc_type);
+      json += "\"";
+      json += ",\"enc_type\":";
+      json += String(enc_type);
+      json += "}";
+    }
+    
+    json += "]";
+  } else {
+    json += ",\"networks\":[]";
+  }
+  
+  json += "}";
+  
+  request->send(200, "application/json", json);
 }
 
 /** 
@@ -3954,7 +4220,7 @@ String WiFiManager::WiFi_psk(bool persistent) const {
         WiFi.reconnect();
       #endif
   }
-  else if(event == ARDUINO_EVENT_WIFI_SCAN_DONE && _asyncScan){
+  else if(event == ARDUINO_EVENT_WIFI_SCAN_DONE){
     uint16_t scans = WiFi.scanComplete();
     WiFi_scanComplete(scans);
   }

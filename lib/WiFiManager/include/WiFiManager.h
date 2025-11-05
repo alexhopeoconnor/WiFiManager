@@ -595,6 +595,11 @@ class WiFiManager
     unsigned long _startscan              = 0; // ms for timing wifi scans
     unsigned long _startconn              = 0; // ms for timing wifi connects
     
+    // async scan state management
+    bool          _scanInProgress        = false; // flag indicating scan is currently running
+    bool          _scanRequested         = false; // flag indicating scan was requested but not yet started
+    unsigned long _scanRequestTime       = 0; // ms when scan was requested
+    
     // async reboot/abort scheduling
     bool          _rebootScheduled        = false; // flag for scheduled reboot
     unsigned long _rebootTime             = 0; // ms when reboot should occur
@@ -697,7 +702,6 @@ class WiFiManager
 public:
     boolean       _preloadwifiscan        = false; // preload wifiscan if true
     unsigned int  _scancachetime          = 30000; // ms cache time for preload scans
-    boolean       _asyncScan              = false; // perform wifi network scan async
     
 protected:
 
@@ -749,6 +753,7 @@ protected:
     void          handleErase(AsyncWebServerRequest *request, boolean opt);
     void          handleParam(AsyncWebServerRequest *request);
     void          handleWiFiStatus(AsyncWebServerRequest *request);
+    void          handleWiFiScanStatus(AsyncWebServerRequest *request);
     void          handleRequest(AsyncWebServerRequest *request);
     void          handleParamSave(AsyncWebServerRequest *request);
     void          doParamSave(WiFiManagerRequestArgs requestArgs);
@@ -776,8 +781,9 @@ protected:
     String        WiFi_SSID(bool persistent = true) const;
     String        WiFi_psk(bool persistent = true) const;
     bool          WiFi_scanNetworks();
-    bool          WiFi_scanNetworks(bool force,bool async);
-    bool          WiFi_scanNetworks(unsigned int cachetime,bool async);
+    bool          WiFi_scanNetworks(bool force); // Always async - returns false if scan started but not complete
+    bool          WiFi_scanNetworks(bool force,bool async); // async parameter ignored - always async
+    bool          WiFi_scanNetworks(unsigned int cachetime,bool async); // async parameter ignored - always async
     bool          WiFi_scanNetworks(unsigned int cachetime);
     void          WiFi_scanComplete(int networksFound);
     bool          WiFiSetCountry();
