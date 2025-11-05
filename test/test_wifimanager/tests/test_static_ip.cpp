@@ -22,6 +22,8 @@ void test_set_ap_static_ip_config() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(200); // Give time for IP to be configured
     
     // Verify AP IP matches what we configured
@@ -75,6 +77,8 @@ void test_ap_static_ip_application() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(200); // Give time for AP to configure
     
     IPAddress apIP = WiFi.softAPIP();

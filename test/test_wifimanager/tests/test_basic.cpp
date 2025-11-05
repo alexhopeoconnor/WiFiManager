@@ -30,8 +30,14 @@ void test_reset_settings() {
     
     WiFiManager wm;
     
+    // Ensure WiFi is in a stable state before resetting
+    delay(100);
+    
     // Reset settings (should not crash)
     wm.resetSettings();
+    
+    // Small delay to allow WiFi operations to complete
+    delay(100);
     
     // Verify WiFi is not saved after reset
     // Note: ESP32 uses NVS for WiFi credentials which behaves differently than ESP8266's EEPROM
@@ -58,10 +64,10 @@ void test_disconnect() {
     WiFiManager wm;
     
     // Disconnect should not crash even if not connected
-    bool result1 = wm.disconnect();
+    (void)wm.disconnect();
     
     // Can be called multiple times safely
-    bool result2 = wm.disconnect();
+    (void)wm.disconnect();
     
     // Verify no crash (results may be true/false depending on WiFi state)
     TEST_ASSERT_TRUE_MESSAGE(true, "disconnect() executed without crash");

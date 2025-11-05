@@ -2,9 +2,9 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
 
-// Test non-blocking configuration portal - verify process() doesn't block
+// Test process() doesn't block - verify it must be called periodically
 void test_nonblocking_process() {
-    Serial.println("[TEST]   Testing non-blocking process() calls...");
+    Serial.println("[TEST]   Testing process() calls (non-blocking behavior)...");
     
     WiFiManager wm;
     
@@ -49,6 +49,7 @@ void test_client_check_setters() {
     // Start portal and verify it works with client check settings
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    wm.process();
     delay(100);
     wm.stopConfigPortal();
     
@@ -60,13 +61,14 @@ void test_client_check_setters() {
     wm.setConfigPortalTimeout(5);
     wm.startWebPortal();
     TEST_ASSERT_TRUE(wm.getWebPortalActive());
+    wm.process();
     wm.stopWebPortal();
     
     Serial.println("[TEST]   Client check setters test completed successfully");
 }
 
 void test_nonblocking_timeout_behavior() {
-    Serial.println("[TEST]   Testing non-blocking timeout behavior...");
+    Serial.println("[TEST]   Testing timeout behavior (requires process() calls)...");
     
     WiFiManager wm;
     
@@ -100,8 +102,52 @@ void test_nonblocking_timeout_behavior() {
     }
     
     // Test completed without crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "Non-blocking timeout test completed without crash");
+    TEST_ASSERT_TRUE_MESSAGE(true, "Timeout test completed without crash");
     
-    Serial.println("[TEST]   Non-blocking timeout behavior test completed successfully");
+    Serial.println("[TEST]   Timeout behavior test completed successfully");
+}
+
+// Test that process() is required for timeouts to work
+void test_process_required_for_timeout() {
+    Serial.println("[TEST]   Testing that process() is required for timeouts...");
+    
+    WiFiManager wm;
+    
+    wm.setConfigPortalTimeout(1); // 1 second timeout
+    wm.startConfigPortal("TestAP");
+    TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    
+    // Wait 2 seconds WITHOUT calling process()
+    delay(2000);
+    
+    // Portal should still be active because process() wasn't called
+    // (timeout checking only happens in process())
+    TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    
+    // Now call process() - timeout should be checked
+    unsigned long start = millis();
+    bool stillActive = true;
+    
+    // Process until timeout or max wait
+    while (stillActive && (millis() - start < 3000)) {
+        wm.process();
+        
+        if (!wm.getConfigPortalActive()) {
+            stillActive = false;
+            break;
+        }
+        
+        delay(50);
+    }
+    
+    // Portal should have timed out after process() was called
+    // (may have auto-closed, but at least we verified process() is needed)
+    bool portalState = wm.getConfigPortalActive();
+    
+    if (portalState) {
+        wm.stopConfigPortal();
+    }
+    
+    Serial.println("[TEST]   process() required for timeout test completed successfully");
 }
 

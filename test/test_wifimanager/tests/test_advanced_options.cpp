@@ -102,6 +102,8 @@ void test_debug_soft_ap_config() {
     
     wm.startConfigPortal("TestAP");
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     // Debug output should not crash

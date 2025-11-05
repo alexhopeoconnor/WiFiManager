@@ -45,6 +45,7 @@ void test_get_config_portal_ssid();
 void test_nonblocking_process();
 void test_client_check_setters();
 void test_nonblocking_timeout_behavior();
+void test_process_required_for_timeout();
 
 // Callback tests
 void test_ap_callback();
@@ -73,6 +74,67 @@ void test_ui_display_options();
 void test_ui_customization();
 void test_debug_soft_ap_config();
 void test_debug_platform_info();
+
+// WiFi connection tests
+void test_autoconnect_fallback_to_portal();
+void test_connectwifi_ssid_not_found();
+void test_connectwifi_retry_count();
+void test_connectwifi_timeout_setting();
+void test_connection_state_transitions();
+void test_autoconnect_with_timeout();
+
+// Callback firing tests
+void test_timeout_callback_fires();
+void test_config_reset_callback_fires();
+void test_ap_callback_fires_improved();
+void test_web_server_callback_fires_improved();
+
+// DNS lifecycle tests
+void test_dns_server_created();
+void test_dns_server_cleanup();
+void test_dns_server_lifecycle_cycles();
+
+// Error condition tests
+void test_invalid_ap_password_too_short();
+void test_invalid_ap_password_too_long();
+void test_empty_ssid();
+void test_very_long_ssid();
+void test_connection_failure_handling();
+void test_resource_cleanup_after_error();
+void test_multiple_rapid_start_stop();
+
+// Parameter value tests
+void test_parameter_value_set_directly();
+void test_parameter_value_length_validation();
+void test_parameter_value_persistence();
+void test_parameter_value_update();
+void test_multiple_parameters_different_values();
+
+// WiFi scanning tests
+void test_wifi_scan_initiates();
+void test_async_scan_behavior();
+void test_scan_status_checking();
+void test_scan_completion_wait();
+
+// State transition tests
+void test_portal_to_connected_transition();
+void test_concurrent_operations();
+void test_state_consistency_during_portal();
+void test_state_transitions_multiple_cycles();
+
+// Integration tests
+void test_autoconnect_fallback_flow();
+void test_portal_lifecycle_with_connection_attempt();
+void test_parameter_add_and_retrieve();
+void test_complete_flow_reset_autoconnect_portal();
+void test_portal_with_parameters_and_infrastructure();
+
+// Stress tests
+void test_many_start_stop_cycles();
+void test_long_running_portal();
+void test_rapid_portal_start_stop();
+void test_multiple_parameters_stress();
+void test_portal_with_timeout_stress();
 
 #endif // TEST_MAIN_H
 

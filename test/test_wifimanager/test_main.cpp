@@ -35,6 +35,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_nonblocking_process),
     TEST_ENTRY(test_client_check_setters),
     TEST_ENTRY(test_nonblocking_timeout_behavior),
+    TEST_ENTRY(test_process_required_for_timeout),
     
     // Callback tests
     TEST_ENTRY(test_ap_callback),
@@ -63,6 +64,67 @@ TestCase tests[] = {
     TEST_ENTRY(test_ui_customization),
     TEST_ENTRY(test_debug_soft_ap_config),
     TEST_ENTRY(test_debug_platform_info),
+    
+    // WiFi connection tests
+    TEST_ENTRY(test_autoconnect_fallback_to_portal),
+    TEST_ENTRY(test_connectwifi_ssid_not_found),
+    TEST_ENTRY(test_connectwifi_retry_count),
+    TEST_ENTRY(test_connectwifi_timeout_setting),
+    TEST_ENTRY(test_connection_state_transitions),
+    TEST_ENTRY(test_autoconnect_with_timeout),
+    
+    // Callback firing tests
+    TEST_ENTRY(test_timeout_callback_fires),
+    TEST_ENTRY(test_config_reset_callback_fires),
+    TEST_ENTRY(test_ap_callback_fires_improved),
+    TEST_ENTRY(test_web_server_callback_fires_improved),
+    
+    // DNS lifecycle tests
+    TEST_ENTRY(test_dns_server_created),
+    TEST_ENTRY(test_dns_server_cleanup),
+    TEST_ENTRY(test_dns_server_lifecycle_cycles),
+    
+    // Error condition tests
+    TEST_ENTRY(test_invalid_ap_password_too_short),
+    TEST_ENTRY(test_invalid_ap_password_too_long),
+    TEST_ENTRY(test_empty_ssid),
+    TEST_ENTRY(test_very_long_ssid),
+    TEST_ENTRY(test_connection_failure_handling),
+    TEST_ENTRY(test_resource_cleanup_after_error),
+    TEST_ENTRY(test_multiple_rapid_start_stop),
+    
+    // Parameter value tests
+    TEST_ENTRY(test_parameter_value_set_directly),
+    TEST_ENTRY(test_parameter_value_length_validation),
+    TEST_ENTRY(test_parameter_value_persistence),
+    TEST_ENTRY(test_parameter_value_update),
+    TEST_ENTRY(test_multiple_parameters_different_values),
+    
+    // WiFi scanning tests
+    TEST_ENTRY(test_wifi_scan_initiates),
+    TEST_ENTRY(test_async_scan_behavior),
+    TEST_ENTRY(test_scan_status_checking),
+    TEST_ENTRY(test_scan_completion_wait),
+    
+    // State transition tests
+    TEST_ENTRY(test_portal_to_connected_transition),
+    TEST_ENTRY(test_concurrent_operations),
+    TEST_ENTRY(test_state_consistency_during_portal),
+    TEST_ENTRY(test_state_transitions_multiple_cycles),
+    
+    // Integration tests
+    TEST_ENTRY(test_autoconnect_fallback_flow),
+    TEST_ENTRY(test_portal_lifecycle_with_connection_attempt),
+    TEST_ENTRY(test_parameter_add_and_retrieve),
+    TEST_ENTRY(test_complete_flow_reset_autoconnect_portal),
+    TEST_ENTRY(test_portal_with_parameters_and_infrastructure),
+    
+    // Stress tests
+    TEST_ENTRY(test_many_start_stop_cycles),
+    TEST_ENTRY(test_long_running_portal),
+    TEST_ENTRY(test_rapid_portal_start_stop),
+    TEST_ENTRY(test_multiple_parameters_stress),
+    TEST_ENTRY(test_portal_with_timeout_stress),
 };
 
 const size_t TEST_COUNT = sizeof(tests) / sizeof(TestCase);

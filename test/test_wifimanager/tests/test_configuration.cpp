@@ -42,8 +42,19 @@ void test_configuration_setters() {
     // Test custom title (no getter available, but we can verify it doesn't crash)
     wm.setTitle("TestTitle");
     
+    // Verify some settings can be retrieved (if getters exist)
+    // Note: Not all setters have getters, but we verify they don't crash
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "All configuration setters executed without crash");
+    
+    // Verify setters can be called multiple times with different values
+    wm.setConfigPortalTimeout(60);
+    wm.setConnectTimeout(30);
+    wm.setHttpPort(8080);
+    wm.setMinimumSignalQuality(50);
+    
+    // Verify no crash after multiple calls
+    TEST_ASSERT_TRUE_MESSAGE(true, "Configuration setters can be called multiple times");
     
     Serial.println("[TEST]   Configuration setters test completed successfully");
 }

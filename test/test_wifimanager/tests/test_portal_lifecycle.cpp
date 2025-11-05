@@ -14,6 +14,8 @@ void test_start_config_portal() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     wm.stopConfigPortal();
@@ -33,6 +35,8 @@ void test_start_config_portal_with_password() {
     wm.startConfigPortal("TestAP2", "password123");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     wm.stopConfigPortal();
@@ -52,6 +56,8 @@ void test_start_config_portal_auto_name() {
     wm.startConfigPortal();
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100); // Give it time to initialize
     
     // Verify we can get the SSID
@@ -75,6 +81,8 @@ void test_stop_config_portal() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     // Stop portal
@@ -94,6 +102,8 @@ void test_config_portal_infrastructure() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(200); // Give time for initialization
     
     // Verify server object exists (must check while portal is active)
@@ -131,6 +141,9 @@ void test_start_web_portal() {
     
     TEST_ASSERT_TRUE(wm.getWebPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
+    
     // Verify server object exists
     TEST_ASSERT_NOT_NULL(wm.server);
     
@@ -148,6 +161,8 @@ void test_stop_web_portal() {
     wm.startWebPortal();
     TEST_ASSERT_TRUE(wm.getWebPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     wm.stopWebPortal();
@@ -166,6 +181,7 @@ void test_config_portal_multiple_start_stop() {
     // First cycle
     wm.startConfigPortal("TestAP1");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    wm.process();
     delay(100);
     wm.stopConfigPortal();
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
@@ -174,6 +190,7 @@ void test_config_portal_multiple_start_stop() {
     // Second cycle
     wm.startConfigPortal("TestAP2");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    wm.process();
     delay(100);
     wm.stopConfigPortal();
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
@@ -182,6 +199,7 @@ void test_config_portal_multiple_start_stop() {
     // Third cycle
     wm.startConfigPortal("TestAP3");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
+    wm.process();
     delay(100);
     wm.stopConfigPortal();
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
@@ -200,6 +218,8 @@ void test_config_portal_already_active() {
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     // Try to start again (should silently fail when already active)
@@ -222,6 +242,8 @@ void test_get_config_portal_ssid() {
     wm.startConfigPortal("MyTestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
+    // Call process() to simulate real usage
+    wm.process();
     delay(100);
     
     // Verify SSID matches what we set

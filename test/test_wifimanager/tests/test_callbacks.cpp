@@ -70,6 +70,9 @@ void test_ap_callback() {
     
     wm.startConfigPortal("TestAP");
     
+    // Call process() to ensure portal is fully initialized
+    wm.process();
+    
     // Callback should have fired when AP starts
     TEST_ASSERT_TRUE(ap_callback_fired);
     
@@ -89,6 +92,8 @@ void test_web_server_callback() {
     
     wm.startConfigPortal("TestAP");
     
+    // Call process() to ensure server is initialized
+    wm.process();
     delay(100); // Give time for server to start
     
     // Callback should have fired when server starts
@@ -145,6 +150,8 @@ void test_multiple_callbacks() {
     wm.setConfigPortalTimeout(5);
     wm.startConfigPortal("TestAP");
     
+    // Call process() to ensure portal is fully initialized
+    wm.process();
     delay(100);
     
     // Verify AP callback fired
