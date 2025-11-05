@@ -66,12 +66,17 @@ function updateNetworkList(data) {
   } else if(data.networks && data.networks.length > 0) {
     data.networks.forEach(function(network) {
       let qualityPercent = network.quality + '%';
-      let encrypted = network.enc_type !== 0 ? '<span class="l">🔒</span>' : '';
+      // Map quality 0-100 to icon level 1-4
+      let qualityIcon = Math.round((network.quality / 100) * 3) + 1;
+      if(qualityIcon < 1) qualityIcon = 1;
+      if(qualityIcon > 4) qualityIcon = 4;
+      // Encryption class: 'l' if encrypted, empty if open
+      let encClass = network.enc_type !== 0 ? 'l' : '';
       let ssidEscaped = escapeHtml(network.ssid);
+      // Match original template structure: icon div with quality + encryption class, then percentage div
       html += '<div><a href="#p" onclick="c(this)" data-ssid="' + ssidEscaped + '">' + ssidEscaped + '</a>';
-      html += '<div role="img" aria-label="' + qualityPercent + '" title="' + qualityPercent + '" class="q q-' + network.quality + '"></div>';
+      html += '<div role="img" aria-label="' + qualityPercent + '" title="' + qualityPercent + '" class="q q-' + qualityIcon + ' ' + encClass + '"></div>';
       html += '<div class="q">' + qualityPercent + '</div>';
-      html += encrypted;
       html += '</div>';
     });
   }

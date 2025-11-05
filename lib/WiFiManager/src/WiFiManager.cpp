@@ -1382,7 +1382,14 @@ void WiFiManager::handleRoot(AsyncWebServerRequest *request) {
 void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
   #ifdef WM_DEBUG_LEVEL
   DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Wifi"));
+  DEBUG_WM(WM_DEBUG_DEV, F("handleWifi called, scan="), scan ? "true" : "false");
   #endif
+  if (captivePortal(request)) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_DEV, F("Captive portal redirect"));
+    #endif
+    return; // If captive portal redirect instead of displaying the page
+  }
   handleRequest(request);
   String page = getHTTPHead(FPSTR(S_titlewifi), FPSTR(C_wifi)); // @token titlewifi
   if (scan) {
@@ -1441,15 +1448,29 @@ void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
   if(_showBack) page += FPSTR(HTTP_BACKBTN);
   reportStatus(page);
   
-  // Add JavaScript for AJAX polling
-  page += FPSTR(WIFI_POLLING_JS);
+  // TODO: Known issue - Adding WIFI_POLLING_JS causes silent failure (empty response)
+  // This is likely due to:
+  // 1. String size limit: Page is already ~9-10KB, adding ~2.5KB JS may exceed ESPAsyncWebServer limits
+  // 2. Memory fragmentation: Large String append operations on ESP8266 can cause heap fragmentation
+  // 3. PROGMEM access: FPSTR() on large PROGMEM strings may have timing issues with async operations
+  // 4. Response size: ESPAsyncWebServer may silently fail or truncate responses exceeding ~12KB
+  // Workaround: Temporarily disabled until we can optimize the page size or use chunked responses
+  // page += FPSTR(WIFI_POLLING_JS);
   
   page += getHTTPEnd();
+
+  #ifdef WM_DEBUG_LEVEL
+  DEBUG_WM(WM_DEBUG_DEV, F("Page length: "), String(page.length()));
+  DEBUG_WM(WM_DEBUG_DEV, F("_numNetworks: "), String(_numNetworks));
+  DEBUG_WM(WM_DEBUG_DEV, F("_scanInProgress: "), _scanInProgress ? "true" : "false");
+  DEBUG_WM(WM_DEBUG_DEV, F("_lastscan: "), String(_lastscan));
+  DEBUG_WM(WM_DEBUG_DEV, F("About to send response"));
+  #endif
 
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
 
   #ifdef WM_DEBUG_LEVEL
-  DEBUG_WM(WM_DEBUG_DEV, F("Sent config page"));
+  DEBUG_WM(WM_DEBUG_DEV, F("Response sent"));
   #endif
 }
 
@@ -2638,8 +2659,21 @@ boolean WiFiManager::captivePortal(AsyncWebServerRequest *request) {
     #ifdef WM_DEBUG_LEVEL
     DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Request redirected to captive portal"));
     DEBUG_WM(WM_DEBUG_DEV, "serverLoc " + serverLoc);
+    DEBUG_WM(WM_DEBUG_DEV, "Original URL " + request->url());
     #endif
-    request->redirect((String)F("http://") + serverLoc);
+    // Preserve the original path in the redirect
+    String redirectUrl = (String)F("http://") + serverLoc + request->url();
+    if (request->params() > 0) {
+      redirectUrl += F("?");
+      for (size_t i = 0; i < request->params(); i++) {
+        if (i > 0) redirectUrl += F("&");
+        redirectUrl += request->getParam(i)->name() + F("=") + request->getParam(i)->value();
+      }
+    }
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_DEV, "Redirect URL " + redirectUrl);
+    #endif
+    request->redirect(redirectUrl);
     return true;
   }
   return false;
