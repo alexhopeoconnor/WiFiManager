@@ -16,8 +16,6 @@ void test_set_ap_static_ip_config() {
     // Set AP static IP
     wm.setAPStaticIPConfig(ip, gw, sn);
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal and verify IP is actually set
@@ -72,11 +70,8 @@ void test_ap_static_ip_application() {
     
     wm.setAPStaticIPConfig(customIP, customGW, customSN);
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     

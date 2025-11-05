@@ -385,8 +385,8 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   }
 
   // not connected start configportal
-  bool res = startConfigPortal(apName, apPassword);
-  return res;
+  startConfigPortal(apName, apPassword);
+  return false; // Config portal started, but not connected yet
 }
 
 bool WiFiManager::setupHostname(bool restart){
@@ -734,9 +734,9 @@ void WiFiManager::setupConfigPortal() {
   if(_preloadwifiscan) WiFi_scanNetworks(true); // preload wifiscan (async)
 }
 
-boolean WiFiManager::startConfigPortal() {
+void WiFiManager::startConfigPortal() {
   String ssid = getDefaultAPName();
-  return startConfigPortal(ssid.c_str(), NULL);
+  startConfigPortal(ssid.c_str(), NULL);
 }
 
 /**
@@ -746,14 +746,14 @@ boolean WiFiManager::startConfigPortal() {
  * @param  {[type]} char const         *apPassword [description]
  * @return {[type]}      [description]
  */
-boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPassword) {
+void WiFiManager::startConfigPortal(char const *apName, char const *apPassword) {
   _begin();
 
   if(configPortalActive){
     #ifdef WM_DEBUG_LEVEL
     DEBUG_WM(WM_DEBUG_VERBOSE,F("Starting Config Portal FAILED, is already running"));
     #endif    
-    return false;
+    return;
   }
 
   //setup AP
@@ -766,7 +766,7 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
 
   if(_apName == "") _apName = getDefaultAPName();
 
-  if(!validApPassword()) return false;
+  if(!validApPassword()) return;
   
   // HANDLE issues with STA connections, shutdown sta if not connected, or else this will hang channel scanning and softap will not respond
   if(_disableSTA || (!WiFi.isConnected() && _disableSTAConn)){
@@ -786,8 +786,7 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
 
   // init configportal globals to known states
   configPortalActive = true;
-  bool result = connect = abort = false; // loop flags, connect true success, abort true break
-  uint8_t state;
+  connect = abort = false; // loop flags, connect true success, abort true break
 
   _configPortalStart = millis();
 
@@ -818,59 +817,10 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
   setupDNSD();
   
 
-  if(!_configPortalIsBlocking){
-    #ifdef WM_DEBUG_LEVEL
-      DEBUG_WM(WM_DEBUG_VERBOSE,F("Config Portal Running, non blocking (processing)"));
-      if(_configPortalTimeout > 0) DEBUG_WM(WM_DEBUG_VERBOSE,F("Portal Timeout In"),(String)(_configPortalTimeout/1000) + (String)F(" seconds"));
-    #endif
-    return result; // skip blocking loop
-  }
-
-  // enter blocking loop, waiting for config
-  
   #ifdef WM_DEBUG_LEVEL
-    DEBUG_WM(WM_DEBUG_VERBOSE,F("Config Portal Running, blocking, waiting for clients..."));
+    DEBUG_WM(WM_DEBUG_VERBOSE,F("Config Portal Running (call process() periodically)"));
     if(_configPortalTimeout > 0) DEBUG_WM(WM_DEBUG_VERBOSE,F("Portal Timeout In"),(String)(_configPortalTimeout/1000) + (String)F(" seconds"));
   #endif
-
-  while(1){
-
-    // if timed out or abort, break
-    if(configPortalHasTimeout() || abort){
-      #ifdef WM_DEBUG_LEVEL
-      DEBUG_WM(WM_DEBUG_DEV,F("configportal loop abort"));
-      #endif
-      shutdownConfigPortal();
-      result = abort ? portalAbortResult : portalTimeoutResult; // false, false
-      if (_configportaltimeoutcallback != NULL) {
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("[CB] config portal timeout callback"));
-        #endif
-        _configportaltimeoutcallback();  // @CALLBACK
-      }
-      break;
-    }
-
-    state = processConfigPortal();
-    
-    // status change, break
-    // @todo what is this for, should be moved inside the processor
-    // I think.. this is to detect autoconnect by esp in background, there are also many open issues about autoreconnect not working
-    if(state != WL_IDLE_STATUS){
-        result = (state == WL_CONNECTED); // true if connected
-        DEBUG_WM(WM_DEBUG_DEV,F("configportal loop break"));
-        break;
-    }
-
-    if(!configPortalActive) break;
-
-    yield(); // watchdog
-  }
-
-  #ifdef WM_DEBUG_LEVEL
-  DEBUG_WM(WM_DEBUG_NOTIFY,F("config portal exiting"));
-  #endif
-  return result;
 }
 
 /**
@@ -922,7 +872,7 @@ boolean WiFiManager::process(){
       _scanRequested = false;
     }
 	
-    if(webPortalActive || (configPortalActive && !_configPortalIsBlocking)){
+    if(webPortalActive || configPortalActive){
       // if timed out or abort, break
       if(_allowExit && (configPortalHasTimeout() || abort)){
         #ifdef WM_DEBUG_LEVEL
@@ -1017,20 +967,10 @@ uint8_t WiFiManager::processConfigPortal(){
         if(_disableConfigPortal) shutdownConfigPortal();
         return WL_CONNECT_FAILED; // CONNECT FAIL
       }
-      else if(_configPortalIsBlocking){
-        // clear save strings
-        _ssid = "";
-        _pass = "";
-        // if connect fails, turn sta off to stabilize AP
-        WiFi_Disconnect();
-        WiFi_enableSTA(false);
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("Processing - Disabling STA"));
-        #endif
-      }
       else{
+        // Portal remaining open
         #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("Portal is non blocking - remaining open"));
+        DEBUG_WM(WM_DEBUG_VERBOSE,F("Portal remaining open"));
         #endif        
       }
     }
@@ -2665,7 +2605,7 @@ String WiFiManager::getInfoData(String id){
 }
 
 /** 
- * HTTPD CALLBACK exit, closes configportal if blocking, if non blocking undefined
+ * HTTPD CALLBACK exit - schedules config portal shutdown on next process() call
  */
 void WiFiManager::handleExit(AsyncWebServerRequest *request) {
   #ifdef WM_DEBUG_LEVEL
@@ -2884,14 +2824,13 @@ void WiFiManager::reportStatus(String &page){
 
 /**
  * [stopConfigPortal description]
- * @return {[type]} [description]
  */
-bool WiFiManager::stopConfigPortal(){
-  if(_configPortalIsBlocking){
-    abort = true;
-    return true;
+void WiFiManager::stopConfigPortal(){
+  // Immediately shutdown the config portal
+  if(configPortalActive) {
+    abort = true; // Set abort flag for any in-flight async operations
+    shutdownConfigPortal();
   }
-  return shutdownConfigPortal();  
 }
 
 /**
@@ -3287,18 +3226,6 @@ void WiFiManager::setCustomMenuHTML(const char* html) {
  */
 void WiFiManager::setRemoveDuplicateAPs(boolean removeDuplicates) {
   _removeDuplicateAPs = removeDuplicates;
-}
-
-/**
- * toggle configportal blocking loop
- * if enabled, then the configportal will enter a blocking loop and wait for configuration
- * if disabled use with process() to manually process webserver
- * @since $dev
- * @access public
- * @param boolean shoudlBlock [false]
- */
-void WiFiManager::setConfigPortalBlocking(boolean shouldBlock) {
-  _configPortalIsBlocking = shouldBlock;
 }
 
 /**

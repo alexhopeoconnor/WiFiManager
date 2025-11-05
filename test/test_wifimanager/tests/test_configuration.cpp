@@ -36,8 +36,6 @@ void test_configuration_setters() {
     wm.setShowDnsFields(false);
     
     // Test portal behavior
-    wm.setConfigPortalBlocking(true);
-    wm.setConfigPortalBlocking(false);
     wm.setCaptivePortalEnable(true);
     wm.setCaptivePortalEnable(false);
     

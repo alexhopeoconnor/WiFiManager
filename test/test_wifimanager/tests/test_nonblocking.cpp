@@ -8,8 +8,6 @@ void test_nonblocking_process() {
     
     WiFiManager wm;
     
-    // Enable non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     wm.startConfigPortal("TestAP");
     
@@ -46,8 +44,6 @@ void test_client_check_setters() {
     wm.setAPClientCheck(true);
     wm.setAPClientCheck(false);
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal and verify it works with client check settings
@@ -74,7 +70,6 @@ void test_nonblocking_timeout_behavior() {
     
     WiFiManager wm;
     
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(2); // 2 second timeout
     wm.startConfigPortal("TestAP");
     

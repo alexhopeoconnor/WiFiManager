@@ -8,12 +8,9 @@ void test_start_config_portal() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode so we can control when to stop
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal with SSID only
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
@@ -30,8 +27,6 @@ void test_start_config_portal_with_password() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal with SSID and password
@@ -51,12 +46,9 @@ void test_start_config_portal_auto_name() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal without SSID (uses chip ID)
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal();
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
@@ -77,20 +69,16 @@ void test_stop_config_portal() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     delay(100);
     
     // Stop portal
-    bool stopped = wm.stopConfigPortal();
-    TEST_ASSERT_TRUE(stopped);
+    wm.stopConfigPortal();
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
     
     Serial.println("[TEST]   stopConfigPortal() test completed successfully");
@@ -101,11 +89,8 @@ void test_config_portal_infrastructure() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
@@ -176,12 +161,9 @@ void test_config_portal_multiple_start_stop() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // First cycle
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP1");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     delay(100);
@@ -212,21 +194,17 @@ void test_config_portal_already_active() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start portal
-    // Note: In non-blocking mode, startConfigPortal() returns false even when successful
     wm.startConfigPortal("TestAP");
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     delay(100);
     
-    // Try to start again (should fail/return false)
-    bool started2 = wm.startConfigPortal("TestAP2");
-    TEST_ASSERT_FALSE(started2); // Should return false when already active
-    TEST_ASSERT_TRUE(wm.getConfigPortalActive()); // Still active
+    // Try to start again (should silently fail when already active)
+    wm.startConfigPortal("TestAP2");
+    TEST_ASSERT_TRUE(wm.getConfigPortalActive()); // Still active with original AP name
     
     wm.stopConfigPortal();
     
@@ -238,8 +216,6 @@ void test_get_config_portal_ssid() {
     
     WiFiManager wm;
     
-    // Use non-blocking mode
-    wm.setConfigPortalBlocking(false);
     wm.setConfigPortalTimeout(10);
     
     // Start with known SSID
