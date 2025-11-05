@@ -782,8 +782,6 @@ protected:
     String        WiFi_psk(bool persistent = true) const;
     bool          WiFi_scanNetworks();
     bool          WiFi_scanNetworks(bool force); // Always async - returns false if scan started but not complete
-    bool          WiFi_scanNetworks(bool force,bool async); // async parameter ignored - always async
-    bool          WiFi_scanNetworks(unsigned int cachetime,bool async); // async parameter ignored - always async
     bool          WiFi_scanNetworks(unsigned int cachetime);
     void          WiFi_scanComplete(int networksFound);
     bool          WiFiSetCountry();

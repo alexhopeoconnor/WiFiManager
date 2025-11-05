@@ -11,6 +11,7 @@
  */
 
 #include "WiFiManager.h"
+#include "templates/WiFiPollingJS.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -1501,104 +1502,7 @@ void WiFiManager::handleWifi(AsyncWebServerRequest *request, boolean scan) {
   reportStatus(page);
   
   // Add JavaScript for AJAX polling
-  page += F("<script>");
-  page += F("let scanPollInterval = null;");
-  page += F("let isPolling = false;");
-  page += F("");
-  page += F("function refreshScan() {");
-  page += F("  // Trigger scan via refresh parameter");
-  page += F("  fetch('/wifi?refresh=1', {method: 'GET'}).then(() => {");
-  page += F("    startPolling();");
-  page += F("  });");
-  page += F("}");
-  page += F("");
-  page += F("function startPolling() {");
-  page += F("  if(isPolling) return;");
-  page += F("  isPolling = true;");
-  page += F("  document.getElementById('refresh-btn').disabled = true;");
-  page += F("  document.getElementById('refresh-btn').textContent = 'Scanning...';");
-  page += F("  updateScanStatus();");
-  page += F("  scanPollInterval = setInterval(updateScanStatus, 1000);");
-  page += F("}");
-  page += F("");
-  page += F("function stopPolling() {");
-  page += F("  if(scanPollInterval) {");
-  page += F("    clearInterval(scanPollInterval);");
-  page += F("    scanPollInterval = null;");
-  page += F("  }");
-  page += F("  isPolling = false;");
-  page += F("  document.getElementById('refresh-btn').disabled = false;");
-  page += F("  document.getElementById('refresh-btn').textContent = 'Refresh';");
-  page += F("}");
-  page += F("");
-  page += F("function updateScanStatus() {");
-  page += F("  fetch('/wifi/scanstatus')");
-  page += F("    .then(response => response.json())");
-  page += F("    .then(data => {");
-  page += F("      if(data.scanning) {");
-  page += F("        // Still scanning, show status");
-  page += F("        document.getElementById('scan-results').innerHTML = 'Scanning for networks...<br/><br/>';");
-  page += F("      } else {");
-  page += F("        // Scan complete, update network list");
-  page += F("        stopPolling();");
-  page += F("        updateNetworkList(data);");
-  page += F("      }");
-  page += F("    })");
-  page += F("    .catch(error => {");
-  page += F("      console.error('Error polling scan status:', error);");
-  page += F("      stopPolling();");
-  page += F("    });");
-  page += F("}");
-  page += F("");
-  page += F("function updateNetworkList(data) {");
-  page += F("  let html = '';");
-  page += F("  if(data.count === 0) {");
-  page += F("    html = 'No networks found. Refresh to scan again.<br/><br/>';");
-  page += F("  } else if(data.networks && data.networks.length > 0) {");
-  page += F("    data.networks.forEach(function(network) {");
-  page += F("      // Match existing HTML structure from getScanItemOut()");
-  page += F("      let qualityIcon = getQualityIcon(network.quality);");
-  page += F("      let qualityPercent = network.quality + '%';");
-  page += F("      let encrypted = network.enc_type !== 0 ? '<span class=\"l\">🔒</span>' : '';");
-  page += F("      html += '<div><a href=\"#p\" onclick=\"c(this)\" data-ssid=\"' + escapeHtml(network.ssid) + '\">' + escapeHtml(network.ssid) + '</a>';");
-  page += F("      html += '<div role=\"img\" aria-label=\"' + qualityPercent + '\" title=\"' + qualityPercent + '\" class=\"q q-' + network.quality + '\"></div>';");
-  page += F("      html += '<div class=\"q\">' + qualityPercent + '</div>';");
-  page += F("      html += encrypted;");
-  page += F("      html += '</div>';");
-  page += F("    });");
-  page += F("  }");
-  page += F("  document.getElementById('scan-results').innerHTML = html;");
-  page += F("}");
-  page += F("");
-  page += F("function escapeHtml(text) {");
-  page += F("  const map = {");
-  page += F("    '&': '&amp;',");
-  page += F("    '<': '&lt;',");
-  page += F("    '>': '&gt;',");
-  page += F("    '\"': '&quot;',");
-  page += F("    \"'\": '&#039;'");
-  page += F("  };");
-  page += F("  return text.replace(/[&<>\"']/g, m => map[m]);");
-  page += F("}");
-  page += F("");
-  page += F("function getQualityIcon(quality) {");
-  page += F("  if(quality >= 75) return '▂▄▆█';");
-  page += F("  if(quality >= 50) return '▂▄▆▁';");
-  page += F("  if(quality >= 25) return '▂▄▁▁';");
-  page += F("  return '▂▁▁▁';");
-  page += F("}");
-  page += F("");
-  page += F("// Check if scan is in progress on page load");
-  page += F("window.addEventListener('load', function() {");
-  page += F("  fetch('/wifi/scanstatus')");
-  page += F("    .then(response => response.json())");
-  page += F("    .then(data => {");
-  page += F("      if(data.scanning) {");
-  page += F("        startPolling();");
-  page += F("      }");
-  page += F("    });");
-  page += F("});");
-  page += F("</script>");
+  page += FPSTR(WIFI_POLLING_JS);
   
   page += getHTTPEnd();
 
@@ -1675,16 +1579,8 @@ bool WiFiManager::WiFi_scanNetworks(){
   return WiFi_scanNetworks(false);
 }
  
-bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime,bool async){
-    // async parameter ignored - always async now
-    return WiFi_scanNetworks(millis()-_lastscan > cachetime);
-}
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime){
     return WiFi_scanNetworks(millis()-_lastscan > cachetime);
-}
-bool WiFiManager::WiFi_scanNetworks(bool force,bool async){
-    // async parameter ignored - always async now
-    return WiFi_scanNetworks(force);
 }
 bool WiFiManager::WiFi_scanNetworks(bool force){
     #ifdef WM_DEBUG_LEVEL
