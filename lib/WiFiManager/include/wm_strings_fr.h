@@ -6,7 +6,7 @@
  *
  * @author Creator tzapu
  * @author tablatronix
- * @version 0.0.1
+ * @author Alex Hope-O'Connor
  * @translated AByGCreation
  * @license MIT
  */

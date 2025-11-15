@@ -8,7 +8,7 @@
  *
  * @author Creator tzapu
  * @author tablatronix
- * @version 0.0.0
+ * @author Alex Hope-O'Connor
  * @license MIT
  */
 

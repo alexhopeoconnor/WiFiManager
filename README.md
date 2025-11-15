@@ -13,6 +13,11 @@ Espressif ESPx WiFi Connection manager with fallback web configuration portal
 
 This fork may contain breaking changes and is not compatible with the upstream version. Use at your own risk.
 
+## Authors
+
+- **Alex Hope-O'Connor** ([@alexhopeoconnor](https://github.com/alexhopeoconnor)) - Fork maintainer
+- Original work by **tzapu** and contributors
+
 ## Installation
 
 This fork is optimized for PlatformIO. Add to your `platformio.ini`:
