@@ -11,7 +11,7 @@
  */
 
 #include "WiFiManager.h"
-#include "WiFiManagerServer.h"
+#include "WiFiManagerServer.h" // Need menu tokens
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -1852,6 +1852,33 @@ void WiFiManager::setTitle(String title){
  * @since $dev
  * @param uint8_t menu[] array of menu ids
  */
+// Menu tokens (used by setMenu and handlers) - defined here, declared in WiFiManagerServer.h
+const char _wifi_token[]       PROGMEM = "wifi";
+const char _wifinoscan_token[] PROGMEM = "wifinoscan";
+const char _info_token[]       PROGMEM = "info";
+const char _param_token[]      PROGMEM = "param";
+const char _close_token[]      PROGMEM = "close";
+const char _restart_token[]    PROGMEM = "restart";
+const char _exit_token[]       PROGMEM = "exit";
+const char _erase_token[]      PROGMEM = "erase";
+const char _update_token[]     PROGMEM = "update";
+const char _sep_token[]        PROGMEM = "sep";
+const char _custom_token[]     PROGMEM = "custom";
+PGM_P _menutokens[] PROGMEM = {
+    _wifi_token,
+    _wifinoscan_token,
+    _info_token,
+    _param_token,
+    _close_token,
+    _restart_token,
+    _exit_token,
+    _erase_token,
+    _update_token,
+    _sep_token,
+    _custom_token
+};
+const uint8_t _nummenutokens = (sizeof(_menutokens) / sizeof(PGM_P));
+
 void WiFiManager::setMenu(const char * menu[], uint8_t size){
 #ifdef WM_DEBUG_LEVEL
   // DEBUG_WM(WM_DEBUG_DEV,"setmenu array");
@@ -1960,6 +1987,15 @@ String WiFiManager::getDefaultAPName(){
 }
 
 /**
+ * setWiFiSSIDPrefix
+ * Set the prefix for default AP name (e.g., "ESP" becomes "ESP_XXXXXX")
+ * @param String prefix, prefix for auto-generated AP name
+ */
+void WiFiManager::setWiFiSSIDPrefix(String prefix){
+  _wifissidprefix = prefix;
+}
+
+/**
  * setCountry
  * @since $dev
  * @param String cc country code, must be defined in WiFiSetCountry, US, JP, CN
@@ -2049,7 +2085,7 @@ void WiFiManager::debugSoftAPConfig(){
 
     #ifdef WM_DEBUG_LEVEL
     DEBUG_WM(F("SoftAP Configuration"));
-    DEBUG_WM(FPSTR(D_HR));
+    DEBUG_WM(F("--------------------"));
     DEBUG_WM(F("ssid:            "),(char *) config.ssid);
     DEBUG_WM(F("password:        "),(char *) config.password);
     DEBUG_WM(F("ssid_len:        "),config.ssid_len);
@@ -2063,7 +2099,7 @@ void WiFiManager::debugSoftAPConfig(){
       DEBUG_WM(F("country:         "),(String)country.cc);
       #endif
     DEBUG_WM(F("beacon_interval: "),(String)config.beacon_interval + "(ms)");
-    DEBUG_WM(FPSTR(D_HR));
+    DEBUG_WM(F("--------------------"));
     #endif
 }
 
@@ -2098,45 +2134,25 @@ void WiFiManager::debugPlatformInfo(){
   #endif
 }
 
+// Utility function wrappers - delegate to WiFiManagerUtils namespace
+
 int WiFiManager::getRSSIasQuality(int RSSI) {
-  int quality = 0;
-
-  if (RSSI <= -100) {
-    quality = 0;
-  } else if (RSSI >= -50) {
-    quality = 100;
-  } else {
-    quality = 2 * (RSSI + 100);
-  }
-  return quality;
+  return WiFiManagerUtils::rssiToQuality(RSSI);
 }
 
-/** Is this an IP? */
 boolean WiFiManager::isIp(String str) {
-  for (size_t i = 0; i < str.length(); i++) {
-    int c = str.charAt(i);
-    if (c != '.' && (c < '0' || c > '9')) {
-      return false;
-    }
-  }
-  return true;
+  return WiFiManagerUtils::isValidIP(str);
 }
 
-/** IP to String? */
 String WiFiManager::toStringIp(IPAddress ip) {
-  String res = "";
-  for (int i = 0; i < 3; i++) {
-    res += String((ip >> (8 * i)) & 0xFF) + ".";
-  }
-  res += String(((ip >> 8 * 3)) & 0xFF);
-  return res;
+  return WiFiManagerUtils::ipToString(ip);
 }
 
 boolean WiFiManager::validApPassword(){
   // check that ap password is valid, return false
   if (_apPassword == NULL) _apPassword = "";
   if (_apPassword != "") {
-    if (_apPassword.length() < 8 || _apPassword.length() > 63) {
+    if (!WiFiManagerUtils::isValidAPPassword(_apPassword)) {
     #ifdef WM_DEBUG_LEVEL
       DEBUG_WM(F("AccessPoint set password is INVALID or <8 chars"));
       #endif
@@ -2151,54 +2167,36 @@ boolean WiFiManager::validApPassword(){
   return true;
 }
 
-/**
- * encode htmlentities
- * @since $dev
- * @param  string str  string to replace entities
- * @return string      encoded string
- */
 String WiFiManager::htmlEntities(String str, bool whitespace) {
-  str.replace("&","&amp;");
-  str.replace("<","&lt;");
-  str.replace(">","&gt;");
-  str.replace("'","&#39;");
-  if(whitespace) str.replace(" ","&#160;");
-  // str.replace("-","&ndash;");
-  // str.replace("\"","&quot;");
-  // str.replace("/": "&#x2F;");
-  // str.replace("`": "&#x60;");
-  // str.replace("=": "&#x3D;");
-return str;
+  return WiFiManagerUtils::htmlEntities(str, whitespace);
 }
 
-/**
- * [getWLStatusString description]
- * @access public
- * @param  {[type]} uint8_t status        [description]
- * @return {[type]}         [description]
- */
 String WiFiManager::getWLStatusString(uint8_t status){
-  if(status <= 7) return WIFI_STA_STATUS[status];
-  return FPSTR(S_NA);
+  return WiFiManagerUtils::getStatusString(status);
 }
 
 String WiFiManager::getWLStatusString(){
-  uint8_t status = WiFi.status();
-  if(status <= 7) return WIFI_STA_STATUS[status];
-  return FPSTR(S_NA);
+  return WiFiManagerUtils::getStatusString(WiFi.status());
 }
 
 String WiFiManager::encryptionTypeStr(uint8_t authmode) {
-#ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM("enc_tye: ",authmode);
-  #endif
-  return AUTH_MODE_NAMES[authmode];
+  return WiFiManagerUtils::getEncryptionString(authmode);
 }
 
 String WiFiManager::getModeString(uint8_t mode){
-  if(mode <= 3) return WIFI_MODES[mode];
-  return FPSTR(S_NA);
+  return WiFiManagerUtils::getModeString(mode);
 }
+
+// Country configurations (used by WiFiSetCountry)
+#ifdef ESP32
+const wifi_country_t WM_COUNTRY_US{"US",1,11,CONFIG_ESP32_PHY_MAX_WIFI_TX_POWER,WIFI_COUNTRY_POLICY_AUTO};
+const wifi_country_t WM_COUNTRY_CN{"CN",1,13,CONFIG_ESP32_PHY_MAX_WIFI_TX_POWER,WIFI_COUNTRY_POLICY_AUTO};
+const wifi_country_t WM_COUNTRY_JP{"JP",1,14,CONFIG_ESP32_PHY_MAX_WIFI_TX_POWER,WIFI_COUNTRY_POLICY_AUTO};
+#elif defined(ESP8266) && !defined(WM_NOCOUNTRY)
+const wifi_country_t WM_COUNTRY_US{"US",1,11,WIFI_COUNTRY_POLICY_AUTO};
+const wifi_country_t WM_COUNTRY_CN{"CN",1,13,WIFI_COUNTRY_POLICY_AUTO};
+const wifi_country_t WM_COUNTRY_JP{"JP",1,14,WIFI_COUNTRY_POLICY_AUTO};
+#endif
 
 bool WiFiManager::WiFiSetCountry(){
   if(_wificountry == "") return false; // skip not set
@@ -2207,16 +2205,6 @@ bool WiFiManager::WiFiSetCountry(){
   DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFiSetCountry to"),_wificountry);
   #endif
 
-/*
-  * @return
-  *    - ESP_OK: succeed
-  *    - ESP_ERR_WIFI_NOT_INIT: WiFi is not initialized by eps_wifi_init
-  *    - ESP_ERR_WIFI_IF: invalid interface
-  *    - ESP_ERR_WIFI_ARG: invalid argument
-  *    - others: refer to error codes in esp_err.h
-  */
-
-  // @todo move these definitions, and out of cpp `esp_wifi_set_country(&WM_COUNTRY_US)`
   bool ret = true;
   // ret = esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20); // WIFI_BW_HT40
   #ifdef ESP32

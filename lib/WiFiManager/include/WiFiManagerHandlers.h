@@ -18,6 +18,35 @@
 #include <memory>
 #include "WiFiManager.h" // Need full definition for WiFiManagerRequestArgs
 
+// -----------------------------------------------------------------------------------------------
+// CSS CLASSES (for body class attribute)
+
+const char C_root[]               PROGMEM = "home";
+const char C_wifi[]               PROGMEM = "wifi";
+const char C_info[]               PROGMEM = "info";
+const char C_param[]              PROGMEM = "param";
+const char C_close[]              PROGMEM = "close";
+const char C_restart[]            PROGMEM = "restart";
+const char C_exit[]               PROGMEM = "exit";
+const char C_erase[]              PROGMEM = "erase";
+const char C_update[]             PROGMEM = "update";
+
+// -----------------------------------------------------------------------------------------------
+// FORM FIELD NAMES (for IP configuration forms)
+
+const char S_ip[]                 PROGMEM = "ip";
+const char S_gw[]                 PROGMEM = "gw";
+const char S_sn[]                 PROGMEM = "sn";
+const char S_dns[]                PROGMEM = "dns";
+
+// -----------------------------------------------------------------------------------------------
+// HTTP HEADERS
+
+const char HTTP_HEAD_CT[]         PROGMEM = "text/html";
+const char HTTP_HEAD_CT2[]        PROGMEM = "text/plain";
+const char HTTP_HEAD_CORS[]       PROGMEM = "Access-Control-Allow-Origin";
+const char HTTP_HEAD_CORS_ALLOW_ALL[]  PROGMEM = "*";
+
 class WiFiManagerHandlers {
   public:
     WiFiManagerHandlers(WiFiManager* wm);

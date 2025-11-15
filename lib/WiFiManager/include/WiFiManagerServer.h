@@ -25,6 +25,42 @@ class WiFiManager;
 // Forward declaration - full definition needed in .cpp file
 class WiFiManagerHandlers;
 
+// -----------------------------------------------------------------------------------------------
+// MENU TOKENS (for menu configuration via setMenu)
+
+extern const char _wifi_token[]       PROGMEM;
+extern const char _wifinoscan_token[] PROGMEM;
+extern const char _info_token[]       PROGMEM;
+extern const char _param_token[]      PROGMEM;
+extern const char _close_token[]      PROGMEM;
+extern const char _restart_token[]    PROGMEM;
+extern const char _exit_token[]       PROGMEM;
+extern const char _erase_token[]      PROGMEM;
+extern const char _update_token[]     PROGMEM;
+extern const char _sep_token[]        PROGMEM;
+extern const char _custom_token[]     PROGMEM;
+extern PGM_P _menutokens[] PROGMEM;
+extern const uint8_t _nummenutokens;
+
+// -----------------------------------------------------------------------------------------------
+// HTTP ROUTES
+
+const char R_root[]               PROGMEM = "/";
+const char R_wifi[]               PROGMEM = "/wifi";
+const char R_wifinoscan[]         PROGMEM = "/0wifi";
+const char R_wifisave[]           PROGMEM = "/wifisave";
+const char R_info[]               PROGMEM = "/info";
+const char R_param[]              PROGMEM = "/param";
+const char R_paramsave[]          PROGMEM = "/paramsave";
+const char R_restart[]            PROGMEM = "/restart";
+const char R_exit[]               PROGMEM = "/exit";
+const char R_close[]              PROGMEM = "/close";
+const char R_erase[]              PROGMEM = "/erase";
+const char R_status[]             PROGMEM = "/status";
+const char R_scanstatus[]         PROGMEM = "/wifistatus";
+const char R_update[]             PROGMEM = "/update";
+const char R_updatedone[]         PROGMEM = "/u";
+
 class WiFiManagerServer {
   public:
     WiFiManagerServer(WiFiManager* wm);

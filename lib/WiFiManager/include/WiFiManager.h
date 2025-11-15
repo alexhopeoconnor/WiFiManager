@@ -129,16 +129,15 @@
 #include <string>
 
 
-// Include wm strings vars
-// Pass in strings env override via WM_STRINGS_FILE
-#ifndef WM_STRINGS_FILE
-#define WM_STRINGS_FILE "wm_strings_en.h" // this includes constants as dependency
-#endif
-#include WM_STRINGS_FILE
+// Include utility functions
+#include "WiFiManagerUtils.h"
 
 // prep string concat vars
 #define WM_STRING2(x) #x
-#define WM_STRING(x) WM_STRING2(x)    
+#define WM_STRING(x) WM_STRING2(x)
+
+// WiFiManager version
+const char WM_VERSION_STR[] PROGMEM = "v2.0.18";    
 
 // #include <esp_idf_version.h>
 #ifdef ESP_IDF_VERSION
@@ -441,6 +440,9 @@ class WiFiManager
     // get default ap esp uses , esp_chipid etc
     String        getDefaultAPName();
     
+    // set the WiFi SSID prefix for default AP name, default platform-specific (ESP/ESP32/WM)
+    void          setWiFiSSIDPrefix(String prefix);
+    
     // set port of webserver, 80
     void          setHttpPort(uint16_t port);
 
@@ -584,7 +586,15 @@ class WiFiManager
     unsigned long _saveTimeout            = 0; // ms stop trying to connect to ap on saves, in case bugs in esp waitforconnectresult
     
     WiFiMode_t    _usermode               = WIFI_STA; // Default user mode
-    String        _wifissidprefix         = FPSTR(S_ssidpre); // auto apname prefix prefix+chipid
+    String        _wifissidprefix         = 
+#ifdef ESP8266
+        "ESP"
+#elif defined(ESP32)
+        "ESP32"
+#else
+        "WM"
+#endif
+        ; // auto apname prefix prefix+chipid
     int           _cpclosedelay           = 2000; // delay before wifisave, prevents captive portal from closing to fast.
     bool          _cleanConnect           = false; // disconnect before connect in connectwifi, increases stability on connects
     bool          _connectonsave          = true; // connect to wifi when saving creds
@@ -636,7 +646,7 @@ class WiFiManager
     const char*   _customBodyFooter       = ""; // store custom bottom body element html from user inside <body>
     const char*   _customMenuHTML         = ""; // store custom menu html from user
     String        _bodyClass              = ""; // class to add to body
-    String        _title                  = FPSTR(S_brand); // app title -  default WiFiManager
+    String        _title                  = "WiFiManager"; // app title - default WiFiManager
 
     // internal options
     
@@ -782,7 +792,7 @@ protected:
     WiFiManagerParameter** _params    = NULL;
 
     boolean _debug  = true;
-    String _debugPrefix = FPSTR(S_debugPrefix);
+    String _debugPrefix = "*wm:"; // default debug prefix
 
     wm_debuglevel_t debugLvlShow = WM_DEBUG_VERBOSE; // at which level start showing [n] level tags
 
