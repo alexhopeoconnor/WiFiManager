@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFiManagerParameter.h>
 #include "../test_main.h"
 
 // Test many start/stop cycles for memory leaks
@@ -56,8 +57,8 @@ void test_long_running_portal() {
         TEST_ASSERT_TRUE(wm.getConfigPortalActive());
         
         // Verify infrastructure remains
-        TEST_ASSERT_NOT_NULL(wm.server);
-        TEST_ASSERT_NOT_NULL(wm.dnsServer);
+        TEST_ASSERT_NOT_NULL(wm.getServer());
+        TEST_ASSERT_NOT_NULL(wm.getDNSServer());
         
         delay(10);
     }

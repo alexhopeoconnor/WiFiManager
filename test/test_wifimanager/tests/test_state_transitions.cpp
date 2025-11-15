@@ -76,8 +76,8 @@ void test_state_consistency_during_portal() {
     
     // Verify state consistency
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
-    TEST_ASSERT_NOT_NULL(wm.server);
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getServer());
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     // Process multiple times
     for (int i = 0; i < 10; i++) {

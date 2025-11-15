@@ -107,10 +107,10 @@ void test_config_portal_infrastructure() {
     delay(200); // Give time for initialization
     
     // Verify server object exists (must check while portal is active)
-    TEST_ASSERT_NOT_NULL_MESSAGE(wm.server, "Server object should exist when portal is active");
+    TEST_ASSERT_NOT_NULL_MESSAGE(wm.getServer(), "Server object should exist when portal is active");
     
     // Verify DNS server exists
-    TEST_ASSERT_NOT_NULL_MESSAGE(wm.dnsServer, "DNS server object should exist when portal is active");
+    TEST_ASSERT_NOT_NULL_MESSAGE(wm.getDNSServer(), "DNS server object should exist when portal is active");
     
     // Verify WiFi is in AP mode
     WiFiMode_t mode = WiFi.getMode();
@@ -145,7 +145,7 @@ void test_start_web_portal() {
     wm.process();
     
     // Verify server object exists
-    TEST_ASSERT_NOT_NULL(wm.server);
+    TEST_ASSERT_NOT_NULL(wm.getServer());
     
     wm.stopWebPortal();
     

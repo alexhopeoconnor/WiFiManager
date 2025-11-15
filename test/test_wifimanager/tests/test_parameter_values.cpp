@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFiManagerParameter.h>
 #include "../test_main.h"
 
 // Test parameter value set directly

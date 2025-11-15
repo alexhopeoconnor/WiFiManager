@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFiManagerParameter.h>
 #include "../test_main.h"
 
 // Test autoConnect fallback flow
@@ -145,8 +146,8 @@ void test_portal_with_parameters_and_infrastructure() {
     TEST_ASSERT_TRUE(wm.getConfigPortalActive());
     
     // Verify infrastructure
-    TEST_ASSERT_NOT_NULL(wm.server);
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getServer());
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     // Verify parameters
     TEST_ASSERT_EQUAL(2, wm.getParametersCount());

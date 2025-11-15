@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <Arduino.h>
 #include <WiFiManager.h>
+#include <WiFiManagerParameter.h>
 
 // Test custom parameters
 void test_create_parameter() {

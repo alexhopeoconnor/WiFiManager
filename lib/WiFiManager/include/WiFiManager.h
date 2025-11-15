@@ -6,7 +6,7 @@
  * 
  * @author Creator tzapu
  * @author tablatronix
- * @version 0.0.0
+ * @author Alex Hope-O'Connor
  * @license MIT
  */
 
@@ -21,6 +21,8 @@
 #endif
 
 #include <vector>
+
+#include "WiFiManagerParameter.h"
 
 // #define WM_MDNS            // includes MDNS, also set MDNS with sethostname
 // #define WM_FIXERASECONFIG  // use erase flash fix
@@ -180,54 +182,7 @@
 // #pragma message "VER_IDF_STR = " WM_STRING(VER_IDF_STR)
 // #pragma message "VER_ARDUINO_STR = " WM_STRING(VER_ARDUINO_STR)
 
-#ifndef WIFI_MANAGER_MAX_PARAMS
-    #define WIFI_MANAGER_MAX_PARAMS 5 // params will autoincrement and realloc by this amount when max is reached
-#endif
-
-#define WFM_LABEL_BEFORE 1
-#define WFM_LABEL_AFTER 2
-#define WFM_NO_LABEL 0
-#define WFM_LABEL_DEFAULT 1
-
 // WiFiManagerRequestArgs is defined as a nested class inside WiFiManager (after WM_WebServer is defined)
-
-class WiFiManagerParameter {
-  public:
-    /** 
-        Create custom parameters that can be added to the WiFiManager setup web page
-        @id is used for HTTP queries and must not contain spaces nor other special characters
-    */
-    WiFiManagerParameter();
-    WiFiManagerParameter(const char *custom);
-    WiFiManagerParameter(const char *id, const char *label);
-    WiFiManagerParameter(const char *id, const char *label, const char *defaultValue, int length);
-    WiFiManagerParameter(const char *id, const char *label, const char *defaultValue, int length, const char *custom);
-    WiFiManagerParameter(const char *id, const char *label, const char *defaultValue, int length, const char *custom, int labelPlacement);
-    ~WiFiManagerParameter();
-    // WiFiManagerParameter& operator=(const WiFiManagerParameter& rhs);
-
-    const char *getID() const;
-    const char *getValue() const;
-    const char *getLabel() const;
-    const char *getPlaceholder() const; // @deprecated, use getLabel
-    int         getValueLength() const;
-    int         getLabelPlacement() const;
-    virtual const char *getCustomHTML() const;
-    void        setValue(const char *defaultValue, int length);
-
-  protected:
-    void init(const char *id, const char *label, const char *defaultValue, int length, const char *custom, int labelPlacement);
-
-    WiFiManagerParameter& operator=(const WiFiManagerParameter&);
-    const char *_id;
-    const char *_label;
-    char       *_value;
-    int         _length;
-    int         _labelPlacement;
-  
-    const char *_customHTML;
-    friend class WiFiManager;
-};
 
 
     // debugging
@@ -239,6 +194,10 @@ class WiFiManagerParameter {
         WM_DEBUG_DEV       = 4, // development useful debugging info
         WM_DEBUG_MAX       = 5  // MAX extra dev auditing, var dumps etc (MAX+1 will print timing,mem and frag info)
     } wm_debuglevel_t;
+
+// Forward declarations
+class WiFiManagerServer;
+class WiFiManagerHandlers;
 
 class WiFiManager
 {
@@ -496,10 +455,12 @@ class WiFiManager
 
     // get hostname helper
     String        getWiFiHostname();
-
-
-    std::unique_ptr<DNSServer>        dnsServer;
-    std::unique_ptr<AsyncWebServer>  server;
+    
+    // get server instance (for testing)
+    AsyncWebServer* getServer();
+    
+    // get DNS server instance (for testing)
+    DNSServer* getDNSServer();
 
   public:
   // Define WiFiManagerRequestArgs here after AsyncWebServer is available
@@ -566,8 +527,12 @@ class WiFiManager
       }
   };
 
+  friend class WiFiManagerServer;
+  friend class WiFiManagerHandlers;
+
   protected:
     // vars
+    std::unique_ptr<WiFiManagerServer> _serverManager;
     std::vector<uint8_t> _menuIds;
     std::vector<const char *> _menuIdsParams  = {"wifi","param","info","exit"};
     std::vector<const char *> _menuIdsUpdate  = {"wifi","param","info","update","exit"};
@@ -722,7 +687,6 @@ protected:
 
     bool          startAP();
     void          setupDNSD();
-    void          setupHTTPServer();
 
     uint8_t       connectWifi(String ssid, String pass, bool connect = true);
     bool          setSTAConfig();
@@ -733,33 +697,9 @@ protected:
     uint8_t       waitForConnectResult(uint32_t timeout);
     void          updateConxResult(uint8_t status);
 
-    // webserver handlers
-public:
-    void          handleNotFound(AsyncWebServerRequest *request);
-protected:
-    void          handleRoot(AsyncWebServerRequest *request);
-    void          handleWifi(AsyncWebServerRequest *request, boolean scan);
-    void          handleWifiSave(AsyncWebServerRequest *request);
-    void          handleInfo(AsyncWebServerRequest *request);
-    void          handleReset(AsyncWebServerRequest *request);
-    void          handleExit(AsyncWebServerRequest *request);
-    void          handleClose(AsyncWebServerRequest *request);
-    void          handleErase(AsyncWebServerRequest *request, boolean opt);
-    void          handleParam(AsyncWebServerRequest *request);
-    void          handleWiFiStatus(AsyncWebServerRequest *request);
-    void          handleWiFiScanStatus(AsyncWebServerRequest *request);
-    void          handleRequest(AsyncWebServerRequest *request);
-    void          handleParamSave(AsyncWebServerRequest *request);
-    void          doParamSave(WiFiManagerRequestArgs requestArgs);
-
-    boolean       captivePortal(AsyncWebServerRequest *request);
+    // Config portal lifecycle (handlers moved to WiFiManagerHandlers)
     boolean       configPortalHasTimeout();
     uint8_t       processConfigPortal();
-    void          stopCaptivePortal();
-	// OTA Update handler
-	void          handleUpdate(AsyncWebServerRequest *request);
-	void          handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
-	void          handleUpdateDone(AsyncWebServerRequest *request);
 
 
     // wifi platform abstractions
@@ -815,21 +755,11 @@ protected:
     #endif
     #endif
 
-    // output helpers
-    String        getParamOut();
-    String        getIpForm(String id, String title, String value);
-    String        getScanItemOut();
-    String        getStaticOut();
-    String        getHTTPHead(String title, String classes = "");
-    String        getHTTPEnd();
-    String        getMenuOut();
-    //helpers
+    //helpers (rendering methods moved to WiFiManagerHandlers)
     boolean       isIp(String str);
     String        toStringIp(IPAddress ip);
     boolean       validApPassword();
     String        encryptionTypeStr(uint8_t authmode);
-    void          reportStatus(String &page);
-    String        getInfoData(String id);
 
     // flags
     boolean       connect             = false;
@@ -914,6 +844,9 @@ protected:
     }
 
 };
+
+// Include template implementations for DEBUG_WM
+#include "WiFiManagerDebug.h"
 
 #endif
 

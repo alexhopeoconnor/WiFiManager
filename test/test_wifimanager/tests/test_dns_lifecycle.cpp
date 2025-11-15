@@ -15,13 +15,13 @@ void test_dns_server_created() {
     
     // Wait for DNS server to be created
     unsigned long start = millis();
-    while (!wm.dnsServer && (millis() - start < 1000)) {
+    while (!wm.getDNSServer() && (millis() - start < 1000)) {
         wm.process();
         delay(10);
     }
     
     // DNS server should be created when portal starts
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     wm.stopConfigPortal();
     
@@ -40,13 +40,13 @@ void test_dns_server_cleanup() {
     
     // Wait for DNS server to be created
     unsigned long start = millis();
-    while (!wm.dnsServer && (millis() - start < 1000)) {
+    while (!wm.getDNSServer() && (millis() - start < 1000)) {
         wm.process();
         delay(10);
     }
     
     // Verify DNS server exists
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     // Stop portal
     wm.stopConfigPortal();
@@ -72,11 +72,11 @@ void test_dns_server_lifecycle_cycles() {
     wm.process();
     
     unsigned long start = millis();
-    while (!wm.dnsServer && (millis() - start < 1000)) {
+    while (!wm.getDNSServer() && (millis() - start < 1000)) {
         wm.process();
         delay(10);
     }
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     wm.stopConfigPortal();
     wm.process();
@@ -87,11 +87,11 @@ void test_dns_server_lifecycle_cycles() {
     wm.process();
     
     start = millis();
-    while (!wm.dnsServer && (millis() - start < 1000)) {
+    while (!wm.getDNSServer() && (millis() - start < 1000)) {
         wm.process();
         delay(10);
     }
-    TEST_ASSERT_NOT_NULL(wm.dnsServer);
+    TEST_ASSERT_NOT_NULL(wm.getDNSServer());
     
     wm.stopConfigPortal();
     wm.process();
