@@ -19,6 +19,9 @@
 #include <functional>
 #include <memory>
 
+// DFTE (template engine)
+#include <TemplateEngine.h>
+
 // Forward declarations
 class WiFiManager;
 
@@ -46,7 +49,20 @@ const char R_updatedone[]         PROGMEM = "/u";
 
 class WiFiManagerServer {
   public:
+    // Singleton access
+    static WiFiManagerServer* instance();
+    
     WiFiManagerServer(WiFiManager* wm);
+    
+    // Template engine setup and access
+    void setupTemplateEngine();
+    PlaceholderRegistry* getPlaceholderRegistry() { return _tplRegistry.get(); }
+    
+    // Static zero-arg getters for DFTE RAM placeholders
+    static const char* tplGetPageTitle();
+    static const char* tplGetSubtitle();
+    static const char* tplGetMenu();
+    static const char* tplGetStatus();
     
     // Create server instance
     void createServer(uint16_t port);
@@ -74,6 +90,12 @@ class WiFiManagerServer {
     std::unique_ptr<WiFiManagerHandlers> _handlers;
     std::unique_ptr<AsyncWebServer> server;
     std::unique_ptr<DNSServer> dnsServer;
+    
+    // Shared DFTE placeholder registry
+    std::unique_ptr<PlaceholderRegistry> _tplRegistry;
+    
+    // Singleton instance
+    static WiFiManagerServer* s_instance;
 };
 
 // Include WiFiManagerHandlers.h after class definition to provide full definition

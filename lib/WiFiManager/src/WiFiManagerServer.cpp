@@ -11,11 +11,78 @@
 #include "WiFiManagerServer.h"
 #include "WiFiManager.h"
 #include "WiFiManagerHandlers.h" // Full definition needed for unique_ptr
+#include "templates/CSS.h"
+#include "templates/JS.h"
+#include "templates/Root.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
+WiFiManagerServer* WiFiManagerServer::s_instance = nullptr;
+
+WiFiManagerServer* WiFiManagerServer::instance() {
+  return s_instance;
+}
+
 WiFiManagerServer::WiFiManagerServer(WiFiManager* wm) 
   : _wm(wm), _handlers(std::make_unique<WiFiManagerHandlers>(wm)) {
+  s_instance = this;
+}
+
+// Static getters for RAM placeholders (registry requires zero-arg functions) using singleton
+const char* WiFiManagerServer::tplGetPageTitle() {
+  auto srv = WiFiManagerServer::instance();
+  if (!srv || !srv->_wm) return "";
+  return srv->_wm->_title.c_str();
+}
+
+const char* WiFiManagerServer::tplGetSubtitle() {
+  static String buf;
+  auto srv = WiFiManagerServer::instance();
+  if (!srv || !srv->_wm) { buf = ""; return buf.c_str(); }
+  WiFiManager* wm = srv->_wm;
+  if (wm->configPortalActive) {
+    buf = wm->_apName;
+  } else {
+    buf = wm->getWiFiHostname() + " - " + WiFi.localIP().toString();
+  }
+  return buf.c_str();
+}
+
+const char* WiFiManagerServer::tplGetMenu() {
+  static String buf;
+  auto srv = WiFiManagerServer::instance();
+  if (!srv || !srv->_handlers) { buf = ""; return buf.c_str(); }
+  buf = "";
+  srv->_handlers->getMenuOut(&buf);
+  return buf.c_str();
+}
+
+const char* WiFiManagerServer::tplGetStatus() {
+  static String buf;
+  auto srv = WiFiManagerServer::instance();
+  if (!srv || !srv->_handlers) { buf = ""; return buf.c_str(); }
+  buf = "";
+  srv->_handlers->reportStatus(buf);
+  return buf.c_str();
+}
+
+void WiFiManagerServer::setupTemplateEngine() {
+  // Initialize shared placeholder registry once
+  if (!_tplRegistry) {
+    _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(12));
+  } else {
+    _tplRegistry->clear();
+  }
+  
+  // Register PROGMEM assets
+  _tplRegistry->registerProgmemData("%STYLES%", CSS_STYLE);
+  _tplRegistry->registerProgmemData("%SCRIPTS%", JS_SCRIPT);
+  
+  // Register dynamic RAM getters
+  _tplRegistry->registerRamData("%PAGE_TITLE%", &WiFiManagerServer::tplGetPageTitle);
+  _tplRegistry->registerRamData("%SUBTITLE%", &WiFiManagerServer::tplGetSubtitle);
+  _tplRegistry->registerRamData("%MENU%", &WiFiManagerServer::tplGetMenu);
+  _tplRegistry->registerRamData("%STATUS%", &WiFiManagerServer::tplGetStatus);
 }
 
 void WiFiManagerServer::createServer(uint16_t port) {
@@ -38,6 +105,9 @@ void WiFiManagerServer::createServer(uint16_t port) {
   }
 
   server.reset(new AsyncWebServer(port));
+  
+  // Ensure template engine is ready whenever a server is (re)created
+  setupTemplateEngine();
 }
 
 void WiFiManagerServer::registerRoutes() {
@@ -48,6 +118,11 @@ void WiFiManagerServer::registerRoutes() {
     return;
   }
 
+  // Ensure template engine is initialized before routes use it
+  if (!_tplRegistry) {
+    setupTemplateEngine();
+  }
+  
   if (_wm->_webservercallback != NULL) {
     #ifdef WM_DEBUG_LEVEL
     _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("[CB] _webservercallback calling"));
@@ -164,6 +239,9 @@ void WiFiManagerServer::shutdownServer() {
     dnsServer->stop(); // free heap ?
     dnsServer.reset();
   }
+  
+  // Clear singleton on shutdown
+  if (s_instance == this) s_instance = nullptr;
 }
 
 #endif

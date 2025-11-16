@@ -13,6 +13,8 @@
 #include "templates/HTML.h"
 #include "templates/CSS.h"
 #include "templates/JS.h"
+#include "templates/Root.h"
+#include <TemplateEngine.h>
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -38,13 +40,30 @@ String WiFiManagerHandlers::getHTTPEnd() {
 }
 
 String WiFiManagerHandlers::getMenuOut(){
-  String page;
-  page += HTML_PORTAL_MENU[0]; // WIFI
-  page += HTML_PORTAL_MENU[2]; // INFO
-  page += HTML_PORTAL_MENU[6]; // EXIT
-  page += HTML_PORTAL_MENU[9]; // SEP
-  page += HTML_PORTAL_MENU[8]; // UPDATE
-  return page;
+  return getMenuOut(nullptr);
+}
+
+String WiFiManagerHandlers::getMenuOut(String* outOpt){
+  String local;
+  String &out = outOpt ? *outOpt : local;
+  out += HTML_PORTAL_MENU[0]; // WIFI (scan)
+  
+  // Show PARAM (Setup) when params are on their own page
+  if(!_wm->_paramsInWifi && _wm->_paramsCount > 0){
+    out += HTML_PORTAL_MENU[3]; // PARAM
+  }
+  
+  out += HTML_PORTAL_MENU[2]; // INFO
+  
+  // When captive/config portal is active, offer Close (keeps portal running)
+  if(_wm->configPortalActive){
+    out += HTML_PORTAL_MENU[4]; // CLOSE
+  }
+  
+  out += HTML_PORTAL_MENU[6]; // EXIT
+  out += HTML_PORTAL_MENU[9]; // SEP
+  out += HTML_PORTAL_MENU[8]; // UPDATE
+  return out;
 }
 
 String WiFiManagerHandlers::getScanItemOut(){
@@ -680,19 +699,25 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
   #endif
   if (captivePortal(request)) return;
   handleRequest(request);
-  String page = getHTTPHead(_wm->_title, FPSTR(C_root));
-  // Build root main HTML directly without tokens
-  page += F("<h1>");
-  page += _wm->_title;
-  page += F("</h1><h3>");
-  page += (_wm->configPortalActive ? _wm->_apName : (_wm->getWiFiHostname() + " - " + WiFi.localIP().toString()));
-  page += F("</h3>");
-  page += FPSTR(HTML_PORTAL_OPTIONS);
-  page += getMenuOut();
-  reportStatus(page);
-  page += getHTTPEnd();
-
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  
+  // Stream-render the root page using DFTE and the shared registry
+  TemplateContext ctx;
+  if (_wm->_serverManager && _wm->_serverManager->getPlaceholderRegistry()) {
+    ctx.setRegistry(_wm->_serverManager->getPlaceholderRegistry());
+  }
+  TemplateRenderer::initializeContext(ctx, WM_ROOT_TEMPLATE);
+  
+  // Keep context alive across chunk calls
+  auto ctxPtr = std::make_shared<TemplateContext>(ctx);
+  
+  AsyncWebServerResponse *response = request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
+    [ctxPtr](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
+      if (!ctxPtr) return 0;
+      size_t written = TemplateRenderer::renderNextChunk(*ctxPtr, buffer, maxLen);
+      return written;
+    }
+  );
+  request->send(response);
   if(_wm->_preloadwifiscan) _wm->WiFi_scanNetworks(_wm->_scancachetime);
 }
 

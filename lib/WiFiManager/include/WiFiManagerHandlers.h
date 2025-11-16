@@ -78,6 +78,7 @@ class WiFiManagerHandlers {
     String getHTTPHead(String title, String classes = "");
     String getHTTPEnd();
     String getMenuOut();
+    String getMenuOut(String* outOpt);
     String getScanItemOut();
     String getParamOut();
     String getStaticOut();
