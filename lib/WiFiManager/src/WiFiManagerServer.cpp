@@ -66,6 +66,49 @@ const char* WiFiManagerServer::tplGetStatus() {
   return buf.c_str();
 }
 
+void WiFiManagerServer::registerDefaultStyles(PlaceholderRegistry& reg) {
+  reg.registerProgmemData("%STYLES%", CSS_STYLE);
+}
+
+void WiFiManagerServer::registerDefaultScripts(PlaceholderRegistry& reg) {
+  reg.registerProgmemData("%SCRIPTS%", JS_SCRIPT);
+}
+
+void WiFiManagerServer::registerDefaultPageTitle(PlaceholderRegistry& reg) {
+  reg.registerRamData("%PAGE_TITLE%", &WiFiManagerServer::tplGetPageTitle);
+}
+
+void WiFiManagerServer::registerDefaultSubtitle(PlaceholderRegistry& reg) {
+  reg.registerRamData("%SUBTITLE%", &WiFiManagerServer::tplGetSubtitle);
+}
+
+void WiFiManagerServer::registerDefaultMenu(PlaceholderRegistry& reg) {
+  reg.registerRamData("%MENU%", &WiFiManagerServer::tplGetMenu);
+}
+
+void WiFiManagerServer::registerDefaultStatus(PlaceholderRegistry& reg) {
+  reg.registerRamData("%STATUS%", &WiFiManagerServer::tplGetStatus);
+}
+
+void WiFiManagerServer::registerDefaultPlaceholders(PlaceholderRegistry& reg) {
+  registerDefaultStyles(reg);
+  registerDefaultScripts(reg);
+  registerDefaultPageTitle(reg);
+  registerDefaultSubtitle(reg);
+  registerDefaultMenu(reg);
+  registerDefaultStatus(reg);
+}
+
+void WiFiManagerServer::rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer) {
+  _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(12));
+  registerDefaultPlaceholders(*_tplRegistry);
+  if (customizer) {
+    customizer(*_tplRegistry);
+  } else if (_tplSetupCallback) {
+    _tplSetupCallback(*_tplRegistry);
+  }
+}
+
 void WiFiManagerServer::setupTemplateEngine() {
   // Initialize shared placeholder registry once
   if (!_tplRegistry) {
@@ -74,15 +117,13 @@ void WiFiManagerServer::setupTemplateEngine() {
     _tplRegistry->clear();
   }
   
-  // Register PROGMEM assets
-  _tplRegistry->registerProgmemData("%STYLES%", CSS_STYLE);
-  _tplRegistry->registerProgmemData("%SCRIPTS%", JS_SCRIPT);
+  // Register all default placeholders
+  registerDefaultPlaceholders(*_tplRegistry);
   
-  // Register dynamic RAM getters
-  _tplRegistry->registerRamData("%PAGE_TITLE%", &WiFiManagerServer::tplGetPageTitle);
-  _tplRegistry->registerRamData("%SUBTITLE%", &WiFiManagerServer::tplGetSubtitle);
-  _tplRegistry->registerRamData("%MENU%", &WiFiManagerServer::tplGetMenu);
-  _tplRegistry->registerRamData("%STATUS%", &WiFiManagerServer::tplGetStatus);
+  // Allow consumers to customize placeholders
+  if (_tplSetupCallback) {
+    _tplSetupCallback(*_tplRegistry);
+  }
 }
 
 void WiFiManagerServer::createServer(uint16_t port) {

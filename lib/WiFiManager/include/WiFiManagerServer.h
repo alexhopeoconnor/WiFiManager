@@ -64,6 +64,22 @@ class WiFiManagerServer {
     static const char* tplGetMenu();
     static const char* tplGetStatus();
     
+    // Template customization API
+    // Consumers can register a callback to customize placeholders
+    void registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb) { _tplSetupCallback = cb; }
+    
+    // Convenience helpers to register our defaults (granular + all)
+    void registerDefaultStyles(PlaceholderRegistry& reg);
+    void registerDefaultScripts(PlaceholderRegistry& reg);
+    void registerDefaultPageTitle(PlaceholderRegistry& reg);
+    void registerDefaultSubtitle(PlaceholderRegistry& reg);
+    void registerDefaultMenu(PlaceholderRegistry& reg);
+    void registerDefaultStatus(PlaceholderRegistry& reg);
+    void registerDefaultPlaceholders(PlaceholderRegistry& reg);
+    
+    // Rebuild registry with defaults and optional customizer
+    void rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer = nullptr);
+    
     // Create server instance
     void createServer(uint16_t port);
     
@@ -93,6 +109,7 @@ class WiFiManagerServer {
     
     // Shared DFTE placeholder registry
     std::unique_ptr<PlaceholderRegistry> _tplRegistry;
+    std::function<void(PlaceholderRegistry&)> _tplSetupCallback;
     
     // Singleton instance
     static WiFiManagerServer* s_instance;

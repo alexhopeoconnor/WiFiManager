@@ -13,7 +13,7 @@
 #include "templates/HTML.h"
 #include "templates/CSS.h"
 #include "templates/JS.h"
-#include "templates/Root.h"
+#include "templates/RootSelector.h"
 #include <TemplateEngine.h>
 
 #if defined(ESP8266) || defined(ESP32)
