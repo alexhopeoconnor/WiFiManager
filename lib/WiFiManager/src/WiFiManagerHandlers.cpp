@@ -16,62 +16,34 @@
 
 #if defined(ESP8266) || defined(ESP32)
 
-WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {
-}
+WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {}
 
 // Rendering Methods
 
 String WiFiManagerHandlers::getHTTPHead(String title, String classes){
   String page;
-  // Use template for HTML head start
   page += FPSTR(HTML_HEAD_START);
   page += title;
   page += FPSTR(HTML_TITLE_END);
   page += FPSTR(JS_SCRIPT);
   page += FPSTR(CSS_STYLE);
-  page += _wm->_customHeadElement;
-
-  // Build body tag with classes using template
   page += FPSTR(HTML_HEAD_END_START);
-  if (_wm->_bodyClass != "") {
-    if (classes != "") {
-      classes += " ";  // add spacing, if necessary
-    }
-    classes += _wm->_bodyClass;  // add class str
-  }
   page += classes;
   page += FPSTR(HTML_HEAD_END_WRAP);
-
-  if (_wm->_customBodyHeader) {
-    page += _wm->_customBodyHeader;
-  }
-
   return page;
 }
 
 String WiFiManagerHandlers::getHTTPEnd() {
-  String end = FPSTR(HTML_END);
-
-  if (_wm->_customBodyFooter) {
-    end = String(_wm->_customBodyFooter) + end;
-  }
-
-  return end;
+  return FPSTR(HTML_END);
 }
 
 String WiFiManagerHandlers::getMenuOut(){
-  String page;  
-
-  for(auto menuId : _wm->_menuIds ){
-    if((String)_menutokens[menuId] == "param" && _wm->_paramsCount == 0) continue; // no params set, omit params from menu, @todo this may be undesired by someone, use only menu to force?
-    if((String)_menutokens[menuId] == "custom" && _wm->_customMenuHTML!=NULL){
-      page += _wm->_customMenuHTML;
-      continue;
-    }
-    page += HTML_PORTAL_MENU[menuId];
-    delay(0);
-  }
-
+  String page;
+  page += HTML_PORTAL_MENU[0]; // WIFI
+  page += HTML_PORTAL_MENU[2]; // INFO
+  page += HTML_PORTAL_MENU[6]; // EXIT
+  page += HTML_PORTAL_MENU[9]; // SEP
+  page += HTML_PORTAL_MENU[8]; // UPDATE
   return page;
 }
 

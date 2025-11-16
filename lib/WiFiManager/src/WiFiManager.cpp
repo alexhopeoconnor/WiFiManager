@@ -91,7 +91,6 @@ WiFiManager::WiFiManager() {
 }
 
 void WiFiManager::WiFiManagerInit(){
-  setMenu(_menuIdsDefault);
   if(_debug && _debugLevel >= WM_DEBUG_DEV) debugPlatformInfo();
   _max_params = WIFI_MANAGER_MAX_PARAMS;
   // _serverManager is created lazily when config portal is started to save memory
@@ -1456,46 +1455,6 @@ void WiFiManager::setConfigPortalTimeoutCallback( std::function<void()> func ) {
 }
 
 /**
- * set custom head html
- * custom element will be added to head, eg. new meta,style,script tag etc.
- * @access public
- * @param char element
- */
-void WiFiManager::setCustomHeadElement(const char* html) {
-  _customHeadElement = html;
-}
-
-/**
- * set custom html at the top of the body
- * custom element will be added after the body tag is opened, eg. to show a logo etc.
- * @access public
- * @param char element
- */
-void WiFiManager::setCustomBodyHeader(const char* html) {
-    _customBodyHeader = html;
-}
-
-/**
- * set custom html at the bottom of the body
- * custom element will be added before the body tag is closed
- * @access public
- * @param char element
- */
-void WiFiManager::setCustomBodyFooter(const char* html) {
-    _customBodyFooter = html;
-}
-
-/**
- * set custom menu html
- * custom element will be added to menu under custom menu item.
- * @access public
- * @param char element
- */
-void WiFiManager::setCustomMenuHTML(const char* html) {
-  _customMenuHTML = html;
-}
-
-/**
  * toggle wifiscan hiding of duplicate ssid names
  * if this is false, wifiscan will remove duplicat Access Points - defaut true
  * @access public
@@ -1733,97 +1692,12 @@ void WiFiManager::setTitle(String title){
 }
 
 /**
- * set menu items and order
- * if param is present in menu , params will be removed from wifi page automatically
- * eg.
- *  const char * menu[] = {"wifi","setup","sep","info","exit"};
- *  WiFiManager.setMenu(menu);
- * @since $dev
- * @param uint8_t menu[] array of menu ids
- */
-// Menu tokens (used by setMenu and handlers) - defined here, declared in WiFiManagerServer.h
-const char _wifi_token[]       PROGMEM = "wifi";
-const char _wifinoscan_token[] PROGMEM = "wifinoscan";
-const char _info_token[]       PROGMEM = "info";
-const char _param_token[]      PROGMEM = "param";
-const char _close_token[]      PROGMEM = "close";
-const char _restart_token[]    PROGMEM = "restart";
-const char _exit_token[]       PROGMEM = "exit";
-const char _erase_token[]      PROGMEM = "erase";
-const char _update_token[]     PROGMEM = "update";
-const char _sep_token[]        PROGMEM = "sep";
-const char _custom_token[]     PROGMEM = "custom";
-PGM_P _menutokens[] PROGMEM = {
-    _wifi_token,
-    _wifinoscan_token,
-    _info_token,
-    _param_token,
-    _close_token,
-    _restart_token,
-    _exit_token,
-    _erase_token,
-    _update_token,
-    _sep_token,
-    _custom_token
-};
-const uint8_t _nummenutokens = (sizeof(_menutokens) / sizeof(PGM_P));
-
-void WiFiManager::setMenu(const char * menu[], uint8_t size){
-#ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM(WM_DEBUG_DEV,"setmenu array");
-  #endif
-  _menuIds.clear();
-  for(size_t i = 0; i < size; i++){
-    for(size_t j = 0; j < _nummenutokens; j++){
-      if((String)menu[i] == (__FlashStringHelper *)(_menutokens[j])){
-        if((String)menu[i] == "param") _paramsInWifi = false; // param auto flag
-        _menuIds.push_back(j);
-      }
-      delay(0);
-    }
-    delay(0);
-  }
-  #ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM(getMenuOut());
-  #endif
-}
-
-/**
- * setMenu with vector
- * eg.
- * std::vector<const char *> menu = {"wifi","setup","sep","info","exit"};
- * WiFiManager.setMenu(menu);
- * tokens can be found in _menutokens array in strings_en.h
- * @shiftIncrement $dev
- * @param {[type]} std::vector<const char *>& menu [description]
- */
-void WiFiManager::setMenu(std::vector<const char *>& menu){
-#ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM(WM_DEBUG_DEV,"setmenu vector");
-  #endif
-  _menuIds.clear();
-  for(auto menuitem : menu ){
-    for(size_t j = 0; j < _nummenutokens; j++){
-      if((String)menuitem == (__FlashStringHelper *)(_menutokens[j])){
-        if((String)menuitem == "param") _paramsInWifi = false; // param auto flag
-        _menuIds.push_back(j);
-      }
-    }
-  }
-  #ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM(WM_DEBUG_DEV,getMenuOut());
-  #endif
-}
-
-
-/**
  * Set params as separate page not in wifi
  * NOT COMPATIBLE WITH setMenu!
  * @param enable If true, params appear on separate page
  */
 void WiFiManager::setParamsPage(bool enable){
   _paramsInWifi  = !enable;
-  setMenu(enable ? _menuIdsParams : _menuIdsDefault);
 }
 
 // GETTERS
@@ -1889,22 +1763,6 @@ void WiFiManager::setWiFiSSIDPrefix(String prefix){
  */
 void WiFiManager::setCountry(String cc){
   _wificountry = cc;
-}
-
-/**
- * setClass
- * @param String str body class string
- */
-void WiFiManager::setClass(String str){
-  _bodyClass = str;
-}
-
-/**
- * setDarkMode
- * @param bool enable, enable dark mode via invert class
- */
-void WiFiManager::setDarkMode(bool enable){
-  _bodyClass = enable ? "invert" : "";
 }
 
 /**

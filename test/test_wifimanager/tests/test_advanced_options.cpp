@@ -50,8 +50,6 @@ void test_ui_display_options() {
     wm.setShowInfoErase(false);
     wm.setShowInfoUpdate(true);
     wm.setShowInfoUpdate(false);
-    wm.setDarkMode(true);
-    wm.setDarkMode(false);
     wm.setParamsPage(true);
     wm.setParamsPage(false);
     
@@ -67,26 +65,8 @@ void test_ui_customization() {
     
     WiFiManager wm;
     
-    // Test custom HTML elements
-    wm.setCustomHeadElement("<style>body { background: red; }</style>");
-    wm.setCustomHeadElement("");
-    wm.setCustomBodyHeader("<div>Custom Header</div>");
-    wm.setCustomBodyHeader("");
-    wm.setCustomBodyFooter("<div>Custom Footer</div>");
-    wm.setCustomBodyFooter("");
-    wm.setCustomMenuHTML("<div>Custom Menu</div>");
-    wm.setCustomMenuHTML("");
-    
-    // Test menu configuration
-    const char* menu[] = {"wifi", "info", "exit"};
-    wm.setMenu(menu, 3);
-    std::vector<const char*> menuVec = {"wifi", "info", "param", "exit"};
-    wm.setMenu(menuVec);
-    
-    // Test CSS class
-    wm.setClass("invert");
-    wm.setClass("custom-class");
-    wm.setClass("");
+    // Minimal customization retained: title
+    wm.setTitle("MyDevice");
     
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "UI customization options executed without crash");

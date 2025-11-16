@@ -26,23 +26,6 @@ class WiFiManager;
 class WiFiManagerHandlers;
 
 // -----------------------------------------------------------------------------------------------
-// MENU TOKENS (for menu configuration via setMenu)
-
-extern const char _wifi_token[]       PROGMEM;
-extern const char _wifinoscan_token[] PROGMEM;
-extern const char _info_token[]       PROGMEM;
-extern const char _param_token[]      PROGMEM;
-extern const char _close_token[]      PROGMEM;
-extern const char _restart_token[]    PROGMEM;
-extern const char _exit_token[]       PROGMEM;
-extern const char _erase_token[]      PROGMEM;
-extern const char _update_token[]     PROGMEM;
-extern const char _sep_token[]        PROGMEM;
-extern const char _custom_token[]     PROGMEM;
-extern PGM_P _menutokens[] PROGMEM;
-extern const uint8_t _nummenutokens;
-
-// -----------------------------------------------------------------------------------------------
 // HTTP ROUTES
 
 const char R_root[]               PROGMEM = "/";

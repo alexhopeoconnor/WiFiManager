@@ -322,17 +322,6 @@ class WiFiManager
     //if this is set, it will exit after config, even if connection is unsuccessful.
     void          setBreakAfterConfig(boolean shouldBreak);
     
-    //add custom html at inside <head> for all pages
-    void          setCustomHeadElement(const char* html);
-
-    //add custom html at start of <body> for all pages
-    void          setCustomBodyHeader(const char* html);
-
-    //add custom html at end of <body> for all pages
-    void          setCustomBodyFooter(const char* html);
-
-    //if this is set, customise style
-    void          setCustomMenuHTML(const char* html);
 
     //if this is true, remove duplicated Access Points - defaut true
     void          setRemoveDuplicateAPs(boolean removeDuplicates);
@@ -388,11 +377,6 @@ class WiFiManager
     
     // clean connect, always disconnect before connecting
     void          setCleanConnect(bool enable); // default false
-
-    // set custom menu items and order, vector or arr
-    // see _menutokens for ids
-    void          setMenu(std::vector<const char*>& menu);
-    void          setMenu(const char* menu[], uint8_t size);
     
     // set the webapp title, default WiFiManager
     void          setTitle(String title);
@@ -430,12 +414,7 @@ class WiFiManager
     
     // set the country code for wifi settings, CN
     void          setCountry(String cc);
-
-    // set body class (invert), may be used for hacking in alt classes
-    void          setClass(String str);
-
-    // set dark mode via invert class
-    void          setDarkMode(bool enable);
+    
 
     // get default ap esp uses , esp_chipid etc
     String        getDefaultAPName();
@@ -535,10 +514,6 @@ class WiFiManager
   protected:
     // vars
     std::unique_ptr<WiFiManagerServer> _serverManager;
-    std::vector<uint8_t> _menuIds;
-    std::vector<const char *> _menuIdsParams  = {"wifi","param","info","exit"};
-    std::vector<const char *> _menuIdsUpdate  = {"wifi","param","info","update","exit"};
-    std::vector<const char *> _menuIdsDefault = {"wifi","info","exit","sep","update"};
 
     // ip configs @todo struct ?
     IPAddress     _ap_static_ip;
@@ -640,12 +615,6 @@ class WiFiManager
     boolean       _enableConfigPortal     = true;  // FOR autoconnect - start config portal if autoconnect failed
     boolean       _disableConfigPortal    = true;  // FOR autoconnect - stop config portal if cp wifi save
     String        _hostname               = "";    // hostname for esp8266 for dhcp, and or MDNS
-
-    const char*   _customHeadElement      = ""; // store custom head element html from user inside <head>
-    const char*   _customBodyHeader       = ""; // store custom top body element html from user inside <body>
-    const char*   _customBodyFooter       = ""; // store custom bottom body element html from user inside <body>
-    const char*   _customMenuHTML         = ""; // store custom menu html from user
-    String        _bodyClass              = ""; // class to add to body
     String        _title                  = "WiFiManager"; // app title - default WiFiManager
 
     // internal options
