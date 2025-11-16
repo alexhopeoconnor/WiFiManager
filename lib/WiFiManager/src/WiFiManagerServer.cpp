@@ -33,7 +33,7 @@ void WiFiManagerServer::createServer(uint16_t port) {
 
   if(port != 80) {
     #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("http server started with custom port: "), port); // @todo not showing ip
+    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("http server started with custom port: "), port);
     #endif
   }
 
@@ -141,8 +141,7 @@ void WiFiManagerServer::setupDNSD() {
   /* Setup the DNS server redirecting all the domains to the apIP */
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   #ifdef WM_DEBUG_LEVEL
-  // DEBUG_WM("dns server started port: ",DNS_PORT);
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("dns server started with ip: "), WiFi.softAPIP()); // @todo not showing ip
+  _wm->DEBUG_WM(WM_DEBUG_DEV, F("dns server started with ip: "), WiFi.softAPIP());
   #endif
   const uint8_t DNS_PORT = 53;
   dnsServer->start(DNS_PORT, F("*"), WiFi.softAPIP());
@@ -155,9 +154,7 @@ void WiFiManagerServer::processDNS() {
 }
 
 void WiFiManagerServer::shutdownServer() {
-  // @todo what is the proper way to shutdown and free the server up
-  // debug - many open issues aobut port not clearing for use with other servers
-  // AsyncWebServer doesn't have stop(), just reset the unique_ptr
+  // AsyncWebServer doesn't have stop(), just reset the unique_ptr to free resources
   if (server) {
     server.reset();
   }

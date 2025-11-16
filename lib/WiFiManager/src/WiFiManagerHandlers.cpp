@@ -1186,22 +1186,6 @@ void WiFiManagerHandlers::handleNotFound(AsyncWebServerRequest *request) {
   if (captivePortal(request)) return;
   handleRequest(request);
   String message = F("File not found\n\n");
-
-  bool verbose404 = false;
-  if(verbose404){
-    message += F("URI: ");
-    message += request->url();
-    message += F("\nMethod: ");
-    message += (request->method() == HTTP_GET) ? F("GET") : F("POST");
-    message += F("\nArguments: ");
-    message += request->params();
-    message += F("\n");
-
-    for (size_t i = 0; i < request->params(); i++) {
-      const AsyncWebParameter* p = request->getParam(i);
-      message += " " + p->name() + ": " + p->value() + "\n";
-    }
-  }
   AsyncWebServerResponse *response = request->beginResponse(404, FPSTR(HTTP_HEAD_CT2), message);
   response->addHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
   response->addHeader(F("Pragma"), F("no-cache"));
