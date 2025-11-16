@@ -38,6 +38,16 @@
     "espressif8266",
     "espressif32"
   ],
+  "dependencies": [
+    {
+      "name": "ESP32Async/ESPAsyncWebServer",
+      "version": "3.8.1"
+    },
+    {
+      "name": "DFTE",
+      "version": "https://github.com/alexhopeoconnor/DFTE"
+    }
+  ],
   "export": {
     "include": "include"
   }
