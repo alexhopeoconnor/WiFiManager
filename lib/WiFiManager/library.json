@@ -41,7 +41,7 @@
   "dependencies": [
     {
       "name": "ESP32Async/ESPAsyncWebServer",
-      "version": "3.8.1"
+      "version": "3.9.1"
     },
     {
       "name": "DFTE",
