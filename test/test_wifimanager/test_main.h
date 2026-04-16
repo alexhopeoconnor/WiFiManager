@@ -42,6 +42,7 @@ void test_config_portal_already_active();
 void test_get_config_portal_ssid();
 void test_root_render_menu_state_transitions();
 void test_root_render_snapshot_consistency();
+void test_root_render_interleaved_context_isolation();
 
 // Non-blocking tests
 void test_nonblocking_process();

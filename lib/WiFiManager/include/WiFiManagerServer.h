@@ -22,6 +22,10 @@
 // DFTE (template engine)
 #include <TemplateEngine.h>
 
+#ifndef WM_TEMPLATE_REGISTRY_CAPACITY
+#define WM_TEMPLATE_REGISTRY_CAPACITY 24
+#endif
+
 // Forward declarations
 class WiFiManager;
 

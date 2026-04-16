@@ -106,7 +106,7 @@ void WiFiManagerServer::applyTemplateSetupCallback(PlaceholderRegistry& reg) {
 }
 
 void WiFiManagerServer::rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer) {
-  _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(12));
+  _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(WM_TEMPLATE_REGISTRY_CAPACITY));
   registerDefaultPlaceholders(*_tplRegistry);
   if (customizer) {
     customizer(*_tplRegistry);
@@ -118,7 +118,7 @@ void WiFiManagerServer::rebuildPlaceholderRegistry(std::function<void(Placeholde
 void WiFiManagerServer::setupTemplateEngine() {
   // Initialize shared placeholder registry once
   if (!_tplRegistry) {
-    _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(12));
+    _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(WM_TEMPLATE_REGISTRY_CAPACITY));
   } else {
     _tplRegistry->clear();
   }

@@ -13,6 +13,9 @@
 #include "templates/HTML.h"
 #include "templates/CSS.h"
 #include "templates/JS.h"
+#include "templates/PageShell.h"
+#include "templates/Info.h"
+#include "templates/WiFi.h"
 #include "templates/RootSelector.h"
 #include <TemplateEngine.h>
 #include <cstring>
@@ -35,24 +38,72 @@ inline void reservePage(String& page, size_t extraBytes = WM_PAGE_RESERVE_BYTES)
   (void)page.reserve(targetLen);
 }
 
+const char* dynamicStringGetter(void* userData) {
+  const auto* value = static_cast<const String*>(userData);
+  return value ? value->c_str() : "";
+}
+
+size_t dynamicStringLengthGetter(const char* data, void* /*userData*/) {
+  return data ? strlen(data) : 0;
+}
+
+void configureDynamicStringDescriptor(DynamicTemplateDescriptor& descriptor, String& value) {
+  descriptor.getter = &dynamicStringGetter;
+  descriptor.getLength = &dynamicStringLengthGetter;
+  descriptor.userData = &value;
+}
+
+template <typename BundleT>
+AsyncWebServerResponse* beginTemplateResponse(AsyncWebServerRequest* request,
+                                             const std::shared_ptr<BundleT>& bundle,
+                                             const char* templateData) {
+  bundle->context.setRegistry(&bundle->registry);
+  TemplateRenderer::initializeContext(bundle->context, templateData);
+  return request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
+    [bundle](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
+      return TemplateRenderer::renderNextChunk(bundle->context, buffer, maxLen);
+    }
+  );
+}
+
+void registerSharedShellPlaceholders(WiFiManagerServer* server, PlaceholderRegistry& registry) {
+  if (server) {
+    server->registerDefaultStyles(registry);
+    server->registerDefaultScripts(registry);
+    server->applyTemplateSetupCallback(registry);
+    return;
+  }
+
+  registry.registerProgmemData("%STYLES%", CSS_STYLE);
+  registry.registerProgmemData("%SCRIPTS%", JS_SCRIPT);
+}
+
 struct RootState {
   String menu;
   String status;
 };
 
-const char* rootMenuGetter(void* userData) {
-  const auto* state = static_cast<const RootState*>(userData);
-  return state ? state->menu.c_str() : "";
-}
+struct MessagePageState {
+  String docTitle;
+  String bodyClass;
+  String content;
+};
 
-const char* rootStatusGetter(void* userData) {
-  const auto* state = static_cast<const RootState*>(userData);
-  return state ? state->status.c_str() : "";
-}
+struct InfoPageState {
+  String docTitle;
+  String status;
+  String deviceSection;
+  String wifiSection;
+  String aboutSection;
+};
 
-size_t rootTemplateLengthGetter(const char* data, void* /*userData*/) {
-  return data ? strlen(data) : 0;
-}
+struct WiFiPageState {
+  String docTitle;
+  String scanResults;
+  String formSection;
+  String backSection;
+  String status;
+};
 
 void escapePercentsForTemplate(String& value) {
   if (value.indexOf('%') < 0) return;
@@ -81,6 +132,147 @@ void buildRootState(WiFiManagerHandlers* handlers, RootState& state) {
   escapePercentsForTemplate(state.status);
 }
 
+void appendPortalHeader(const String& title,
+                        const String& subtitle,
+                        String& content) {
+  content += F("<h1>");
+  content += title;
+  content += F("</h1><h3>");
+  content += subtitle;
+  content += F("</h3>");
+}
+
+void buildMessagePageState(MessagePageState& state,
+                           const __FlashStringHelper* title,
+                           const __FlashStringHelper* bodyClass,
+                           const String& contentHtml) {
+  state.docTitle = String(title);
+  state.bodyClass = String(bodyClass);
+  state.content = contentHtml;
+  escapePercentsForTemplate(state.content);
+}
+
+void appendInfoEntries(WiFiManagerHandlers* handlers,
+                       String& section,
+                       const char* const* ids,
+                       size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    section += handlers->getInfoData(ids[i]);
+  }
+}
+
+void buildInfoPageState(WiFiManagerHandlers* handlers,
+                        InfoPageState& state,
+                        bool showInfoUpdate,
+                        bool showInfoErase,
+                        bool showBack) {
+  reservePage(state.status, 512);
+  reservePage(state.deviceSection, 4096);
+  reservePage(state.wifiSection, 4096);
+  reservePage(state.aboutSection, 1536);
+
+  state.docTitle = F("Info");
+  handlers->reportStatus(state.status);
+
+#ifdef ESP8266
+  static const char* const deviceIds[] = {
+    "esphead", "uptime", "chipid", "fchipid", "idesize", "flashsize",
+    "corever", "bootver", "cpufreq", "freeheap", "memsketch", "memsmeter",
+    "lastreset"
+  };
+  static const char* const wifiIds[] = {
+    "wifihead", "conx", "stassid", "staip", "stagw", "stasub", "dnss",
+    "host", "stamac", "autoconx", "wifiaphead", "apssid", "apip", "apbssid",
+    "apmac"
+  };
+#elif defined(ESP32)
+  static const char* const deviceIds[] = {
+    "esphead", "uptime", "chipid", "chiprev", "idesize", "flashsize",
+    "cpufreq", "freeheap", "memsketch", "memsmeter", "lastreset", "temp"
+  };
+  static const char* const wifiIds[] = {
+    "wifihead", "conx", "stassid", "staip", "stagw", "stasub", "dnss",
+    "host", "stamac", "apssid", "wifiaphead", "apip", "apmac", "aphost",
+    "apbssid"
+  };
+#endif
+
+  appendInfoEntries(handlers, state.deviceSection, deviceIds, sizeof(deviceIds) / sizeof(deviceIds[0]));
+  state.deviceSection += F("</dl>");
+
+  appendInfoEntries(handlers, state.wifiSection, wifiIds, sizeof(wifiIds) / sizeof(wifiIds[0]));
+  state.wifiSection += F("</dl>");
+
+  state.aboutSection += F("<h3>About</h3><hr><dl>");
+  state.aboutSection += handlers->getInfoData("aboutver");
+  state.aboutSection += handlers->getInfoData("aboutarduinover");
+  state.aboutSection += handlers->getInfoData("aboutidfver");
+  state.aboutSection += handlers->getInfoData("aboutdate");
+  state.aboutSection += F("</dl>");
+
+  if (showInfoUpdate) {
+    state.aboutSection += HTML_PORTAL_MENU[8];
+    state.aboutSection += HTML_PORTAL_MENU[9];
+  }
+  if (showInfoErase) state.aboutSection += FPSTR(HTML_ERASEBTN);
+  if (showBack) state.aboutSection += FPSTR(HTML_BACKBTN);
+  state.aboutSection += FPSTR(HTML_HELP);
+
+  escapePercentsForTemplate(state.status);
+  escapePercentsForTemplate(state.deviceSection);
+  escapePercentsForTemplate(state.wifiSection);
+  escapePercentsForTemplate(state.aboutSection);
+}
+
+void buildWiFiPageState(WiFiManagerHandlers* handlers,
+                        WiFiPageState& state,
+                        bool includeScanResults,
+                        bool showBack,
+                        const String& ssidPlaceholder,
+                        const String& passwordPlaceholder,
+                        bool paramsInWifi) {
+  reservePage(state.scanResults, includeScanResults ? 4096 : 64);
+  reservePage(state.formSection, 4096);
+  reservePage(state.backSection, 256);
+  reservePage(state.status, 512);
+
+  state.docTitle = F("Config ESP");
+
+  if (includeScanResults) {
+    state.scanResults += F("<div id=\"scan-results\">");
+    state.scanResults += handlers->getScanItemOut();
+    state.scanResults += F("</div>");
+  }
+
+  state.formSection += F("<form method='POST' action='wifisave'>");
+
+  state.formSection += F("<label for='s'>SSID</label><input id='s' name='s' maxlength='32' autocorrect='off' autocapitalize='none' placeholder='");
+  state.formSection += ssidPlaceholder;
+  state.formSection += F("'><br/><label for='p'>Password</label><input id='p' name='p' maxlength='64' type='password' placeholder='");
+  state.formSection += passwordPlaceholder;
+  state.formSection += F("'><input type='checkbox' id='showpass' onclick='f()'> <label for='showpass'>Show Password</label><br/>");
+
+  state.formSection += handlers->getStaticOut();
+  state.formSection += FPSTR(HTML_FORM_WIFI_END);
+  if (paramsInWifi) {
+    state.formSection += FPSTR(HTML_FORM_PARAM_HEAD);
+    state.formSection += handlers->getParamOut();
+  }
+  state.formSection += FPSTR(HTML_FORM_END);
+  state.formSection += F("<br/><div class=\"c\"><button id=\"refresh-btn\" onclick=\"refreshScan()\">Refresh</button></div>");
+
+  if (showBack) {
+    state.backSection += FPSTR(HTML_BACKBTN);
+  }
+
+  handlers->reportStatus(state.status);
+
+  escapePercentsForTemplate(state.scanResults);
+  escapePercentsForTemplate(state.formSection);
+  escapePercentsForTemplate(state.backSection);
+  escapePercentsForTemplate(state.status);
+}
+
 #if WM_ROOT_REQUEST_STATE
 struct RootRenderBundle {
   RootState state;
@@ -90,9 +282,62 @@ struct RootRenderBundle {
   DynamicTemplateDescriptor statusDescriptor;
 
   RootRenderBundle()
-      : registry(12), menuDescriptor{}, statusDescriptor{} {}
+      : registry(WM_TEMPLATE_REGISTRY_CAPACITY), menuDescriptor{}, statusDescriptor{} {}
 };
 #endif
+
+struct MessageRenderBundle {
+  MessagePageState state;
+  PlaceholderRegistry registry;
+  TemplateContext context;
+  DynamicTemplateDescriptor docTitleDescriptor;
+  DynamicTemplateDescriptor bodyClassDescriptor;
+  DynamicTemplateDescriptor contentDescriptor;
+
+  MessageRenderBundle()
+      : registry(WM_TEMPLATE_REGISTRY_CAPACITY),
+        docTitleDescriptor{},
+        bodyClassDescriptor{},
+        contentDescriptor{} {}
+};
+
+struct InfoRenderBundle {
+  InfoPageState state;
+  PlaceholderRegistry registry;
+  TemplateContext context;
+  DynamicTemplateDescriptor docTitleDescriptor;
+  DynamicTemplateDescriptor statusDescriptor;
+  DynamicTemplateDescriptor deviceDescriptor;
+  DynamicTemplateDescriptor wifiDescriptor;
+  DynamicTemplateDescriptor aboutDescriptor;
+
+  InfoRenderBundle()
+      : registry(WM_TEMPLATE_REGISTRY_CAPACITY),
+        docTitleDescriptor{},
+        statusDescriptor{},
+        deviceDescriptor{},
+        wifiDescriptor{},
+        aboutDescriptor{} {}
+};
+
+struct WiFiRenderBundle {
+  WiFiPageState state;
+  PlaceholderRegistry registry;
+  TemplateContext context;
+  DynamicTemplateDescriptor docTitleDescriptor;
+  DynamicTemplateDescriptor scanResultsDescriptor;
+  DynamicTemplateDescriptor formDescriptor;
+  DynamicTemplateDescriptor backDescriptor;
+  DynamicTemplateDescriptor statusDescriptor;
+
+  WiFiRenderBundle()
+      : registry(WM_TEMPLATE_REGISTRY_CAPACITY),
+        docTitleDescriptor{},
+        scanResultsDescriptor{},
+        formDescriptor{},
+        backDescriptor{},
+        statusDescriptor{} {}
+};
 
 }  // namespace
 
@@ -788,29 +1033,24 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
   buildRootState(this, bundle->state);
 
   if (_wm->_serverManager) {
-    _wm->_serverManager->registerDefaultPlaceholders(bundle->registry);
+    _wm->_serverManager->registerDefaultStyles(bundle->registry);
+    _wm->_serverManager->registerDefaultScripts(bundle->registry);
+    _wm->_serverManager->registerDefaultPageTitle(bundle->registry);
+    _wm->_serverManager->registerDefaultSubtitle(bundle->registry);
     _wm->_serverManager->applyTemplateSetupCallback(bundle->registry);
   }
 
-  bundle->menuDescriptor.getter = &rootMenuGetter;
-  bundle->menuDescriptor.getLength = &rootTemplateLengthGetter;
-  bundle->menuDescriptor.userData = &bundle->state;
+  if (bundle->registry.getPlaceholder("%MENU%") == nullptr) {
+    configureDynamicStringDescriptor(bundle->menuDescriptor, bundle->state.menu);
+    bundle->registry.registerDynamicTemplate("%MENU%", &bundle->menuDescriptor);
+  }
 
-  bundle->statusDescriptor.getter = &rootStatusGetter;
-  bundle->statusDescriptor.getLength = &rootTemplateLengthGetter;
-  bundle->statusDescriptor.userData = &bundle->state;
+  if (bundle->registry.getPlaceholder("%STATUS%") == nullptr) {
+    configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
+    bundle->registry.registerDynamicTemplate("%STATUS%", &bundle->statusDescriptor);
+  }
 
-  bundle->registry.registerDynamicTemplate("%MENU%", &bundle->menuDescriptor);
-  bundle->registry.registerDynamicTemplate("%STATUS%", &bundle->statusDescriptor);
-
-  bundle->context.setRegistry(&bundle->registry);
-  TemplateRenderer::initializeContext(bundle->context, WM_ROOT_TEMPLATE);
-
-  response = request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
-    [bundle](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
-      return TemplateRenderer::renderNextChunk(bundle->context, buffer, maxLen);
-    }
-  );
+  response = beginTemplateResponse(request, bundle, WM_ROOT_TEMPLATE);
 #else
   TemplateContext ctx;
   if (_wm->_serverManager && _wm->_serverManager->getPlaceholderRegistry()) {
@@ -843,18 +1083,13 @@ void WiFiManagerHandlers::handleWifi(AsyncWebServerRequest *request, boolean sca
     return;
   }
   handleRequest(request);
-  String page = getHTTPHead(F("Config ESP"), FPSTR(C_wifi));
-  reservePage(page);
+  auto bundle = std::make_shared<WiFiRenderBundle>();
   if (scan) {
     bool forceRefresh = false;
     if (request->hasParam("refresh")) {
       forceRefresh = true;
     }
-    
-    page += F("<div id=\"scan-results\">");
-    page += getScanItemOut();
-    page += F("</div>");
-    
+
     if(forceRefresh || !_wm->_lastscan || (millis()-_wm->_lastscan > _wm->_scancachetime)){
       if(!_wm->_scanInProgress){
         _wm->WiFi_scanNetworks(true);
@@ -863,47 +1098,48 @@ void WiFiManagerHandlers::handleWifi(AsyncWebServerRequest *request, boolean sca
       }
     }
   }
-  // Build WiFi form directly without tokens
-  page += F("<form method='POST' action='wifisave'>");
-  
+
   String ssidPlaceholder = _wm->WiFi_SSID();
   String passwordPlaceholder = "";
-  
   if(_wm->_showPassword){
     passwordPlaceholder = _wm->WiFi_psk();
   }
   else if(_wm->WiFi_psk() != ""){
     passwordPlaceholder = F("********");
   }
-  
-  page += F("<label for='s'>SSID</label><input id='s' name='s' maxlength='32' autocorrect='off' autocapitalize='none' placeholder='");
-  page += ssidPlaceholder;
-  page += F("'><br/><label for='p'>Password</label><input id='p' name='p' maxlength='64' type='password' placeholder='");
-  page += passwordPlaceholder;
-  page += F("'><input type='checkbox' id='showpass' onclick='f()'> <label for='showpass'>Show Password</label><br/>");
 
-  page += getStaticOut();
-  page += FPSTR(HTML_FORM_WIFI_END);
-  if(_wm->_paramsInWifi && _wm->_paramsCount > 0){
-    page += FPSTR(HTML_FORM_PARAM_HEAD);
-    page += getParamOut();
-  }
-  page += FPSTR(HTML_FORM_END);
-  page += F("<br/><div class=\"c\"><button id=\"refresh-btn\" onclick=\"refreshScan()\">Refresh</button></div>");
-  if(_wm->_showBack) page += FPSTR(HTML_BACKBTN);
-  reportStatus(page);
-  
-  page += getHTTPEnd();
+  buildWiFiPageState(this,
+                     bundle->state,
+                     scan,
+                     _wm->_showBack,
+                     ssidPlaceholder,
+                     passwordPlaceholder,
+                     _wm->_paramsInWifi && _wm->_paramsCount > 0);
+
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->scanResultsDescriptor, bundle->state.scanResults);
+  configureDynamicStringDescriptor(bundle->formDescriptor, bundle->state.formSection);
+  configureDynamicStringDescriptor(bundle->backDescriptor, bundle->state.backSection);
+  configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%WIFI_SCAN_RESULTS%", &bundle->scanResultsDescriptor);
+  bundle->registry.registerDynamicTemplate("%WIFI_FORM_SECTION%", &bundle->formDescriptor);
+  bundle->registry.registerDynamicTemplate("%WIFI_BACK_SECTION%", &bundle->backDescriptor);
+  bundle->registry.registerDynamicTemplate("%WIFI_STATUS%", &bundle->statusDescriptor);
 
   #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Page length: "), String(page.length()));
+  size_t debugPageLength = bundle->state.scanResults.length() + bundle->state.formSection.length()
+                         + bundle->state.backSection.length() + bundle->state.status.length();
+  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Page length: "), String(debugPageLength));
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("_numNetworks: "), String(_wm->_numNetworks));
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("_scanInProgress: "), _wm->_scanInProgress ? "true" : "false");
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("_lastscan: "), String(_wm->_lastscan));
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("About to send response"));
   #endif
 
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  request->send(beginTemplateResponse(request, bundle, WM_WIFI_TEMPLATE));
 
   #ifdef WM_DEBUG_LEVEL
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("Response sent"));
@@ -1119,100 +1355,23 @@ void WiFiManagerHandlers::handleInfo(AsyncWebServerRequest *request) {
   _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Info"));
   #endif
   handleRequest(request);
-  String page = getHTTPHead(F("Info"), FPSTR(C_info));
-  reservePage(page);
-  reportStatus(page);
+  auto bundle = std::make_shared<InfoRenderBundle>();
+  buildInfoPageState(this, bundle->state, _wm->_showInfoUpdate, _wm->_showInfoErase, _wm->_showBack);
 
-  uint16_t infos = 0;
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
+  configureDynamicStringDescriptor(bundle->deviceDescriptor, bundle->state.deviceSection);
+  configureDynamicStringDescriptor(bundle->wifiDescriptor, bundle->state.wifiSection);
+  configureDynamicStringDescriptor(bundle->aboutDescriptor, bundle->state.aboutSection);
 
-  #ifdef ESP8266
-    infos = 28;
-    String infoids[] = {
-      F("esphead"),
-      F("uptime"),
-      F("chipid"),
-      F("fchipid"),
-      F("idesize"),
-      F("flashsize"),
-      F("corever"),
-      F("bootver"),
-      F("cpufreq"),
-      F("freeheap"),
-      F("memsketch"),
-      F("memsmeter"),
-      F("lastreset"),
-      F("wifihead"),
-      F("conx"),
-      F("stassid"),
-      F("staip"),
-      F("stagw"),
-      F("stasub"),
-      F("dnss"),
-      F("host"),
-      F("stamac"),
-      F("autoconx"),
-      F("wifiaphead"),
-      F("apssid"),
-      F("apip"),
-      F("apbssid"),
-      F("apmac")
-    };
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%INFO_STATUS%", &bundle->statusDescriptor);
+  bundle->registry.registerDynamicTemplate("%INFO_DEVICE_SECTION%", &bundle->deviceDescriptor);
+  bundle->registry.registerDynamicTemplate("%INFO_WIFI_SECTION%", &bundle->wifiDescriptor);
+  bundle->registry.registerDynamicTemplate("%INFO_ABOUT_SECTION%", &bundle->aboutDescriptor);
 
-  #elif defined(ESP32)
-    infos = 27;
-    String infoids[] = {
-      F("esphead"),
-      F("uptime"),
-      F("chipid"),
-      F("chiprev"),
-      F("idesize"),
-      F("flashsize"),      
-      F("cpufreq"),
-      F("freeheap"),
-      F("memsketch"),
-      F("memsmeter"),      
-      F("lastreset"),
-      F("temp"),
-      F("wifihead"),
-      F("conx"),
-      F("stassid"),
-      F("staip"),
-      F("stagw"),
-      F("stasub"),
-      F("dnss"),
-      F("host"),
-      F("stamac"),
-      F("apssid"),
-      F("wifiaphead"),
-      F("apip"),
-      F("apmac"),
-      F("aphost"),
-      F("apbssid")
-    };
-  #endif
-
-  for(size_t i=0; i<infos;i++){
-    if(infoids[i] != NULL) page += getInfoData(infoids[i]);
-  }
-  page += F("</dl>");
-
-  page += F("<h3>About</h3><hr><dl>");
-  page += getInfoData("aboutver");
-  page += getInfoData("aboutarduinover");
-  page += getInfoData("aboutidfver");
-  page += getInfoData("aboutdate");
-  page += F("</dl>");
-
-  if(_wm->_showInfoUpdate){
-    page += HTML_PORTAL_MENU[8];
-    page += HTML_PORTAL_MENU[9];
-  }
-  if(_wm->_showInfoErase) page += FPSTR(HTML_ERASEBTN);
-  if(_wm->_showBack) page += FPSTR(HTML_BACKBTN);
-  page += FPSTR(HTML_HELP);
-  page += getHTTPEnd();
-
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  request->send(beginTemplateResponse(request, bundle, WM_INFO_TEMPLATE));
 
   #ifdef WM_DEBUG_LEVEL
   _wm->DEBUG_WM(WM_DEBUG_DEV, F("Sent info page"));
@@ -1224,11 +1383,19 @@ void WiFiManagerHandlers::handleExit(AsyncWebServerRequest *request) {
   _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Exit"));
   #endif
   handleRequest(request);
-  String page = getHTTPHead(F("Exit"), FPSTR(C_exit));
-  reservePage(page, 1024);
-  page += F("Exiting");
-  page += getHTTPEnd();
-  AsyncWebServerResponse *response = request->beginResponse(200, FPSTR(HTTP_HEAD_CT), page);
+  auto bundle = std::make_shared<MessageRenderBundle>();
+  buildMessagePageState(bundle->state, F("Exit"), FPSTR(C_exit), String(F("Exiting")));
+
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->bodyClassDescriptor, bundle->state.bodyClass);
+  configureDynamicStringDescriptor(bundle->contentDescriptor, bundle->state.content);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%BODY_CLASS%", &bundle->bodyClassDescriptor);
+  bundle->registry.registerDynamicTemplate("%PAGE_CONTENT%", &bundle->contentDescriptor);
+
+  AsyncWebServerResponse *response = beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE);
   response->addHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
   request->send(response);
   
@@ -1241,12 +1408,22 @@ void WiFiManagerHandlers::handleReset(AsyncWebServerRequest *request) {
   _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Reset"));
   #endif
   handleRequest(request);
-  String page = getHTTPHead(F("Reset"), FPSTR(C_restart));
-  reservePage(page, 1024);
-  page += F("Module will reset in a few seconds.");
-  page += getHTTPEnd();
+  auto bundle = std::make_shared<MessageRenderBundle>();
+  buildMessagePageState(bundle->state,
+                        F("Reset"),
+                        FPSTR(C_restart),
+                        String(F("Module will reset in a few seconds.")));
 
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->bodyClassDescriptor, bundle->state.bodyClass);
+  configureDynamicStringDescriptor(bundle->contentDescriptor, bundle->state.content);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%BODY_CLASS%", &bundle->bodyClassDescriptor);
+  bundle->registry.registerDynamicTemplate("%PAGE_CONTENT%", &bundle->contentDescriptor);
+
+  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 
   #ifdef WM_DEBUG_LEVEL
   _wm->DEBUG_WM(F("RESETTING ESP"));
@@ -1260,21 +1437,31 @@ void WiFiManagerHandlers::handleErase(AsyncWebServerRequest *request, boolean op
   _wm->DEBUG_WM(WM_DEBUG_NOTIFY, F("<- HTTP Erase"));
   #endif
   handleRequest(request);
-  String page = getHTTPHead(F("Erase"), FPSTR(C_erase));
-  reservePage(page, 1024);
-
   bool ret = _wm->erase(opt);
+  auto bundle = std::make_shared<MessageRenderBundle>();
+  String content;
+  reservePage(content, 256);
 
-  if(ret) page += F("Module will reset in a few seconds.");
+  if(ret) content += F("Module will reset in a few seconds.");
   else {
-    page += F("An error occured");
+    content += F("An error occured");
     #ifdef WM_DEBUG_LEVEL
     _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] WiFi EraseConfig failed"));
     #endif
   }
 
-  page += getHTTPEnd();
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  buildMessagePageState(bundle->state, F("Erase"), FPSTR(C_erase), content);
+
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->bodyClassDescriptor, bundle->state.bodyClass);
+  configureDynamicStringDescriptor(bundle->contentDescriptor, bundle->state.content);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%BODY_CLASS%", &bundle->bodyClassDescriptor);
+  bundle->registry.registerDynamicTemplate("%PAGE_CONTENT%", &bundle->contentDescriptor);
+
+  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 
   if(ret){
     _wm->_rebootScheduled = true;
@@ -1292,11 +1479,22 @@ void WiFiManagerHandlers::handleClose(AsyncWebServerRequest *request){
   _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP close"));
   #endif
   handleRequest(request);
-  String page = getHTTPHead(F("Close"), FPSTR(C_close));
-  reservePage(page, 1024);
-  page += F("You can close the page, portal will continue to run");
-  page += getHTTPEnd();
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  auto bundle = std::make_shared<MessageRenderBundle>();
+  buildMessagePageState(bundle->state,
+                        F("Close"),
+                        FPSTR(C_close),
+                        String(F("You can close the page, portal will continue to run")));
+
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->bodyClassDescriptor, bundle->state.bodyClass);
+  configureDynamicStringDescriptor(bundle->contentDescriptor, bundle->state.content);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%BODY_CLASS%", &bundle->bodyClassDescriptor);
+  bundle->registry.registerDynamicTemplate("%PAGE_CONTENT%", &bundle->contentDescriptor);
+
+  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 }
 
 void WiFiManagerHandlers::handleNotFound(AsyncWebServerRequest *request) {
@@ -1482,28 +1680,36 @@ void WiFiManagerHandlers::handleUpdateDone(AsyncWebServerRequest *request) {
   _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Handle update done"));
   #endif
 
-  String page = getHTTPHead(F("options"), FPSTR(C_update));
-  reservePage(page, 2048);
-  // Build root main HTML directly without tokens
-  page += F("<h1>");
-  page += _wm->_title;
-  page += F("</h1><h3>");
-  page += (_wm->configPortalActive ? _wm->_apName : WiFi.localIP().toString());
-  page += F("</h3>");
+  auto bundle = std::make_shared<MessageRenderBundle>();
+  String content;
+  reservePage(content, 2048);
+  appendPortalHeader(_wm->_title,
+                     (_wm->configPortalActive ? _wm->_apName : WiFi.localIP().toString()),
+                     content);
 
   if (Update.hasError()) {
-    page += FPSTR(HTML_UPDATE_FAIL);
+    content += FPSTR(HTML_UPDATE_FAIL);
     #ifdef ESP32
-    page += "OTA Error: " + (String)Update.errorString();
+    content += "OTA Error: " + (String)Update.errorString();
     #else
-    page += "OTA Error: " + (String)Update.getError();
+    content += "OTA Error: " + (String)Update.getError();
     #endif
   } else {
-    page += FPSTR(HTML_UPDATE_SUCCESS);
+    content += FPSTR(HTML_UPDATE_SUCCESS);
   }
 
-  page += getHTTPEnd();
-  request->send(200, FPSTR(HTTP_HEAD_CT), page);
+  buildMessagePageState(bundle->state, F("options"), FPSTR(C_update), content);
+
+  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
+  configureDynamicStringDescriptor(bundle->docTitleDescriptor, bundle->state.docTitle);
+  configureDynamicStringDescriptor(bundle->bodyClassDescriptor, bundle->state.bodyClass);
+  configureDynamicStringDescriptor(bundle->contentDescriptor, bundle->state.content);
+
+  bundle->registry.registerDynamicTemplate("%DOC_TITLE%", &bundle->docTitleDescriptor);
+  bundle->registry.registerDynamicTemplate("%BODY_CLASS%", &bundle->bodyClassDescriptor);
+  bundle->registry.registerDynamicTemplate("%PAGE_CONTENT%", &bundle->contentDescriptor);
+
+  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 
   if (!Update.hasError()) {
     delay(1000);
