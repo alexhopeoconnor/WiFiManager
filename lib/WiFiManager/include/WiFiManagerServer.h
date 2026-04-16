@@ -76,6 +76,7 @@ class WiFiManagerServer {
     void registerDefaultMenu(PlaceholderRegistry& reg);
     void registerDefaultStatus(PlaceholderRegistry& reg);
     void registerDefaultPlaceholders(PlaceholderRegistry& reg);
+    void applyTemplateSetupCallback(PlaceholderRegistry& reg);
     
     // Rebuild registry with defaults and optional customizer
     void rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer = nullptr);

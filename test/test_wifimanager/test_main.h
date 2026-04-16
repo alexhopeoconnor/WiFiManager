@@ -40,6 +40,8 @@ void test_stop_web_portal();
 void test_config_portal_multiple_start_stop();
 void test_config_portal_already_active();
 void test_get_config_portal_ssid();
+void test_root_render_menu_state_transitions();
+void test_root_render_snapshot_consistency();
 
 // Non-blocking tests
 void test_nonblocking_process();

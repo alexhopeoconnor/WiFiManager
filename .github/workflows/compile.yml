@@ -1,0 +1,28 @@
+name: Compile
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pio-compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [esp8266, esp32]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Compile tests for ${{ matrix.environment }}
+        run: pio test -e ${{ matrix.environment }} --without-uploading --without-testing

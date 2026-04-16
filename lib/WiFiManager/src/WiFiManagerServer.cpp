@@ -99,13 +99,19 @@ void WiFiManagerServer::registerDefaultPlaceholders(PlaceholderRegistry& reg) {
   registerDefaultStatus(reg);
 }
 
+void WiFiManagerServer::applyTemplateSetupCallback(PlaceholderRegistry& reg) {
+  if (_tplSetupCallback) {
+    _tplSetupCallback(reg);
+  }
+}
+
 void WiFiManagerServer::rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer) {
   _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(12));
   registerDefaultPlaceholders(*_tplRegistry);
   if (customizer) {
     customizer(*_tplRegistry);
-  } else if (_tplSetupCallback) {
-    _tplSetupCallback(*_tplRegistry);
+  } else {
+    applyTemplateSetupCallback(*_tplRegistry);
   }
 }
 
@@ -121,9 +127,7 @@ void WiFiManagerServer::setupTemplateEngine() {
   registerDefaultPlaceholders(*_tplRegistry);
   
   // Allow consumers to customize placeholders
-  if (_tplSetupCallback) {
-    _tplSetupCallback(*_tplRegistry);
-  }
+  applyTemplateSetupCallback(*_tplRegistry);
 }
 
 void WiFiManagerServer::createServer(uint16_t port) {

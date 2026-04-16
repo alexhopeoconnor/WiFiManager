@@ -15,8 +15,86 @@
 #include "templates/JS.h"
 #include "templates/RootSelector.h"
 #include <TemplateEngine.h>
+#include <cstring>
 
 #if defined(ESP8266) || defined(ESP32)
+
+#ifndef WM_PAGE_RESERVE_BYTES
+#define WM_PAGE_RESERVE_BYTES 8192
+#endif
+
+#ifndef WM_ROOT_REQUEST_STATE
+#define WM_ROOT_REQUEST_STATE 1
+#endif
+
+namespace {
+
+inline void reservePage(String& page, size_t extraBytes = WM_PAGE_RESERVE_BYTES) {
+  if (extraBytes == 0) return;
+  const size_t targetLen = page.length() + extraBytes;
+  (void)page.reserve(targetLen);
+}
+
+struct RootState {
+  String menu;
+  String status;
+};
+
+const char* rootMenuGetter(void* userData) {
+  const auto* state = static_cast<const RootState*>(userData);
+  return state ? state->menu.c_str() : "";
+}
+
+const char* rootStatusGetter(void* userData) {
+  const auto* state = static_cast<const RootState*>(userData);
+  return state ? state->status.c_str() : "";
+}
+
+size_t rootTemplateLengthGetter(const char* data, void* /*userData*/) {
+  return data ? strlen(data) : 0;
+}
+
+void escapePercentsForTemplate(String& value) {
+  if (value.indexOf('%') < 0) return;
+
+  String escaped;
+  reservePage(escaped, value.length() + 32);
+  for (size_t i = 0; i < value.length(); i++) {
+    if (value[i] == '%') {
+      escaped += F("&#37;");
+    } else {
+      escaped += value[i];
+    }
+  }
+  value = escaped;
+}
+
+void buildRootState(WiFiManagerHandlers* handlers, RootState& state) {
+  reservePage(state.menu, 768);
+  reservePage(state.status, 512);
+
+  handlers->getMenuOut(&state.menu);
+  handlers->reportStatus(state.status);
+
+  // Dynamic templates are parsed as template content, so escape literal '%' values.
+  escapePercentsForTemplate(state.menu);
+  escapePercentsForTemplate(state.status);
+}
+
+#if WM_ROOT_REQUEST_STATE
+struct RootRenderBundle {
+  RootState state;
+  PlaceholderRegistry registry;
+  TemplateContext context;
+  DynamicTemplateDescriptor menuDescriptor;
+  DynamicTemplateDescriptor statusDescriptor;
+
+  RootRenderBundle()
+      : registry(12), menuDescriptor{}, statusDescriptor{} {}
+};
+#endif
+
+}  // namespace
 
 WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {}
 
@@ -24,6 +102,7 @@ WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {}
 
 String WiFiManagerHandlers::getHTTPHead(String title, String classes){
   String page;
+  reservePage(page, 512);
   page += FPSTR(HTML_HEAD_START);
   page += title;
   page += FPSTR(HTML_TITLE_END);
@@ -68,10 +147,11 @@ String WiFiManagerHandlers::getMenuOut(String* outOpt){
 
 String WiFiManagerHandlers::getScanItemOut(){
     String page;
+    int n = _wm->_numNetworks;
+    reservePage(page, 256 + (n > 0 ? static_cast<size_t>(n) * 96 : 96));
 
     // Never trigger scans from here - only use cached data
     // If no cached data, show message (scan should be started elsewhere if needed)
-    int n = _wm->_numNetworks;
     if (n == 0) {
       #ifdef WM_DEBUG_LEVEL
       _wm->DEBUG_WM(F("No networks found"));
@@ -206,6 +286,7 @@ String WiFiManagerHandlers::getIpForm(String id, String title, String value){
 
 String WiFiManagerHandlers::getStaticOut(){
   String page;
+  reservePage(page, 384);
   if ((_wm->_staShowStaticFields || _wm->_sta_static_ip) && _wm->_staShowStaticFields>=0) {
     #ifdef WM_DEBUG_LEVEL
     _wm->DEBUG_WM(WM_DEBUG_DEV,F("_staShowStaticFields"));
@@ -227,6 +308,7 @@ String WiFiManagerHandlers::getStaticOut(){
 
 String WiFiManagerHandlers::getParamOut(){
   String page;
+  reservePage(page, 256 + (_wm->_paramsCount > 0 ? static_cast<size_t>(_wm->_paramsCount) * 128 : 64));
 
   #ifdef WM_DEBUG_LEVEL
   _wm->DEBUG_WM(WM_DEBUG_DEV,F("getParamOut"),_wm->_paramsCount);
@@ -699,24 +781,52 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
   #endif
   if (captivePortal(request)) return;
   handleRequest(request);
-  
-  // Stream-render the root page using DFTE and the shared registry
+
+  AsyncWebServerResponse *response = nullptr;
+#if WM_ROOT_REQUEST_STATE
+  auto bundle = std::make_shared<RootRenderBundle>();
+  buildRootState(this, bundle->state);
+
+  if (_wm->_serverManager) {
+    _wm->_serverManager->registerDefaultPlaceholders(bundle->registry);
+    _wm->_serverManager->applyTemplateSetupCallback(bundle->registry);
+  }
+
+  bundle->menuDescriptor.getter = &rootMenuGetter;
+  bundle->menuDescriptor.getLength = &rootTemplateLengthGetter;
+  bundle->menuDescriptor.userData = &bundle->state;
+
+  bundle->statusDescriptor.getter = &rootStatusGetter;
+  bundle->statusDescriptor.getLength = &rootTemplateLengthGetter;
+  bundle->statusDescriptor.userData = &bundle->state;
+
+  bundle->registry.registerDynamicTemplate("%MENU%", &bundle->menuDescriptor);
+  bundle->registry.registerDynamicTemplate("%STATUS%", &bundle->statusDescriptor);
+
+  bundle->context.setRegistry(&bundle->registry);
+  TemplateRenderer::initializeContext(bundle->context, WM_ROOT_TEMPLATE);
+
+  response = request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
+    [bundle](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
+      return TemplateRenderer::renderNextChunk(bundle->context, buffer, maxLen);
+    }
+  );
+#else
   TemplateContext ctx;
   if (_wm->_serverManager && _wm->_serverManager->getPlaceholderRegistry()) {
     ctx.setRegistry(_wm->_serverManager->getPlaceholderRegistry());
   }
   TemplateRenderer::initializeContext(ctx, WM_ROOT_TEMPLATE);
-  
-  // Keep context alive across chunk calls
   auto ctxPtr = std::make_shared<TemplateContext>(ctx);
-  
-  AsyncWebServerResponse *response = request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
+
+  response = request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
     [ctxPtr](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
       if (!ctxPtr) return 0;
-      size_t written = TemplateRenderer::renderNextChunk(*ctxPtr, buffer, maxLen);
-      return written;
+      return TemplateRenderer::renderNextChunk(*ctxPtr, buffer, maxLen);
     }
   );
+#endif
+
   request->send(response);
   if(_wm->_preloadwifiscan) _wm->WiFi_scanNetworks(_wm->_scancachetime);
 }
@@ -734,6 +844,7 @@ void WiFiManagerHandlers::handleWifi(AsyncWebServerRequest *request, boolean sca
   }
   handleRequest(request);
   String page = getHTTPHead(F("Config ESP"), FPSTR(C_wifi));
+  reservePage(page);
   if (scan) {
     bool forceRefresh = false;
     if (request->hasParam("refresh")) {
@@ -805,6 +916,7 @@ void WiFiManagerHandlers::handleParam(AsyncWebServerRequest *request){
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Setup"), FPSTR(C_param));
+  reservePage(page, 4096);
 
   // Build form start directly without tokens
   page += F("<form method='POST' action='paramsave'>");
@@ -901,10 +1013,12 @@ void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
 
   if(_wm->_ssid == ""){
     page = getHTTPHead(F("Settings saved"), FPSTR(C_wifi));
+    reservePage(page, 1024);
     page += FPSTR(HTML_PARAMSAVED);
   }
   else {
     page = getHTTPHead(F("Credentials saved"), FPSTR(C_wifi));
+    reservePage(page, 1024);
     page += FPSTR(HTML_SAVED);
   }
 
@@ -934,6 +1048,7 @@ void WiFiManagerHandlers::handleParamSave(AsyncWebServerRequest *request) {
   doParamSave(requestArgs);
 
   String page = getHTTPHead(F("Setup saved"), FPSTR(C_param));
+  reservePage(page, 1024);
   page += FPSTR(HTML_PARAMSAVED);
   if(_wm->_showBack) page += FPSTR(HTML_BACKBTN); 
   page += getHTTPEnd();
@@ -1005,6 +1120,7 @@ void WiFiManagerHandlers::handleInfo(AsyncWebServerRequest *request) {
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Info"), FPSTR(C_info));
+  reservePage(page);
   reportStatus(page);
 
   uint16_t infos = 0;
@@ -1109,6 +1225,7 @@ void WiFiManagerHandlers::handleExit(AsyncWebServerRequest *request) {
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Exit"), FPSTR(C_exit));
+  reservePage(page, 1024);
   page += F("Exiting");
   page += getHTTPEnd();
   AsyncWebServerResponse *response = request->beginResponse(200, FPSTR(HTTP_HEAD_CT), page);
@@ -1125,6 +1242,7 @@ void WiFiManagerHandlers::handleReset(AsyncWebServerRequest *request) {
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Reset"), FPSTR(C_restart));
+  reservePage(page, 1024);
   page += F("Module will reset in a few seconds.");
   page += getHTTPEnd();
 
@@ -1143,6 +1261,7 @@ void WiFiManagerHandlers::handleErase(AsyncWebServerRequest *request, boolean op
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Erase"), FPSTR(C_erase));
+  reservePage(page, 1024);
 
   bool ret = _wm->erase(opt);
 
@@ -1174,6 +1293,7 @@ void WiFiManagerHandlers::handleClose(AsyncWebServerRequest *request){
   #endif
   handleRequest(request);
   String page = getHTTPHead(F("Close"), FPSTR(C_close));
+  reservePage(page, 1024);
   page += F("You can close the page, portal will continue to run");
   page += getHTTPEnd();
   request->send(200, FPSTR(HTTP_HEAD_CT), page);
@@ -1196,6 +1316,7 @@ void WiFiManagerHandlers::handleWiFiStatus(AsyncWebServerRequest *request){
   #endif
   handleRequest(request);
   String page;
+  reservePage(page, 256);
   #ifdef WM_JSTEST
     page = FPSTR(HTML_JS);
   #endif
@@ -1209,6 +1330,7 @@ void WiFiManagerHandlers::handleWiFiScanStatus(AsyncWebServerRequest *request){
   handleRequest(request);
   
   String json = "{";
+  reservePage(json, 128 + (_wm->_numNetworks > 0 ? static_cast<size_t>(_wm->_numNetworks) * 96 : 64));
   json += "\"scanning\":";
   json += _wm->_scanInProgress ? "true" : "false";
   json += ",\"count\":";
@@ -1275,6 +1397,7 @@ void WiFiManagerHandlers::handleUpdate(AsyncWebServerRequest *request) {
   #endif
   if (captivePortal(request)) return;
   String page = getHTTPHead(_wm->_title, FPSTR(C_update));
+  reservePage(page, 2048);
   // Build root main HTML directly without tokens
   page += F("<h1>");
   page += _wm->_title;
@@ -1360,6 +1483,7 @@ void WiFiManagerHandlers::handleUpdateDone(AsyncWebServerRequest *request) {
   #endif
 
   String page = getHTTPHead(F("options"), FPSTR(C_update));
+  reservePage(page, 2048);
   // Build root main HTML directly without tokens
   page += F("<h1>");
   page += _wm->_title;

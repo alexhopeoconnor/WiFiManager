@@ -30,6 +30,8 @@ TestCase tests[] = {
     TEST_ENTRY(test_config_portal_multiple_start_stop),
     TEST_ENTRY(test_config_portal_already_active),
     TEST_ENTRY(test_get_config_portal_ssid),
+    TEST_ENTRY(test_root_render_menu_state_transitions),
+    TEST_ENTRY(test_root_render_snapshot_consistency),
     
     // Non-blocking tests
     TEST_ENTRY(test_nonblocking_process),
