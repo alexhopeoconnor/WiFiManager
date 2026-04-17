@@ -45,7 +45,17 @@
     },
     "https://github.com/alexhopeoconnor/DFTE.git"
   ],
+  "build": {
+    "includeDir": "lib/WiFiManager/include",
+    "srcDir": "lib/WiFiManager/src"
+  },
   "export": {
-    "include": "include"
+    "include": [
+      "lib/WiFiManager/include",
+      "lib/WiFiManager/src",
+      "LICENSE",
+      "README.md",
+      "library.json"
+    ]
   }
 }
