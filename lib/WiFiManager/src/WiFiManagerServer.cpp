@@ -222,12 +222,12 @@ void WiFiManagerServer::registerRoutes() {
     this->_handlers->handleErase(request, false);
   });
   
-  server->on(WM_G(R_status), HTTP_GET, [this](AsyncWebServerRequest *request) {
-    this->_handlers->handleWiFiStatus(request);
-  });
-  
   server->on(WM_G(R_scanstatus), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleWiFiScanStatus(request);
+  });
+
+  server->on(WM_G(R_scan), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleWiFiScanRequest(request);
   });
   
   // OTA Update routes

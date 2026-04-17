@@ -29,7 +29,6 @@
 // #define WM_ERASE_NVS       // esp32 erase(true) will erase NVS 
 // #define WM_RTC             // esp32 info page will include reset reasons
 
-// #define WM_JSTEST                      // build flag for enabling js xhr tests
 // #define WIFI_MANAGER_OVERRIDE_STRINGS // build flag for using own strings include
 
 #ifdef ARDUINO_ESP8266_RELEASE_2_3_0
@@ -203,6 +202,49 @@ class WiFiManager
   public:
     // Forward declare nested class - defined later after WM_WebServer is available
     class WiFiManagerRequestArgs;
+
+    enum wm_scan_state_t : uint8_t {
+      WM_SCAN_IDLE = 0,
+      WM_SCAN_QUEUED,
+      WM_SCAN_RUNNING,
+      WM_SCAN_COMPLETE,
+      WM_SCAN_FAILED,
+      WM_SCAN_TIMEOUT,
+    };
+
+    enum wm_scan_schedule_reason_t : uint8_t {
+      WM_SCAN_SCHEDULE_NONE = 0,
+      WM_SCAN_SCHEDULE_PRELOAD,
+      WM_SCAN_SCHEDULE_USER_REFRESH,
+      WM_SCAN_SCHEDULE_STALE_CACHE,
+      WM_SCAN_SCHEDULE_UI_RESUME,
+    };
+
+    struct WiFiScanNetwork {
+      String ssid;
+      int32_t rssi = 0;
+      uint8_t encType = 0;
+    };
+
+    struct WiFiScanRuntimeState {
+      wm_scan_state_t state = WM_SCAN_IDLE;
+      bool resultsValid = false;
+      bool schedulePending = false;
+      bool forceRefresh = false;
+      bool completionPending = false;
+      unsigned long requestedAt = 0;
+      unsigned long startedAt = 0;
+      unsigned long finishedAt = 0;
+      unsigned long timeoutMs = 15000;
+      unsigned long minRestartIntervalMs = 2000;
+      uint32_t generation = 0;
+      uint32_t runningGeneration = 0;
+      uint32_t completionGeneration = 0;
+      int lastScanResult = WIFI_SCAN_FAILED;
+      int completionResult = WIFI_SCAN_FAILED;
+      int visibleNetworkCount = 0;
+      wm_scan_schedule_reason_t scheduledReason = WM_SCAN_SCHEDULE_NONE;
+    };
     
     WiFiManager(Print& consolePort);
     WiFiManager();
@@ -228,6 +270,15 @@ class WiFiManager
 
     // Run webserver processing - must be called periodically when config portal is active
     boolean       process();
+
+    // async scan state and cached result accessors
+    void          requestAsyncScan(bool forceRefresh = false);
+    const WiFiScanRuntimeState& getScanSnapshot() const { return _scan; }
+    wm_scan_state_t getScanState() const { return _scan.state; }
+    bool          isScanRunning() const { return _scan.state == WM_SCAN_RUNNING || _scan.state == WM_SCAN_QUEUED; }
+    bool          hasValidScanResults() const { return _scan.resultsValid; }
+    const WiFiScanRuntimeState& getScanRuntimeState() const { return _scan; }
+    const std::vector<WiFiScanNetwork>& getScanResults() const { return _scanResultsCache; }
 
     // get the AP name of the config portal, so it can be used in the callback
     String        getConfigPortalSSID();
@@ -460,7 +511,7 @@ class WiFiManager
           }
       }
       
-      // Legacy constructor for backward compatibility (if needed during transition)
+      // Default constructor for tests and manually assembled argument sets
       WiFiManagerRequestArgs() {}
       
       // Check if argument exists
@@ -529,13 +580,12 @@ class WiFiManager
     uint8_t       _lastconxresult         = WL_IDLE_STATUS; // store last result when doing connect operations
     int           _numNetworks            = 0; // init index for numnetworks wifiscans
     unsigned long _lastscan               = 0; // ms for timing wifi scans
-    unsigned long _startscan              = 0; // ms for timing wifi scans
     unsigned long _startconn              = 0; // ms for timing wifi connects
-    
+
     // async scan state management
-    bool          _scanInProgress        = false; // flag indicating scan is currently running
-    bool          _scanRequested         = false; // flag indicating scan was requested but not yet started
-    unsigned long _scanRequestTime       = 0; // ms when scan was requested
+    WiFiScanRuntimeState _scan;
+    std::vector<WiFiScanNetwork> _scanResultsCache;
+    bool _scanLifecycleBlocked = false;
     
     // async reboot/abort scheduling
     bool          _rebootScheduled        = false; // flag for scheduled reboot
@@ -697,6 +747,19 @@ protected:
     bool          WiFi_scanNetworks(bool force); // Always async - returns false if scan started but not complete
     bool          WiFi_scanNetworks(unsigned int cachetime);
     void          WiFi_scanComplete(int networksFound);
+    void          processScan();
+    bool          shouldScheduleScan(unsigned int cachetime,
+                                     wm_scan_schedule_reason_t reason,
+                                     bool forceRefresh = false) const;
+    void          scheduleScan(wm_scan_schedule_reason_t reason, bool forceRefresh = false);
+    bool          startAsyncScan();
+    void          finalizeAsyncScan(int networksFound);
+    void          failAsyncScan(wm_scan_state_t state, int scanResult = WIFI_SCAN_FAILED);
+    void          resetAsyncScan(bool clearResults);
+    void          invalidateScanResults();
+    bool          hasFreshScanResults(unsigned int cachetime) const;
+    bool          canRunAsyncScan() const;
+    void          cacheScanResults(int networksFound);
     bool          WiFiSetCountry();
 
     #ifdef ESP32
@@ -733,6 +796,37 @@ protected:
         void   WiFiEvent(WiFiEvent_t event, system_event_info_t info);
     #endif
     #endif
+
+    #ifdef UNIT_TEST
+  public:
+    void          wmTestForceScanState(wm_scan_state_t state) { _scan.state = state; }
+    void          wmTestSetScanStartedAt(unsigned long startedAt) { _scan.startedAt = startedAt; }
+    void          wmTestSetScanTimeoutMs(unsigned long timeoutMs) { _scan.timeoutMs = timeoutMs; }
+    void          wmTestInjectScanResults(const std::vector<WiFiScanNetwork>& results) {
+      _scanResultsCache = results;
+      _numNetworks = static_cast<int>(results.size());
+      _scan.visibleNetworkCount = _numNetworks;
+      _scan.resultsValid = true;
+      _scan.state = WM_SCAN_COMPLETE;
+      _lastscan = millis();
+      _scan.finishedAt = _lastscan;
+    }
+    void          wmTestSetScanCompletionPending(int completionResult) {
+      _scan.completionPending = true;
+      _scan.completionResult = completionResult;
+    }
+    void          wmTestSetPortalActive(bool active) { configPortalActive = active; }
+    void          wmTestSetConnectPending(bool active) { connect = active; }
+    void          wmTestSetScanLifecycleBlocked(bool blocked) { _scanLifecycleBlocked = blocked; }
+    void          wmTestSetScanGenerations(uint32_t generation, uint32_t runningGeneration, uint32_t completionGeneration) {
+      _scan.generation = generation;
+      _scan.runningGeneration = runningGeneration;
+      _scan.completionGeneration = completionGeneration;
+    }
+    void          wmTestClearScanResults() { resetAsyncScan(true); }
+    #endif
+
+  protected:
 
     //helpers (rendering methods moved to WiFiManagerHandlers)
     boolean       isIp(String str);

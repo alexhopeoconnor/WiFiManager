@@ -118,6 +118,20 @@ void test_wifi_scan_initiates();
 void test_async_scan_behavior();
 void test_scan_status_checking();
 void test_scan_completion_wait();
+void test_scan_cancels_when_connect_pending();
+void test_scan_cancels_when_lifecycle_blocked();
+void test_scan_generation_invalidated_on_reset();
+
+// Template rendering tests
+void test_page_shell_supports_page_assets();
+void test_root_template_renders_core_placeholders();
+void test_wifi_template_renders_scan_container_and_form_fields();
+void test_message_template_renders_body_and_actions();
+void test_param_template_renders_shared_actions();
+void test_info_template_renders_sections_and_footer();
+void test_fragment_action_form_renders_shared_button_markup();
+void test_fragment_info_row_and_section_render();
+void test_fragment_centered_button_supports_extra_attrs();
 
 // State transition tests
 void test_portal_to_connected_transition();

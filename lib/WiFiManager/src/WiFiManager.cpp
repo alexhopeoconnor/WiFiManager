@@ -19,6 +19,39 @@
 uint8_t WiFiManager::_lastconxresulttmp = WL_IDLE_STATUS;
 #endif
 
+namespace {
+constexpr size_t kMaxHostnameLength = 32;
+constexpr uint8_t kSoftApStartMaxAttempts = 3;
+
+bool isValidHostnameChar(char c) {
+  return isAlphaNumeric(c) || c == '-';
+}
+
+bool normalizeHostname(String& hostname) {
+  hostname.trim();
+
+  if (hostname.length() > kMaxHostnameLength) {
+    return false;
+  }
+
+  if (hostname.length() == 0) {
+    return true;
+  }
+
+  if (hostname[0] == '-' || hostname[hostname.length() - 1] == '-') {
+    return false;
+  }
+
+  for (size_t i = 0; i < hostname.length(); i++) {
+    if (!isValidHostnameChar(hostname[i])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+} // namespace
+
 /**
  * Add a custom parameter to the config portal
  * @param p Pointer to WiFiManagerParameter to add
@@ -354,24 +387,27 @@ bool WiFiManager::startAP(){
     #endif
   }
 
-  // Start soft AP with password or anonymous
-  if (_apPassword != "") {
-    if(channel>0){
-      ret = WiFi.softAP(_apName.c_str(), _apPassword.c_str(),channel,_apHidden);
-    }  
-    else{
-      ret = WiFi.softAP(_apName.c_str(), _apPassword.c_str(),1,_apHidden);//password option
+  uint8_t apChannel = channel > 0 ? channel : 1;
+  auto startSoftAP = [&]() -> bool {
+    if (_apPassword != "") {
+      return WiFi.softAP(_apName.c_str(), _apPassword.c_str(), apChannel, _apHidden);
     }
-  } else {
+
     #ifdef WM_DEBUG_LEVEL
-    DEBUG_WM(WM_DEBUG_VERBOSE,F("AP has anonymous access!"));    
+    DEBUG_WM(WM_DEBUG_VERBOSE,F("AP has anonymous access!"));
     #endif
-    if(channel>0){
-      ret = WiFi.softAP(_apName.c_str(),"",channel,_apHidden);
-    }  
-    else{
-      ret = WiFi.softAP(_apName.c_str(),"",1,_apHidden);
-    }  
+    return WiFi.softAP(_apName.c_str(), "", apChannel, _apHidden);
+  };
+
+  // Start soft AP with password or anonymous
+  ret = startSoftAP();
+  for (uint8_t attempt = 1; !ret && attempt < kSoftApStartMaxAttempts; attempt++) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] softAP start failed, retry attempt"), attempt + 1);
+    #endif
+    WiFi.softAPdisconnect(false);
+    delay(150 * attempt);
+    ret = startSoftAP();
   }
 
   if(_debugLevel >= WM_DEBUG_DEV) debugSoftAPConfig();
@@ -379,7 +415,6 @@ bool WiFiManager::startAP(){
   delay(500); // slight delay to make sure we get an AP IP
   #ifdef WM_DEBUG_LEVEL
   if(!ret) DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] There was a problem starting the AP"));
-  // TODO: Implement simple retry/backoff if AP start fails (bounded attempts)
   DEBUG_WM(F("AP IP address:"),WiFi.softAPIP());
   #endif
 
@@ -467,8 +502,8 @@ void WiFiManager::setupConfigPortal() {
   }
   _serverManager->createServer(_httpPort);
   _serverManager->registerRoutes();
-  _lastscan = 0; // reset network scan cache
-  if(_preloadwifiscan) WiFi_scanNetworks(true); // preload wifiscan (async)
+  resetAsyncScan(true);
+  if(_preloadwifiscan) scheduleScan(WM_SCAN_SCHEDULE_PRELOAD); // process() starts it later
 }
 
 void WiFiManager::startConfigPortal() {
@@ -518,6 +553,7 @@ void WiFiManager::startConfigPortal(char const *apName, char const *apPassword) 
   // init configportal globals to known states
   configPortalActive = true;
   connect = abort = false; // loop flags, connect true success, abort true break
+  _scanLifecycleBlocked = true;
 
   _configPortalStart = millis();
 
@@ -548,7 +584,7 @@ void WiFiManager::startConfigPortal(char const *apName, char const *apPassword) 
   if (_serverManager) {
     _serverManager->setupDNSD();
   }
-  
+  _scanLifecycleBlocked = false;
 
   #ifdef WM_DEBUG_LEVEL
     DEBUG_WM(WM_DEBUG_VERBOSE,F("Config Portal Running (call process() periodically)"));
@@ -579,30 +615,7 @@ boolean WiFiManager::process(){
     MDNS.update();
     #endif
     
-    // Poll WiFi scan status (non-blocking)
-    // Check if scan is in progress and poll for completion
-    if(_scanInProgress){
-      int8_t scanStatus = WiFi.scanComplete();
-      if(scanStatus >= 0){
-        // Scan completed
-        WiFi_scanComplete(scanStatus);
-      }
-      else if(scanStatus == WIFI_SCAN_FAILED){
-        // Scan failed
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed during polling"));
-        #endif
-        _scanInProgress = false;
-        _scanRequested = false;
-      }
-      // If WIFI_SCAN_RUNNING, continue polling next time (non-blocking)
-    }
-    
-    // Handle queued scan requests
-    if(_scanRequested && !_scanInProgress){
-      WiFi_scanNetworks(true);
-      _scanRequested = false;
-    }
+    processScan();
 	
     if(webPortalActive || configPortalActive){
       // if timed out or abort, break
@@ -639,6 +652,8 @@ uint8_t WiFiManager::processConfigPortal(){
     // Waiting for save...
     if(connect) {
       connect = false;
+      _scanLifecycleBlocked = true;
+      resetAsyncScan(false);
       #ifdef WM_DEBUG_LEVEL
       DEBUG_WM(WM_DEBUG_VERBOSE,F("processing save"));
       #endif
@@ -670,8 +685,12 @@ uint8_t WiFiManager::processConfigPortal(){
             #endif
             _savewificallback(); // @CALLBACK
           }
-          if(!_connectonsave) return WL_IDLE_STATUS;
+          if(!_connectonsave) {
+            _scanLifecycleBlocked = false;
+            return WL_IDLE_STATUS;
+          }
           if(_disableConfigPortal) shutdownConfigPortal();
+          _scanLifecycleBlocked = false;
           return WL_CONNECTED; // CONNECT SUCCESS
         }
         #ifdef WM_DEBUG_LEVEL
@@ -688,6 +707,7 @@ uint8_t WiFiManager::processConfigPortal(){
           _savewificallback(); // @CALLBACK
         }
         if(_disableConfigPortal) shutdownConfigPortal();
+        _scanLifecycleBlocked = false;
         return WL_CONNECT_FAILED; // CONNECT FAIL
       }
       else{
@@ -696,6 +716,7 @@ uint8_t WiFiManager::processConfigPortal(){
         DEBUG_WM(WM_DEBUG_VERBOSE,F("Portal remaining open"));
         #endif        
       }
+      _scanLifecycleBlocked = false;
     }
 
     return WL_IDLE_STATUS;
@@ -723,9 +744,11 @@ bool WiFiManager::shutdownConfigPortal(){
     _serverManager.reset();
   }
 
-  WiFi.scanDelete(); // free wifi scan results
+  resetAsyncScan(true);
 
   if(!configPortalActive) return false;
+
+  _scanLifecycleBlocked = true;
 
   // Turn off AP
   bool ret = false;
@@ -750,6 +773,7 @@ bool WiFiManager::shutdownConfigPortal(){
   configPortalActive = false;
   DEBUG_WM(WM_DEBUG_VERBOSE,F("configportal closed"));
   _end();
+  _scanLifecycleBlocked = false;
   return ret;
 }
 
@@ -994,14 +1018,12 @@ void WiFiManager::startWPS() {
 #endif
 
 void WiFiManager::WiFi_scanComplete(int networksFound){
-  _lastscan = millis();
-  _numNetworks = networksFound;
-  _scanInProgress = false;
-  _scanRequested = false;
-  #ifdef WM_DEBUG_LEVEL
-  DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC completed"), "in "+(String)(_lastscan - _startscan)+" ms");  
-  DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC found:"),_numNetworks);
-  #endif
+  if (_scan.state != WM_SCAN_RUNNING) {
+    return;
+  }
+  _scan.completionPending = true;
+  _scan.completionResult = networksFound;
+  _scan.completionGeneration = _scan.runningGeneration;
 }
 
 bool WiFiManager::WiFi_scanNetworks(){
@@ -1009,85 +1031,321 @@ bool WiFiManager::WiFi_scanNetworks(){
 }
  
 bool WiFiManager::WiFi_scanNetworks(unsigned int cachetime){
-    return WiFi_scanNetworks(millis()-_lastscan > cachetime);
+    if (hasFreshScanResults(cachetime)) {
+      return true;
+    }
+    scheduleScan(WM_SCAN_SCHEDULE_STALE_CACHE);
+    return false;
 }
 
 bool WiFiManager::WiFi_scanNetworks(bool force){
-    // If 0 networks found, force rescan if autoforcerescan is enabled
     if(_numNetworks == 0 && _autoforcerescan){
       DEBUG_WM(WM_DEBUG_DEV,"NO APs found forcing new scan");
       force = true;
     }
 
-    // if scan is empty or stale (last scantime > _scancachetime), this avoids fast reloading wifi page and constant scan delayed page loads appearing to freeze.
-    if(!_lastscan || (_lastscan>0 && (millis()-_lastscan > _scancachetime))){
-      force = true;
-    }
-
-    // If scan already in progress, don't start another one
-    if(_scanInProgress){
-      #ifdef WM_DEBUG_LEVEL
-      DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan already in progress"));
-      #endif
-      return false; // Scan in progress, not complete yet
-    }
-
-    if(force){
-      _startscan = millis();
-      _scanRequestTime = millis();
-      
-      #ifdef ESP8266
-        #ifndef WM_NOASYNC // no async available < 2.4.0
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
-        #endif
-        using namespace std::placeholders; // for `_1`
-        WiFi.scanNetworksAsync(std::bind(&WiFiManager::WiFi_scanComplete,this,_1));
-        _scanInProgress = true;
-        return false; // Scan started, not complete yet
-        #else
-        // ESP8266 < 2.4.0 - no async available, but we can't block here
-        // Return false and let process() handle it
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] Async scan not available on this ESP8266 core"));
-        #endif
-        return false;
-        #endif
-      #else // ESP32
-        #ifdef WM_DEBUG_LEVEL
-        DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
-        #endif
-        int8_t res = WiFi.scanNetworks(true);
-        if(res == WIFI_SCAN_RUNNING){
-          _scanInProgress = true;
-          return false; // Scan started, not complete yet
-        }
-        else if(res == WIFI_SCAN_FAILED){
-          #ifdef WM_DEBUG_LEVEL
-          DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed"));
-          #endif
-          _scanInProgress = false;
-          return false;
-        }
-        else if(res >= 0){
-          // Scan completed immediately (unlikely but possible)
-          _numNetworks = res;
-          _lastscan = millis();
-          _scanInProgress = false;
-          #ifdef WM_DEBUG_LEVEL
-          DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan completed immediately"), "in "+(String)(_lastscan - _startscan)+" ms");
-          #endif
-          return true;
-        }
-        return false;
-      #endif
-    }
-    else {
+    if(!force && hasFreshScanResults(_scancachetime)){
       #ifdef WM_DEBUG_LEVEL
       DEBUG_WM(WM_DEBUG_VERBOSE,F("Scan is cached"),(String)(millis()-_lastscan )+" ms ago");
       #endif
-      return true; // Using cached data
+      return true;
     }
+
+    if (force) {
+      scheduleScan(WM_SCAN_SCHEDULE_USER_REFRESH, true);
+    } else {
+      scheduleScan(WM_SCAN_SCHEDULE_STALE_CACHE);
+    }
+    return false;
+}
+
+void WiFiManager::requestAsyncScan(bool forceRefresh) {
+  scheduleScan(WM_SCAN_SCHEDULE_USER_REFRESH, forceRefresh);
+}
+
+bool WiFiManager::shouldScheduleScan(unsigned int cachetime,
+                                     wm_scan_schedule_reason_t reason,
+                                     bool forceRefresh) const {
+  if (forceRefresh) {
+    return true;
+  }
+
+  switch (reason) {
+    case WM_SCAN_SCHEDULE_USER_REFRESH:
+      return true;
+
+    case WM_SCAN_SCHEDULE_PRELOAD:
+    case WM_SCAN_SCHEDULE_STALE_CACHE:
+    case WM_SCAN_SCHEDULE_UI_RESUME:
+      return !hasFreshScanResults(cachetime);
+
+    case WM_SCAN_SCHEDULE_NONE:
+    default:
+      return false;
+  }
+}
+
+void WiFiManager::scheduleScan(wm_scan_schedule_reason_t reason, bool forceRefresh) {
+  if (_numNetworks == 0 && _autoforcerescan) {
+    forceRefresh = true;
+  }
+
+  if (!shouldScheduleScan(_scancachetime, reason, forceRefresh)) {
+    return;
+  }
+
+  _scan.schedulePending = true;
+  _scan.forceRefresh = _scan.forceRefresh || forceRefresh;
+  _scan.requestedAt = millis();
+  _scan.scheduledReason = reason;
+
+  if (_scan.state != WM_SCAN_RUNNING && _scan.state != WM_SCAN_QUEUED) {
+    _scan.state = WM_SCAN_QUEUED;
+    _scan.lastScanResult = WIFI_SCAN_RUNNING;
+  }
+}
+
+void WiFiManager::processScan() {
+  const unsigned long now = millis();
+
+  if (_scan.completionPending) {
+    const int completionResult = _scan.completionResult;
+    const uint32_t completionGeneration = _scan.completionGeneration;
+    _scan.completionPending = false;
+    if (completionGeneration == _scan.runningGeneration) {
+      if (completionResult >= 0) {
+        finalizeAsyncScan(completionResult);
+      } else {
+        failAsyncScan(completionResult == WIFI_SCAN_FAILED ? WM_SCAN_FAILED : WM_SCAN_TIMEOUT, completionResult);
+      }
+    } else {
+      _scan.completionGeneration = 0;
+    }
+  }
+
+  if ((_scan.state == WM_SCAN_RUNNING || _scan.state == WM_SCAN_QUEUED) && !canRunAsyncScan()) {
+    resetAsyncScan(false);
+    return;
+  }
+
+  switch (_scan.state) {
+    case WM_SCAN_IDLE:
+    case WM_SCAN_COMPLETE:
+    case WM_SCAN_FAILED:
+    case WM_SCAN_TIMEOUT:
+      if (_scan.schedulePending) {
+        _scan.state = WM_SCAN_QUEUED;
+      }
+      break;
+
+    case WM_SCAN_QUEUED:
+      startAsyncScan();
+      break;
+
+    case WM_SCAN_RUNNING:
+      if ((now - _scan.startedAt) > _scan.timeoutMs) {
+        failAsyncScan(WM_SCAN_TIMEOUT);
+        return;
+      }
+
+      #ifdef ESP32
+        if (!_scan.completionPending) {
+          int scanStatus = WiFi.scanComplete();
+          if (scanStatus >= 0) {
+            finalizeAsyncScan(scanStatus);
+          } else if (scanStatus == WIFI_SCAN_FAILED) {
+            failAsyncScan(WM_SCAN_FAILED, scanStatus);
+          }
+        }
+      #endif
+      break;
+  }
+}
+
+bool WiFiManager::startAsyncScan() {
+  const unsigned long now = millis();
+
+  if (!canRunAsyncScan()) {
+    return false;
+  }
+
+  if (_scan.finishedAt > 0 && (now - _scan.finishedAt) < _scan.minRestartIntervalMs) {
+    return false;
+  }
+
+  if (_scan.forceRefresh) {
+    invalidateScanResults();
+  }
+
+  _scan.completionPending = false;
+  _scan.completionResult = WIFI_SCAN_FAILED;
+  _scan.generation++;
+  _scan.runningGeneration = _scan.generation;
+  _scan.completionGeneration = 0;
+
+  #ifdef WM_DEBUG_LEVEL
+  DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC started"));
+  #endif
+
+  #ifdef ESP8266
+    #ifndef WM_NOASYNC
+      using namespace std::placeholders;
+      WiFi.scanDelete();
+      WiFi.scanNetworksAsync(std::bind(&WiFiManager::WiFi_scanComplete, this, _1));
+      _scan.state = WM_SCAN_RUNNING;
+      _scan.startedAt = now;
+      _scan.lastScanResult = WIFI_SCAN_RUNNING;
+      _scan.schedulePending = false;
+      _scan.forceRefresh = false;
+      return true;
+    #else
+      #ifdef WM_DEBUG_LEVEL
+      DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] Async scan not available on this ESP8266 core"));
+      #endif
+      failAsyncScan(WM_SCAN_FAILED);
+      return false;
+    #endif
+  #else
+    WiFi.scanDelete();
+    int scanResult = WiFi.scanNetworks(true);
+    if (scanResult == WIFI_SCAN_RUNNING) {
+      _scan.state = WM_SCAN_RUNNING;
+      _scan.startedAt = now;
+      _scan.lastScanResult = WIFI_SCAN_RUNNING;
+      _scan.schedulePending = false;
+      _scan.forceRefresh = false;
+      return true;
+    }
+
+    if (scanResult >= 0) {
+      finalizeAsyncScan(scanResult);
+      return true;
+    }
+
+    failAsyncScan(WM_SCAN_FAILED, scanResult);
+    return false;
+  #endif
+}
+
+void WiFiManager::cacheScanResults(int networksFound) {
+  _scanResultsCache.clear();
+  if (networksFound <= 0) {
+    return;
+  }
+
+  _scanResultsCache.reserve(static_cast<size_t>(networksFound));
+  for (int i = 0; i < networksFound; i++) {
+    WiFiScanNetwork network;
+    network.ssid = WiFi.SSID(i);
+    network.rssi = WiFi.RSSI(i);
+    network.encType = WiFi.encryptionType(i);
+    _scanResultsCache.push_back(network);
+  }
+}
+
+void WiFiManager::finalizeAsyncScan(int networksFound) {
+  if (_scan.completionGeneration != 0 && _scan.completionGeneration != _scan.runningGeneration) {
+    return;
+  }
+
+  _lastscan = millis();
+  _scan.finishedAt = _lastscan;
+  _scan.lastScanResult = networksFound;
+  _scan.state = WM_SCAN_COMPLETE;
+  _scan.resultsValid = networksFound >= 0;
+  _scan.schedulePending = false;
+  _scan.forceRefresh = false;
+
+  cacheScanResults(networksFound);
+  _numNetworks = static_cast<int>(_scanResultsCache.size());
+  _scan.visibleNetworkCount = _numNetworks;
+  _scan.completionGeneration = 0;
+  _scan.runningGeneration = 0;
+  WiFi.scanDelete();
+
+  #ifdef WM_DEBUG_LEVEL
+  DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC completed"), "in "+(String)(_scan.finishedAt - _scan.startedAt)+" ms");
+  DEBUG_WM(WM_DEBUG_VERBOSE,F("WiFi Scan ASYNC found:"),_numNetworks);
+  #endif
+}
+
+void WiFiManager::failAsyncScan(wm_scan_state_t state, int scanResult) {
+  WiFi.scanDelete();
+  _scan.finishedAt = millis();
+  _scan.lastScanResult = scanResult;
+  _scan.state = state;
+  _scan.resultsValid = false;
+  _scan.completionPending = false;
+  _scan.schedulePending = false;
+  _scan.forceRefresh = false;
+  _scan.visibleNetworkCount = 0;
+  _numNetworks = 0;
+  _lastscan = 0;
+  _scan.completionGeneration = 0;
+  _scan.runningGeneration = 0;
+  _scanResultsCache.clear();
+
+  #ifdef WM_DEBUG_LEVEL
+  if (state == WM_SCAN_TIMEOUT) {
+    DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan timed out"));
+  } else {
+    DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] scan failed"));
+  }
+  #endif
+}
+
+void WiFiManager::resetAsyncScan(bool clearResults) {
+  WiFi.scanDelete();
+  _scan.generation++;
+  _scan.state = WM_SCAN_IDLE;
+  _scan.resultsValid = clearResults ? false : _scan.resultsValid;
+  _scan.schedulePending = false;
+  _scan.forceRefresh = false;
+  _scan.completionPending = false;
+  _scan.requestedAt = 0;
+  _scan.startedAt = 0;
+  _scan.finishedAt = 0;
+  _scan.lastScanResult = WIFI_SCAN_FAILED;
+  _scan.completionResult = WIFI_SCAN_FAILED;
+  _scan.runningGeneration = 0;
+  _scan.completionGeneration = 0;
+  _scan.scheduledReason = WM_SCAN_SCHEDULE_NONE;
+  if (clearResults) {
+    _numNetworks = 0;
+    _lastscan = 0;
+    _scan.visibleNetworkCount = 0;
+    _scanResultsCache.clear();
+  } else {
+    _scan.visibleNetworkCount = _numNetworks;
+  }
+}
+
+void WiFiManager::invalidateScanResults() {
+  _scan.resultsValid = false;
+  _scan.visibleNetworkCount = 0;
+  _numNetworks = 0;
+  _lastscan = 0;
+  _scanResultsCache.clear();
+}
+
+bool WiFiManager::hasFreshScanResults(unsigned int cachetime) const {
+  if (!_scan.resultsValid || _scanResultsCache.empty() || _lastscan == 0) {
+    return false;
+  }
+
+  return cachetime == 0 || (millis() - _lastscan) <= cachetime;
+}
+
+bool WiFiManager::canRunAsyncScan() const {
+  if (!configPortalActive && !webPortalActive) {
+    return false;
+  }
+
+  if (_scanLifecycleBlocked || connect || _abortScheduled || _rebootScheduled || abort) {
+    return false;
+  }
+
+  return true;
 }
 
 // PUBLIC
@@ -1606,13 +1864,33 @@ void WiFiManager::setDisableConfigPortal(boolean enable)
  * @return bool false if hostname is not valid
  */
 bool  WiFiManager::setHostname(const char * hostname){
-  // TODO: Enforce max 32-char hostname and reject/trim invalid input
-  _hostname = String(hostname);
+  if (hostname == nullptr) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] hostname: null value rejected"));
+    #endif
+    return false;
+  }
+
+  String candidate(hostname);
+  if (!normalizeHostname(candidate)) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] hostname: invalid value rejected"));
+    #endif
+    return false;
+  }
+
+  _hostname = candidate;
   return true;
 }
 
 bool  WiFiManager::setHostname(String hostname){
-  // TODO: Enforce max 32-char hostname and reject/trim invalid input
+  if (!normalizeHostname(hostname)) {
+    #ifdef WM_DEBUG_LEVEL
+    DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] hostname: invalid value rejected"));
+    #endif
+    return false;
+  }
+
   _hostname = hostname;
   return true;
 }

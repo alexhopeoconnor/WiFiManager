@@ -64,7 +64,7 @@ class WiFiManagerHandlers {
     void handleErase(AsyncWebServerRequest *request, boolean opt);
     void handleNotFound(AsyncWebServerRequest *request);
     void handleRequest(AsyncWebServerRequest *request);
-    void handleWiFiStatus(AsyncWebServerRequest *request);
+    void handleWiFiScanRequest(AsyncWebServerRequest *request);
     void handleWiFiScanStatus(AsyncWebServerRequest *request);
     void handleUpdate(AsyncWebServerRequest *request);
     void handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
@@ -75,8 +75,6 @@ class WiFiManagerHandlers {
     void stopCaptivePortal();
     
     // Rendering Methods
-    String getHTTPHead(String title, String classes = "");
-    String getHTTPEnd();
     String getMenuOut();
     String getMenuOut(String* outOpt);
     String getScanItemOut();
@@ -91,6 +89,8 @@ class WiFiManagerHandlers {
     
   private:
     WiFiManager* _wm;
+    void collectVisibleScanResults(std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
+    void appendVisibleScanResultsJson(String& json, const std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
 };
 
 #endif // defined(ESP8266) || defined(ESP32)

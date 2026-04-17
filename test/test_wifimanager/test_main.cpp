@@ -108,6 +108,20 @@ TestCase tests[] = {
     TEST_ENTRY(test_async_scan_behavior),
     TEST_ENTRY(test_scan_status_checking),
     TEST_ENTRY(test_scan_completion_wait),
+    TEST_ENTRY(test_scan_cancels_when_connect_pending),
+    TEST_ENTRY(test_scan_cancels_when_lifecycle_blocked),
+    TEST_ENTRY(test_scan_generation_invalidated_on_reset),
+
+    // Template rendering tests
+    TEST_ENTRY(test_page_shell_supports_page_assets),
+    TEST_ENTRY(test_root_template_renders_core_placeholders),
+    TEST_ENTRY(test_wifi_template_renders_scan_container_and_form_fields),
+    TEST_ENTRY(test_message_template_renders_body_and_actions),
+    TEST_ENTRY(test_param_template_renders_shared_actions),
+    TEST_ENTRY(test_info_template_renders_sections_and_footer),
+    TEST_ENTRY(test_fragment_action_form_renders_shared_button_markup),
+    TEST_ENTRY(test_fragment_info_row_and_section_render),
+    TEST_ENTRY(test_fragment_centered_button_supports_extra_attrs),
     
     // State transition tests
     TEST_ENTRY(test_portal_to_connected_transition),

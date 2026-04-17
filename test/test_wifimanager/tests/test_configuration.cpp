@@ -65,17 +65,18 @@ void test_set_and_get_hostname() {
     
     WiFiManager wm;
     
-    // Test with char*
-    wm.setHostname("test-hostname");
-    String hostname1 = wm.getWiFiHostname();
-    // Verify hostname was set (may be empty initially, but getter doesn't crash)
-    TEST_ASSERT_TRUE_MESSAGE(true, "setHostname(char*) and getWiFiHostname() executed");
-    
-    // Test with String
-    wm.setHostname(String("test-hostname-2"));
-    String hostname2 = wm.getWiFiHostname();
-    // Verify getter works
-    TEST_ASSERT_TRUE_MESSAGE(true, "setHostname(String) and getWiFiHostname() executed");
+    TEST_ASSERT_TRUE_MESSAGE(wm.setHostname("test-hostname"), "Valid char* hostname should be accepted");
+    TEST_ASSERT_TRUE_MESSAGE(wm.setHostname(String("  trimmed-hostname  ")), "Valid String hostname should be trimmed and accepted");
+    TEST_ASSERT_TRUE_MESSAGE(wm.setHostname(""), "Empty hostname should clear the configured hostname");
+
+    String tooLongHostname = "123456789012345678901234567890123";
+    TEST_ASSERT_FALSE_MESSAGE(wm.setHostname(tooLongHostname), "Hostnames longer than 32 chars should be rejected");
+    TEST_ASSERT_FALSE_MESSAGE(wm.setHostname("bad host"), "Hostnames with spaces should be rejected");
+    TEST_ASSERT_FALSE_MESSAGE(wm.setHostname("-leading"), "Hostnames cannot start with a hyphen");
+    TEST_ASSERT_FALSE_MESSAGE(wm.setHostname("trailing-"), "Hostnames cannot end with a hyphen");
+
+    (void)wm.getWiFiHostname();
+    TEST_ASSERT_TRUE_MESSAGE(true, "getWiFiHostname() executed after hostname validation checks");
     
     Serial.println("[TEST]   setHostname() and getWiFiHostname() test completed successfully");
 }

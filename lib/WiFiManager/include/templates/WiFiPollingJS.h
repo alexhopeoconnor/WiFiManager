@@ -12,49 +12,81 @@
 const char PROGMEM WIFI_POLLING_JS[] = R"rawliteral(
 <script>
 let scanPollInterval = null;
-let isPolling = false;
+let scanBusy = false;
 
-function refreshScan() {
-  // Trigger scan via refresh parameter
-  fetch('/wifi?refresh=1', {method: 'GET'}).then(() => {
+function setRefreshButtonState(disabled, label) {
+  const btn = document.getElementById('refresh-btn');
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.textContent = label;
+}
+
+function showScanMessage(message) {
+  const scanResults = document.getElementById('scan-results');
+  if (!scanResults) return;
+  scanResults.innerHTML = message + '<br/><br/>';
+}
+
+async function refreshScan() {
+  if (scanBusy) return false;
+  scanBusy = true;
+  setRefreshButtonState(true, 'Scanning...');
+
+  try {
+    const response = await fetch('/wifi/scan', { method: 'POST' });
+    if (!response.ok) throw new Error('scan request failed');
     startPolling();
-  });
+  } catch (error) {
+    scanBusy = false;
+    setRefreshButtonState(false, 'Refresh');
+    showScanMessage('Could not start scan. Try again.');
+  }
+
+  return false;
 }
 
 function startPolling() {
-  if(isPolling) return;
-  isPolling = true;
-  document.getElementById('refresh-btn').disabled = true;
-  document.getElementById('refresh-btn').textContent = 'Scanning...';
+  if (scanPollInterval) return;
   updateScanStatus();
   scanPollInterval = setInterval(updateScanStatus, 1000);
 }
 
 function stopPolling() {
-  if(scanPollInterval) {
+  if (scanPollInterval) {
     clearInterval(scanPollInterval);
     scanPollInterval = null;
   }
-  isPolling = false;
-  document.getElementById('refresh-btn').disabled = false;
-  document.getElementById('refresh-btn').textContent = 'Refresh';
+  scanBusy = false;
+  setRefreshButtonState(false, 'Refresh');
 }
 
 function updateScanStatus() {
   fetch('/wifistatus')
     .then(response => response.json())
     .then(data => {
-      if(data.scanning) {
-        // Still scanning, show status
-        document.getElementById('scan-results').innerHTML = 'Scanning for networks...<br/><br/>';
-      } else {
-        // Scan complete, update network list
-        stopPolling();
-        updateNetworkList(data);
+      if (data.scanning) {
+        showScanMessage('Scanning for networks...');
+        return;
       }
+
+      if (data.error === 'timeout') {
+        showScanMessage('Scan timed out. Refresh to try again.');
+        stopPolling();
+        return;
+      }
+
+      if (data.error === 'failed') {
+        showScanMessage('Scan failed. Refresh to try again.');
+        stopPolling();
+        return;
+      }
+
+      stopPolling();
+      updateNetworkList(data);
     })
     .catch(error => {
       console.error('Error polling scan status:', error);
+      showScanMessage('Scan status unavailable.');
       stopPolling();
     });
 }
@@ -66,14 +98,11 @@ function updateNetworkList(data) {
   } else if(data.networks && data.networks.length > 0) {
     data.networks.forEach(function(network) {
       let qualityPercent = network.quality + '%';
-      // Map quality 0-100 to icon level 1-4
       let qualityIcon = Math.round((network.quality / 100) * 3) + 1;
       if(qualityIcon < 1) qualityIcon = 1;
       if(qualityIcon > 4) qualityIcon = 4;
-      // Encryption class: 'l' if encrypted, empty if open
-      let encClass = network.enc_type !== 0 ? 'l' : '';
+      let encClass = network.encrypted ? 'l' : '';
       let ssidEscaped = escapeHtml(network.ssid);
-      // Match original template structure: icon div with quality + encryption class, then percentage div
       html += '<div><a href="#p" onclick="c(this)" data-ssid="' + ssidEscaped + '">' + ssidEscaped + '</a>';
       html += '<div role="img" aria-label="' + qualityPercent + '" title="' + qualityPercent + '" class="q q-' + qualityIcon + ' ' + encClass + '"></div>';
       html += '<div class="q">' + qualityPercent + '</div>';
@@ -93,21 +122,43 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
-function getQualityIcon(quality) {
-  if(quality >= 75) return '▂▄▆█';
-  if(quality >= 50) return '▂▄▆▁';
-  if(quality >= 25) return '▂▄▁▁';
-  return '▂▁▁▁';
-}
-
-// Check if scan is in progress on page load
 window.addEventListener('load', function() {
+  const refreshButton = document.getElementById('refresh-btn');
+  const skipInitialScan = refreshButton && refreshButton.dataset.skipInitialScan === 'true';
+  const pField = document.getElementById('p');
+  if (pField) {
+    pField.removeAttribute('disabled');
+  }
+
+  if (skipInitialScan) {
+    return;
+  }
+
   fetch('/wifistatus')
     .then(response => response.json())
     .then(data => {
-      if(data.scanning) {
+      if (data.scanning) {
+        scanBusy = true;
+        setRefreshButtonState(true, 'Scanning...');
         startPolling();
+        return;
       }
+
+      if (data.error === 'timeout') {
+        showScanMessage('Scan timed out. Refresh to try again.');
+        return;
+      }
+
+      if (data.error === 'failed') {
+        showScanMessage('Scan failed. Refresh to try again.');
+        return;
+      }
+
+      updateNetworkList(data);
+    })
+    .catch(error => {
+      console.error('Error loading initial scan status:', error);
+      showScanMessage('Scan status unavailable.');
     });
 });
 </script>

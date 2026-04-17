@@ -3,88 +3,150 @@
 #include <WiFiManager.h>
 #include "../test_main.h"
 
-// Test WiFi scan initiates
 void test_wifi_scan_initiates() {
-    Serial.println("[TEST]   Testing WiFi scan initiation...");
-    
+    Serial.println("[TEST]   Testing async scan request queues...");
+
     WiFiManager wm;
-    
-    // Initiate scan (non-blocking)
-    unsigned long start = millis();
-    (void)WiFi.scanNetworks(true); // true = async
-    unsigned long elapsed = millis() - start;
-    
-    // Scan initiation should return quickly (non-blocking)
-    TEST_ASSERT_LESS_THAN(100, elapsed);
-    
-    // Return value should be number of networks (if scan completed) or -1 (if async)
-    // For async scan, it returns -1 immediately
-    TEST_ASSERT_TRUE_MESSAGE(true, "WiFi scan initiated (return value may be -1 for async)");
-    
-    Serial.println("[TEST]   WiFi scan initiation test completed successfully");
+    wm.requestAsyncScan(true);
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_QUEUED, wm.getScanState());
+    TEST_ASSERT_TRUE_MESSAGE(wm.getScanSnapshot().schedulePending,
+                             "Explicit refresh should mark scan scheduling as pending");
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_SCHEDULE_USER_REFRESH,
+                      wm.getScanSnapshot().scheduledReason);
+    TEST_ASSERT_FALSE_MESSAGE(wm.hasValidScanResults(),
+                              "Queueing a scan should invalidate previous cached results");
+
+    Serial.println("[TEST]   Async scan request queues test completed successfully");
 }
 
-// Test async scan behavior
 void test_async_scan_behavior() {
-    Serial.println("[TEST]   Testing async scan behavior...");
-    
+    Serial.println("[TEST]   Testing repeated scan requests coalesce...");
+
     WiFiManager wm;
-    
-    // Initiate async scan
-    unsigned long start = millis();
-    (void)WiFi.scanNetworks(true); // true = async
-    unsigned long elapsed = millis() - start;
-    
-    // Should return immediately (non-blocking)
-    TEST_ASSERT_LESS_THAN(50, elapsed);
-    
-    // For async scan, result is -1 immediately
-    // Scan is in progress, status can be checked later
-    TEST_ASSERT_TRUE_MESSAGE(true, "Async scan returns immediately (non-blocking)");
-    
-    Serial.println("[TEST]   Async scan behavior test completed successfully");
+    wm.requestAsyncScan(true);
+    wm.requestAsyncScan(true);
+    wm.requestAsyncScan(true);
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_QUEUED, wm.getScanState());
+    TEST_ASSERT_TRUE_MESSAGE(wm.getScanSnapshot().schedulePending,
+                             "Repeated refresh clicks should still leave one pending schedule");
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_SCHEDULE_USER_REFRESH,
+                      wm.getScanSnapshot().scheduledReason);
+    TEST_ASSERT_FALSE_MESSAGE(wm.hasValidScanResults(),
+                              "Repeated refresh requests should keep a single queued scan lifecycle");
+
+    Serial.println("[TEST]   Repeated scan requests coalesce test completed successfully");
 }
 
-// Test scan status checking (non-blocking)
 void test_scan_status_checking() {
-    Serial.println("[TEST]   Testing scan status checking...");
-    
+    Serial.println("[TEST]   Testing cached scan snapshot state...");
+
     WiFiManager wm;
-    
-    // Initiate scan
-    WiFi.scanNetworks(true); // async
-    
-    // Check scan status (should be able to check without blocking)
-    (void)WiFi.scanComplete();
-    
-    // Status may be -1 (scanning), -2 (not started), or >= 0 (number of networks)
-    // Just verify we can check status without blocking
-    TEST_ASSERT_TRUE_MESSAGE(true, "Scan status can be checked without blocking");
-    
-    Serial.println("[TEST]   Scan status checking test completed successfully");
+
+#ifdef UNIT_TEST
+    std::vector<WiFiManager::WiFiScanNetwork> results = {
+        { "Office", -48, 1 },
+        { "Guest", -70, 0 }
+    };
+    wm.wmTestInjectScanResults(results);
+
+    TEST_ASSERT_TRUE_MESSAGE(wm.hasValidScanResults(),
+                             "Injected scan snapshot should be marked valid");
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_COMPLETE, wm.getScanState());
+    TEST_ASSERT_EQUAL(static_cast<size_t>(2), wm.getScanResults().size());
+    TEST_ASSERT_EQUAL_STRING("Office", wm.getScanResults()[0].ssid.c_str());
+#else
+    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Cached scan snapshot state test completed successfully");
 }
 
-// Test scan completion wait
 void test_scan_completion_wait() {
-    Serial.println("[TEST]   Testing scan completion wait...");
-    
+    Serial.println("[TEST]   Testing scan timeout transition...");
+
     WiFiManager wm;
-    
-    // Initiate scan
-    WiFi.scanNetworks(true); // async
-    
-    // Wait for scan to complete (with timeout)
-    unsigned long start = millis();
-    int scanStatus = -1;
-    while (scanStatus < 0 && (millis() - start < 10000)) { // 10 second timeout
-        delay(100);
-        scanStatus = WiFi.scanComplete();
-    }
-    
-    // After wait, status should be >= 0 (completed) or still -1 (timeout)
-    // Just verify we can wait for completion
-    TEST_ASSERT_TRUE_MESSAGE(true, "Scan completion can be waited for");
-    
-    Serial.println("[TEST]   Scan completion wait test completed successfully");
+
+#ifdef UNIT_TEST
+    wm.wmTestSetPortalActive(true);
+    wm.wmTestForceScanState(WiFiManager::WM_SCAN_RUNNING);
+    wm.wmTestSetScanStartedAt(millis() - 20000);
+    wm.wmTestSetScanTimeoutMs(1000);
+    wm.process();
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_TIMEOUT, wm.getScanState());
+    TEST_ASSERT_FALSE_MESSAGE(wm.hasValidScanResults(),
+                              "Timed out scans should not leave cached results marked valid");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Scan timeout transition test completed successfully");
+}
+
+void test_scan_cancels_when_connect_pending() {
+    Serial.println("[TEST]   Testing scan cancellation during connect...");
+
+    WiFiManager wm;
+
+#ifdef UNIT_TEST
+    wm.wmTestSetPortalActive(true);
+    wm.wmTestForceScanState(WiFiManager::WM_SCAN_RUNNING);
+    wm.wmTestSetScanStartedAt(millis());
+    wm.wmTestSetConnectPending(true);
+    wm.process();
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_IDLE, wm.getScanState());
+    TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().schedulePending,
+                              "Connect flow should cancel any in-flight async scan");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Scan cancellation during connect test completed successfully");
+}
+
+void test_scan_cancels_when_lifecycle_blocked() {
+    Serial.println("[TEST]   Testing scan cancellation during lifecycle block...");
+
+    WiFiManager wm;
+
+#ifdef UNIT_TEST
+    wm.wmTestSetPortalActive(true);
+    wm.requestAsyncScan(true);
+    wm.wmTestSetScanLifecycleBlocked(true);
+    wm.process();
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_IDLE, wm.getScanState());
+    TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().schedulePending,
+                              "Lifecycle blocking should leave scan engine idle");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Scan cancellation during lifecycle block test completed successfully");
+}
+
+void test_scan_generation_invalidated_on_reset() {
+    Serial.println("[TEST]   Testing scan generation invalidation on reset...");
+
+    WiFiManager wm;
+
+#ifdef UNIT_TEST
+    wm.wmTestSetScanGenerations(4, 4, 4);
+    wm.wmTestSetScanCompletionPending(3);
+    wm.wmTestClearScanResults();
+
+    TEST_ASSERT_EQUAL(WiFiManager::WM_SCAN_IDLE, wm.getScanState());
+    TEST_ASSERT_TRUE_MESSAGE(wm.getScanSnapshot().generation > 4,
+                             "Resetting scan state should invalidate older completion generations");
+    TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().completionPending,
+                              "Resetting scan state should clear pending completion callbacks");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Scan generation invalidation on reset test completed successfully");
 }
 
