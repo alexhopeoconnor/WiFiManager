@@ -58,7 +58,7 @@ const char HTML_HELP[] PROGMEM =
  "<tr><td>/erase</td>"
  "<td>Erase WiFi configuration and reboot device. Device will not reconnect to a network until new WiFi configuration data is entered.</td></tr>"
  "</table>"
- "<p/>Github <a href='https://github.com/tzapu/WiFiManager'>https://github.com/tzapu/WiFiManager</a>.";
+ "<p/>Fork <a href='https://github.com/alexhopeoconnor/WiFiManager'>https://github.com/alexhopeoconnor/WiFiManager</a>.";
 #else
 const char HTML_HELP[] PROGMEM = "";
 #endif

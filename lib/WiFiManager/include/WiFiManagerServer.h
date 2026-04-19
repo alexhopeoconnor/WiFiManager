@@ -32,6 +32,10 @@ class WiFiManager;
 // Forward declaration - full definition needed in .cpp file
 class WiFiManagerHandlers;
 
+#ifdef WM_DFTE_LOGGING
+class WiFiManagerDfteLogger;
+#endif
+
 // -----------------------------------------------------------------------------------------------
 // HTTP ROUTES
 
@@ -57,6 +61,7 @@ class WiFiManagerServer {
     static WiFiManagerServer* instance();
     
     WiFiManagerServer(WiFiManager* wm);
+    ~WiFiManagerServer();
     
     // Template engine setup and access
     void setupTemplateEngine();
@@ -115,6 +120,12 @@ class WiFiManagerServer {
     // Shared DFTE placeholder registry
     std::unique_ptr<PlaceholderRegistry> _tplRegistry;
     std::function<void(PlaceholderRegistry&)> _tplSetupCallback;
+
+#ifdef WM_DFTE_LOGGING
+    // DFTE -> DEBUG_WM bridge (only installed when WM_DFTE_LOGGING and no other logger registered)
+    std::unique_ptr<WiFiManagerDfteLogger> _dfteLogger;
+    bool _wmOwnsDfteLogSink = false;
+#endif
     
     // Singleton instance
     static WiFiManagerServer* s_instance;

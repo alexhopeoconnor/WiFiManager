@@ -41,7 +41,7 @@
   "dependencies": [
     {
       "name": "ESP32Async/ESPAsyncWebServer",
-      "version": "3.9.1"
+      "version": "^3.9.1"
     },
     "https://github.com/alexhopeoconnor/DFTE.git"
   ],

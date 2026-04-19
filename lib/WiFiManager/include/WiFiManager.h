@@ -21,9 +21,11 @@
 #endif
 
 #include <vector>
+#include <functional>
 
 #include "WiFiManagerParameter.h"
 
+// #define WM_DFTE_LOGGING    // opt-in: register a DFTE log sink that forwards to DEBUG_WM (see README)
 // #define WM_MDNS            // includes MDNS, also set MDNS with sethostname
 // #define WM_FIXERASECONFIG  // use erase flash fix
 // #define WM_ERASE_NVS       // esp32 erase(true) will erase NVS 
@@ -126,7 +128,7 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
-
+#include <TemplateEngine.h>
 
 // Include utility functions
 #include "WiFiManagerUtils.h"
@@ -196,10 +198,12 @@ const char WM_VERSION_STR[] PROGMEM = "v2.0.18";
 // Forward declarations
 class WiFiManagerServer;
 class WiFiManagerHandlers;
+class WiFiManagerDfteLogger;
 
 class WiFiManager
 {
   public:
+
     // Forward declare nested class - defined later after WM_WebServer is available
     class WiFiManagerRequestArgs;
 
@@ -432,6 +436,13 @@ class WiFiManager
     // set the webapp title, default WiFiManager
     void          setTitle(String title);
 
+    // DFTE (portal HTML): register extra placeholders or override defaults (%STYLES%, %PAGE_TITLE%, …).
+    // Call before startConfigPortal / startWebPortal to have it applied when the server starts; if the
+    // portal is already running, the shared registry is rebuilt immediately.
+    void          registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb);
+    // Rebuild the server’s shared PlaceholderRegistry (defaults + registerTemplateSetupCallback, or customizer if passed).
+    void          rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer = nullptr);
+
     // add params to its own menu page and remove from wifi, NOT TO BE COMBINED WITH setMenu!
     void          setParamsPage(bool enable);
 
@@ -565,6 +576,7 @@ class WiFiManager
   protected:
     // vars
     std::unique_ptr<WiFiManagerServer> _serverManager;
+    std::function<void(PlaceholderRegistry&)> _templateSetupCallback;
 
     // ip configs @todo struct ?
     IPAddress     _ap_static_ip;
@@ -827,6 +839,7 @@ protected:
     #endif
 
   protected:
+    friend class WiFiManagerDfteLogger; // WM_DFTE_LOGGING: bridge calls protected DEBUG_WM
 
     //helpers (rendering methods moved to WiFiManagerHandlers)
     boolean       isIp(String str);

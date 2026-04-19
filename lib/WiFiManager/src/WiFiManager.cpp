@@ -499,6 +499,7 @@ void WiFiManager::setupConfigPortal() {
   // Lazy initialization: only create server manager when config portal is actually needed
   if (!_serverManager) {
     _serverManager = std::make_unique<WiFiManagerServer>(this);
+    _serverManager->registerTemplateSetupCallback(_templateSetupCallback);
   }
   _serverManager->createServer(_httpPort);
   _serverManager->registerRoutes();
@@ -1967,6 +1968,20 @@ DNSServer* WiFiManager::getDNSServer() {
  */
 void WiFiManager::setTitle(String title){
   _title = title;
+}
+
+void WiFiManager::registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb) {
+  _templateSetupCallback = std::move(cb);
+  if (_serverManager) {
+    _serverManager->registerTemplateSetupCallback(_templateSetupCallback);
+    _serverManager->rebuildPlaceholderRegistry();
+  }
+}
+
+void WiFiManager::rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer) {
+  if (_serverManager) {
+    _serverManager->rebuildPlaceholderRegistry(std::move(customizer));
+  }
 }
 
 /**

@@ -11,6 +11,10 @@
 #include "WiFiManagerServer.h"
 #include "WiFiManager.h"
 #include "WiFiManagerHandlers.h" // Full definition needed for unique_ptr
+#ifdef WM_DFTE_LOGGING
+#include "WiFiManagerDfteLogger.h"
+#include <DeviceFrameworkTemplateEngineDebug.h>
+#endif
 #include "templates/CSS.h"
 #include "templates/JS.h"
 #include "templates/Root.h"
@@ -27,6 +31,8 @@ WiFiManagerServer::WiFiManagerServer(WiFiManager* wm)
   : _wm(wm), _handlers(std::make_unique<WiFiManagerHandlers>(wm)) {
   s_instance = this;
 }
+
+WiFiManagerServer::~WiFiManagerServer() = default;
 
 // Static getters for RAM placeholders (registry requires zero-arg functions) using singleton
 const char* WiFiManagerServer::tplGetPageTitle() {
@@ -128,6 +134,17 @@ void WiFiManagerServer::setupTemplateEngine() {
   
   // Allow consumers to customize placeholders
   applyTemplateSetupCallback(*_tplRegistry);
+
+#ifdef WM_DFTE_LOGGING
+  // Install DFTE log sink only if nothing else registered yet (e.g. DeviceFramework's bridge).
+  if (!deviceFrameworkTemplateEngineIsLoggingEnabled()) {
+    if (!_dfteLogger) {
+      _dfteLogger = std::make_unique<WiFiManagerDfteLogger>(_wm);
+    }
+    deviceFrameworkTemplateEngineEnableLogging(_dfteLogger.get());
+    _wmOwnsDfteLogSink = true;
+  }
+#endif
 }
 
 void WiFiManagerServer::createServer(uint16_t port) {
@@ -274,6 +291,16 @@ void WiFiManagerServer::processDNS() {
 }
 
 void WiFiManagerServer::shutdownServer() {
+#ifdef WM_DFTE_LOGGING
+  if (_wmOwnsDfteLogSink) {
+    if (deviceFrameworkTemplateEngineGetLogger() == _dfteLogger.get()) {
+      deviceFrameworkTemplateEngineDisableLogging();
+    }
+    _dfteLogger.reset();
+    _wmOwnsDfteLogSink = false;
+  }
+#endif
+
   // AsyncWebServer doesn't have stop(), just reset the unique_ptr to free resources
   if (server) {
     server.reset();
