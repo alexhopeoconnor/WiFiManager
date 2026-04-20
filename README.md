@@ -66,7 +66,7 @@ wm.rebuildPlaceholderRegistry();  // optional: after changing callback while por
 
 Some small HTML snippets (status messages, OTA blurb, help table, etc.) are still assembled in RAM or pulled from `HTML.h` and then injected into templates. That is **intentional**: not every line of markup needs its own placeholder or registry churn. Customize those via DFTE where it pays off (shell, branding, layout); keep trivial blobs as strings when appropriate.
 
-## Debug: WiFiManager (`DEBUG_WM`) and DFTE logging
+## Debug: WiFiManager logging and DFTE
 
 ### How DFTE logging is designed
 
@@ -74,16 +74,14 @@ DFTE keeps a **single global pointer** `deviceFrameworkTemplateEngineLogger` (se
 
 ### WiFiManager today
 
-- **`DEBUG_WM`**: compile-time gated with **`WM_DEBUG_LEVEL`** (see commented `#define WM_DFTE_LOGGING` / `WM_DEBUG_LEVEL` in `WiFiManager.h`). At runtime, `_debug`, `_debugLevel`, `_debugPrefix`, and `_debugPort` control volume and destination (`Serial` unless **`WM_DEBUG_PORT`** is set). This is tuned for **firmware size** (strip verbose strings when the macro is absent) and familiar serial prefixes (`*wm:`).
-- **`WM_DFTE_LOGGING`** (build flag, **off by default**): when defined, `WiFiManagerServer::setupTemplateEngine()` registers **`WiFiManagerDfteLogger`**, which forwards DFTE messages into **`DEBUG_WM`** with a `[DFTE]` prefix and WM levels (error → `WM_DEBUG_ERROR`, warn → `WM_DEBUG_NOTIFY`, info → `WM_DEBUG_VERBOSE`, debug → `WM_DEBUG_DEV`). If **`deviceFrameworkTemplateEngineIsLoggingEnabled()`** is already true (for example **DeviceFramework** installed `WebInterfaceTemplateEngineLogger` first), WiFiManager **does not replace** that sink; it only owns teardown when it installed its own. **`shutdownServer()`** disables logging and drops the adapter only when WiFiManager installed it—avoiding clobbering a host logger on portal shutdown.
+- **`WM_LOG_LEVEL`**: compile-time default is **`0`** (silent). Set **`1`–`5`** for `Error` … `Trace` (see `WiFiManagerLogLevel` in `WiFiManagerLogLevel.h`). Example: `-DWM_LOG_LEVEL=5` in `platformio.ini` for full verbosity. Strip all log **call sites** from the binary with **`WM_NO_LOG`** (or legacy **`WM_NODEBUG`**). At runtime, **`setLogEnabled`**, **`setLogOutput(enabled, maxLevel)`**, **`_logPrefix`**, and **`_logPort`** gate output; use **`WM_DEBUG_PORT`** to redirect the default `Print` target. **`WiFiManagerLogSink`** receives structured **`WiFiManagerLogMessage`** (level, subsystem, full line).
+- **`WM_DFTE_LOGGING`** (build flag, **off by default**): when defined, `WiFiManagerServer::setupTemplateEngine()` registers **`WiFiManagerDfteLogger`**, which forwards DFTE into **`WiFiManager::log(..., "WM/DFTE", ...)`**. It uses **`deviceFrameworkTemplateEngineEnableLogging(..., this)`** so **`disableLoggingForOwner(this)`** on shutdown does not clobber another owner. If DFTE logging was already enabled, WiFiManager does not replace it.
 
 Use **`pio test -e esp8266_dfte_log --without-uploading --without-testing`** in this repo to compile the test firmware with **`WM_DFTE_LOGGING`** enabled.
 
-### Should WiFiManager’s logging be refactored to match DFTE’s hook style?
+### Design note
 
-**Not as a big-bang rewrite.** DFTE’s model fits a **small library** with one pipeline: optional sink, zero cost when disabled. WiFiManager has **hundreds** of `DEBUG_WM` sites and relies on **`#ifdef WM_DEBUG_LEVEL`** to remove entire print paths from the binary. Replacing that with only a runtime pointer would either **regain flash/RAM** for the strings or require keeping both mechanisms.
-
-A practical middle path (what we did here) is: **keep `DEBUG_WM` + `WM_DEBUG_LEVEL` for WM-native traces**, and **optionally bridge DFTE into the same stream** with `WM_DFTE_LOGGING`. If you later want a unified sink for *both*, a small internal `WiFiManagerLogSink` interface *behind* `DEBUG_WM` could forward to `Serial` or a custom `Print`—that is incremental and does not force every call site through a virtual function in release builds.
+DFTE uses a small optional logger pointer; WiFiManager uses **`#ifndef WM_NO_LOG`** around log call sites so release builds can omit strings entirely. **`WiFiManagerLogSink`** lets hosts (e.g. **DeviceFramework**) map levels without parsing ad hoc prefixes.
 
 ## License
 

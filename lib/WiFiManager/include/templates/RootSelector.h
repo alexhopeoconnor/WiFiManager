@@ -9,7 +9,7 @@
 #ifdef WM_CUSTOM_ROOT_TEMPLATE_HEADER
 #include WM_CUSTOM_ROOT_TEMPLATE_HEADER
 #else
-#include "Root.h"
+#include "RootShell.h"
 #endif
 
 #endif // _WM_ROOT_SELECTOR_H_

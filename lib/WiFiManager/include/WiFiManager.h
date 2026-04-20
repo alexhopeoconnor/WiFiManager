@@ -24,8 +24,19 @@
 #include <functional>
 
 #include "WiFiManagerParameter.h"
+#include "WiFiManagerLogLevel.h"
 
-// #define WM_DFTE_LOGGING    // opt-in: register a DFTE log sink that forwards to DEBUG_WM (see README)
+#ifdef WM_NODEBUG
+#ifndef WM_NO_LOG
+#define WM_NO_LOG
+#endif
+#endif
+
+#ifndef WM_LOG_LEVEL
+#define WM_LOG_LEVEL 0
+#endif
+
+// #define WM_DFTE_LOGGING    // opt-in: bridge DFTE logging into WiFiManager (see README)
 // #define WM_MDNS            // includes MDNS, also set MDNS with sethostname
 // #define WM_FIXERASECONFIG  // use erase flash fix
 // #define WM_ERASE_NVS       // esp32 erase(true) will erase NVS 
@@ -185,20 +196,11 @@ const char WM_VERSION_STR[] PROGMEM = "v2.0.18";
 // WiFiManagerRequestArgs is defined as a nested class inside WiFiManager (after WM_WebServer is defined)
 
 
-    // debugging
-    typedef enum {
-        WM_DEBUG_SILENT    = 0, // debug OFF but still compiled for runtime
-        WM_DEBUG_ERROR     = 1, // error only
-        WM_DEBUG_NOTIFY    = 2, // default stable,INFO
-        WM_DEBUG_VERBOSE   = 3, // move verbose info
-        WM_DEBUG_DEV       = 4, // development useful debugging info
-        WM_DEBUG_MAX       = 5  // MAX extra dev auditing, var dumps etc (MAX+1 will print timing,mem and frag info)
-    } wm_debuglevel_t;
-
 // Forward declarations
 class WiFiManagerServer;
 class WiFiManagerHandlers;
 class WiFiManagerDfteLogger;
+class WiFiManagerLogSink;
 
 class WiFiManager
 {
@@ -357,10 +359,21 @@ class WiFiManager
     // lets you disable automatically connecting after save from webportal
     void          setSaveConnect(bool connect = true);
     
-    // toggle debug output
-    void          setDebugOutput(boolean debug);
-    void          setDebugOutput(boolean debug, String prefix); // log line prefix, default "*wm:"
-    void          setDebugOutput(boolean debug, wm_debuglevel_t level ); // log line prefix, default "*wm:"
+    void          setLogEnabled(boolean enabled);
+    void          setLogPrefix(String prefix);
+    void          setLogOutput(boolean enabled, WiFiManagerLogLevel maxLevel);
+
+    /** When non-null, log lines go here instead of the Print stream. */
+    void          setLogSink(WiFiManagerLogSink* sink);
+    WiFiManagerLogSink* getLogSink();
+
+    template<typename T>
+    void log(WiFiManagerLogLevel level, const char* subsystem, T&& text);
+
+    template<typename T, typename U>
+    void log(WiFiManagerLogLevel level, const char* subsystem, T&& a, U&& b);
+
+    void log(WiFiManagerLogLevel level, const char* subsystem, const String& text);
 
     //set min quality percentage to include in scan, defaults to 8% if not specified
     void          setMinimumSignalQuality(int quality = 8);
@@ -839,8 +852,6 @@ protected:
     #endif
 
   protected:
-    friend class WiFiManagerDfteLogger; // WM_DFTE_LOGGING: bridge calls protected DEBUG_WM
-
     //helpers (rendering methods moved to WiFiManagerHandlers)
     boolean       isIp(String str);
     String        toStringIp(IPAddress ip);
@@ -867,46 +878,24 @@ protected:
     int         _max_params;
     WiFiManagerParameter** _params    = NULL;
 
-    boolean _debug  = true;
-    String _debugPrefix = "*wm:"; // default debug prefix
+    boolean       _logEnabled = true;
+    String        _logPrefix = "*wm:";
+    WiFiManagerLogLevel _logTagMinLevel = WiFiManagerLogLevel::Debug;
 
-    wm_debuglevel_t debugLvlShow = WM_DEBUG_VERBOSE; // at which level start showing [n] level tags
-
-    // build debuglevel support
-    // @todo use DEBUG_ESP_x?
-    
-    // Set default debug level
-    #ifndef WM_DEBUG_LEVEL
-    #define WM_DEBUG_LEVEL WM_DEBUG_NOTIFY
-    #endif
-
-    // override debug level OFF
-    #ifdef WM_NODEBUG
-    #undef WM_DEBUG_LEVEL
-    #endif
-
-    #ifdef WM_DEBUG_LEVEL
-    uint8_t _debugLevel = (uint8_t)WM_DEBUG_LEVEL;
-    #else 
-    uint8_t _debugLevel = 0; // default debug level
-    #endif
+#ifndef WM_NO_LOG
+    WiFiManagerLogLevel _runtimeMaxLevel = static_cast<WiFiManagerLogLevel>((uint8_t)WM_LOG_LEVEL);
+#else
+    WiFiManagerLogLevel _runtimeMaxLevel = WiFiManagerLogLevel::Silent;
+#endif
 
     // @todo use DEBUG_ESP_PORT ?
     #ifdef WM_DEBUG_PORT
-    Print& _debugPort = WM_DEBUG_PORT;
+    Print&        _logPort = WM_DEBUG_PORT;
     #else
-    Print& _debugPort = Serial; // debug output stream ref
+    Print&        _logPort = Serial;
     #endif
 
-    template <typename Generic>
-    void        DEBUG_WM(Generic text);
-
-    template <typename Generic>
-    void        DEBUG_WM(wm_debuglevel_t level,Generic text);
-    template <typename Generic, typename Genericb>
-    void        DEBUG_WM(Generic text,Genericb textb);
-    template <typename Generic, typename Genericb>
-    void        DEBUG_WM(wm_debuglevel_t level, Generic text,Genericb textb);
+    void          emitLogImpl(WiFiManagerLogLevel level, const char* subsystem, const String& textA, const String& textB);
 
     // callbacks
     // @todo use cb list (vector) maybe event ids, allow no return value
@@ -920,19 +909,19 @@ protected:
     std::function<void()> _preotaupdatecallback;
     std::function<void()> _configportaltimeoutcallback;
 
+    WiFiManagerLogSink* _logSink = nullptr;
+
     template <class T>
     auto optionalIPFromString(T *obj, const char *s) -> decltype(  obj->fromString(s)  ) {
       return  obj->fromString(s);
     }
     auto optionalIPFromString(...) -> bool {
-      // DEBUG_WM("NO fromString METHOD ON IPAddress, you need ESP8266 core 2.1.0 or newer for Custom IP configuration to work.");
       return false;
     }
 
 };
 
-// Include template implementations for DEBUG_WM
-#include "WiFiManagerDebug.h"
+#include "WiFiManagerLogTemplates.h"
 
 #endif
 

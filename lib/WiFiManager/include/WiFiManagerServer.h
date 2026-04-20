@@ -55,6 +55,20 @@ const char R_scan[]               PROGMEM = "/wifi/scan";
 const char R_update[]             PROGMEM = "/update";
 const char R_updatedone[]         PROGMEM = "/u";
 
+const char R_api_bootstrap[]      PROGMEM = "/api/bootstrap";
+const char R_api_wifi_scan_status[] PROGMEM = "/api/wifi/scan-status";
+const char R_api_wifi_scan[]      PROGMEM = "/api/wifi/scan";
+const char R_api_wifi_meta[]      PROGMEM = "/api/wifi/meta";
+const char R_api_wifi_save[]      PROGMEM = "/api/wifi/save";
+const char R_api_params[]         PROGMEM = "/api/params";
+const char R_api_params_save[]    PROGMEM = "/api/params/save";
+const char R_api_info[]           PROGMEM = "/api/info";
+const char R_api_status[]         PROGMEM = "/api/status";
+const char R_api_device_restart[] PROGMEM = "/api/device/restart";
+const char R_api_device_erase[]   PROGMEM = "/api/device/erase";
+const char R_api_portal_close[]   PROGMEM = "/api/portal/close";
+const char R_api_portal_exit[]    PROGMEM = "/api/portal/exit";
+
 class WiFiManagerServer {
   public:
     // Singleton access
@@ -122,7 +136,7 @@ class WiFiManagerServer {
     std::function<void(PlaceholderRegistry&)> _tplSetupCallback;
 
 #ifdef WM_DFTE_LOGGING
-    // DFTE -> DEBUG_WM bridge (only installed when WM_DFTE_LOGGING and no other logger registered)
+    // DFTE -> WiFiManager::log bridge (only installed when WM_DFTE_LOGGING and no other logger registered)
     std::unique_ptr<WiFiManagerDfteLogger> _dfteLogger;
     bool _wmOwnsDfteLogSink = false;
 #endif

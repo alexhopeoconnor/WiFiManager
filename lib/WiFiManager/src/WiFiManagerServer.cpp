@@ -17,7 +17,6 @@
 #endif
 #include "templates/CSS.h"
 #include "templates/JS.h"
-#include "templates/Root.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -141,7 +140,7 @@ void WiFiManagerServer::setupTemplateEngine() {
     if (!_dfteLogger) {
       _dfteLogger = std::make_unique<WiFiManagerDfteLogger>(_wm);
     }
-    deviceFrameworkTemplateEngineEnableLogging(_dfteLogger.get());
+    deviceFrameworkTemplateEngineEnableLogging(_dfteLogger.get(), static_cast<const void*>(this));
     _wmOwnsDfteLogSink = true;
   }
 #endif
@@ -150,19 +149,19 @@ void WiFiManagerServer::setupTemplateEngine() {
 void WiFiManagerServer::createServer(uint16_t port) {
   // If server already exists, shutdown first to prevent leaks and connection drops
   if (server) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("Server already exists, shutting down first"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("Server already exists, shutting down first"));
     #endif
     shutdownServer();
   }
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(F("Starting Web Portal"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("Starting Web Portal"));
   #endif
 
   if(port != 80) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("http server started with custom port: "), port);
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("http server started with custom port: "), port);
     #endif
   }
 
@@ -174,8 +173,8 @@ void WiFiManagerServer::createServer(uint16_t port) {
 
 void WiFiManagerServer::registerRoutes() {
   if (!server) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] Server not created, call createServer() first"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] Server not created, call createServer() first"));
     #endif
     return;
   }
@@ -186,8 +185,8 @@ void WiFiManagerServer::registerRoutes() {
   }
   
   if (_wm->_webservercallback != NULL) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("[CB] _webservercallback calling"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _webservercallback calling"));
     #endif
     _wm->_webservercallback(); // @CALLBACK
   }
@@ -197,6 +196,46 @@ void WiFiManagerServer::registerRoutes() {
   // Register routes with lambdas
   server->on(WM_G(R_root), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleRoot(request);
+  });
+
+  server->on(WM_G(R_api_bootstrap), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiBootstrap(request);
+  });
+  server->on(WM_G(R_api_wifi_scan_status), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiScanStatus(request);
+  });
+  server->on(WM_G(R_api_wifi_scan), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiScan(request);
+  });
+  server->on(WM_G(R_api_wifi_meta), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiMeta(request);
+  });
+  server->on(WM_G(R_api_wifi_save), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiSave(request);
+  });
+  server->on(WM_G(R_api_params), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiParamsGet(request);
+  });
+  server->on(WM_G(R_api_params_save), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiParamsSave(request);
+  });
+  server->on(WM_G(R_api_info), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiInfo(request);
+  });
+  server->on(WM_G(R_api_status), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiStatus(request);
+  });
+  server->on(WM_G(R_api_device_restart), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiDeviceRestart(request);
+  });
+  server->on(WM_G(R_api_device_erase), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiDeviceErase(request);
+  });
+  server->on(WM_G(R_api_portal_close), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiPortalClose(request);
+  });
+  server->on(WM_G(R_api_portal_exit), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiPortalExit(request);
   });
   
   server->on(WM_G(R_wifi), HTTP_GET, [this](AsyncWebServerRequest *request) {
@@ -267,8 +306,8 @@ void WiFiManagerServer::registerRoutes() {
   });
   
   server->begin(); // Web server start
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("HTTP server started"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("HTTP server started"));
   #endif
 }
 
@@ -277,8 +316,8 @@ void WiFiManagerServer::setupDNSD() {
 
   /* Setup the DNS server redirecting all the domains to the apIP */
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("dns server started with ip: "), WiFi.softAPIP());
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("dns server started with ip: "), WiFi.softAPIP());
   #endif
   const uint8_t DNS_PORT = 53;
   dnsServer->start(DNS_PORT, F("*"), WiFi.softAPIP());
@@ -293,9 +332,7 @@ void WiFiManagerServer::processDNS() {
 void WiFiManagerServer::shutdownServer() {
 #ifdef WM_DFTE_LOGGING
   if (_wmOwnsDfteLogSink) {
-    if (deviceFrameworkTemplateEngineGetLogger() == _dfteLogger.get()) {
-      deviceFrameworkTemplateEngineDisableLogging();
-    }
+    deviceFrameworkTemplateEngineDisableLoggingForOwner(static_cast<const void*>(this));
     _dfteLogger.reset();
     _wmOwnsDfteLogSink = false;
   }

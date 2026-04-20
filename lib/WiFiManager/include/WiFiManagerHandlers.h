@@ -69,6 +69,21 @@ class WiFiManagerHandlers {
     void handleUpdate(AsyncWebServerRequest *request);
     void handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
     void handleUpdateDone(AsyncWebServerRequest *request);
+
+    // JSON / SPA API (portal is a single-page app; only GET / serves HTML)
+    void handleApiBootstrap(AsyncWebServerRequest *request);
+    void handleApiWifiScanStatus(AsyncWebServerRequest *request);
+    void handleApiWifiScan(AsyncWebServerRequest *request);
+    void handleApiWifiMeta(AsyncWebServerRequest *request);
+    void handleApiWifiSave(AsyncWebServerRequest *request);
+    void handleApiParamsGet(AsyncWebServerRequest *request);
+    void handleApiParamsSave(AsyncWebServerRequest *request);
+    void handleApiInfo(AsyncWebServerRequest *request);
+    void handleApiStatus(AsyncWebServerRequest *request);
+    void handleApiDeviceRestart(AsyncWebServerRequest *request);
+    void handleApiDeviceErase(AsyncWebServerRequest *request);
+    void handleApiPortalClose(AsyncWebServerRequest *request);
+    void handleApiPortalExit(AsyncWebServerRequest *request);
     
     // Captive Portal
     boolean captivePortal(AsyncWebServerRequest *request);
@@ -91,6 +106,11 @@ class WiFiManagerHandlers {
     WiFiManager* _wm;
     void collectVisibleScanResults(std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
     void appendVisibleScanResultsJson(String& json, const std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
+
+    String buildPortalBootstrapJson();
+    void applyWifiAndParamsFromRequest(AsyncWebServerRequest *request);
+    void buildPlainStatusSummary(String& out);
+    static void sendApiJson(AsyncWebServerRequest *request, int code, const String& json);
 };
 
 #endif // defined(ESP8266) || defined(ESP32)

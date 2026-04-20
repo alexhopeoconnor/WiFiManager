@@ -21,6 +21,7 @@
 #include "templates/Param.h"
 #include "templates/WiFi.h"
 #include "templates/RootSelector.h"
+#include "templates/PortalAppJS.h"
 #include <TemplateEngine.h>
 #include <cstring>
 
@@ -29,6 +30,75 @@
 #ifndef WM_PAGE_RESERVE_BYTES
 #define WM_PAGE_RESERVE_BYTES 8192
 #endif
+
+static void jsonAppendEscaped(String& out, const String& s) {
+  for (size_t i = 0; i < s.length(); i++) {
+    const char c = s[i];
+    if (c == '"') {
+      out += F("\\\"");
+    } else if (c == '\\') {
+      out += F("\\\\");
+    } else if (c == '\n') {
+      out += F("\\n");
+    } else if (c == '\r') {
+      // skip
+    } else {
+      out += c;
+    }
+  }
+}
+
+/** Parse a single `<dt>...</dt><dd>...</dd>` row from `getInfoData` HTML. */
+static bool parseInfoRowDtDd(const String& html, String& label, String& value) {
+  const int dtOpen = html.indexOf(F("<dt>"));
+  if (dtOpen < 0) {
+    return false;
+  }
+  const int dtClose = html.indexOf(F("</dt>"), dtOpen);
+  if (dtClose < 0) {
+    return false;
+  }
+  label = html.substring(dtOpen + 4, dtClose);
+  const int ddOpen = html.indexOf(F("<dd>"), dtClose);
+  if (ddOpen < 0) {
+    return false;
+  }
+  const int ddClose = html.indexOf(F("</dd>"), ddOpen);
+  if (ddClose < 0) {
+    return false;
+  }
+  value = html.substring(ddOpen + 4, ddClose);
+  return true;
+}
+
+static void appendJsonInfoArrayFromIds(WiFiManagerHandlers* handlers,
+                                       String& json,
+                                       const char* const* ids,
+                                       size_t count,
+                                       bool& first) {
+  for (size_t i = 0; i < count; i++) {
+    const String row = handlers->getInfoData(ids[i]);
+    if (row.length() == 0) {
+      continue;
+    }
+    String label;
+    String value;
+    if (!parseInfoRowDtDd(row, label, value)) {
+      continue;
+    }
+    if (!first) {
+      json += F(",");
+    }
+    first = false;
+    json += F("{\"key\":\"");
+    json += ids[i];
+    json += F("\",\"label\":\"");
+    jsonAppendEscaped(json, label);
+    json += F("\",\"value\":\"");
+    jsonAppendEscaped(json, value);
+    json += F("\"}");
+  }
+}
 
 namespace {
 
@@ -95,11 +165,6 @@ void registerShellTemplate(PlaceholderRegistry& registry,
   registry.registerProgmemTemplate("%PAGE_CONTENT%", pageContentTemplate);
 }
 
-struct RootState {
-  String menu;
-  String status;
-};
-
 struct MessagePageState {
   String docTitle;
   const char* bodyClass;
@@ -153,69 +218,36 @@ void escapePercentsForTemplate(String& value) {
   value = escaped;
 }
 
-void registerDynamicStringPlaceholder(PlaceholderRegistry& registry,
-                                      const char* placeholder,
-                                      String& value,
-                                      DynamicTemplateDescriptor& descriptor) {
-  escapePercentsForTemplate(value);
-  configureDynamicStringDescriptor(descriptor, value);
-  registry.registerDynamicTemplate(placeholder, &descriptor);
-}
-
-String renderTemplateToString(const char* templateData, PlaceholderRegistry& registry) {
-  TemplateContext context;
-  context.setRegistry(&registry);
-  TemplateRenderer::initializeContext(context, templateData);
-
-  uint8_t buffer[128];
-  String output;
-  while (true) {
-    size_t written = TemplateRenderer::renderNextChunk(context, buffer, sizeof(buffer));
-    if (written == 0) {
-      break;
-    }
-    output.concat(reinterpret_cast<const char*>(buffer), written);
-  }
-  return output;
-}
-
 String renderActionForm(const String& action,
                         const String& method,
                         const String& label,
                         const String& buttonClassAttr = String(),
                         const String& prefix = String(),
                         const String& suffix = String()) {
-  PlaceholderRegistry registry(6);
-  DynamicTemplateDescriptor actionDescriptor;
-  DynamicTemplateDescriptor methodDescriptor;
-  DynamicTemplateDescriptor labelDescriptor;
-  DynamicTemplateDescriptor classDescriptor;
-  DynamicTemplateDescriptor prefixDescriptor;
-  DynamicTemplateDescriptor suffixDescriptor;
-
-  String actionValue = action;
-  String methodValue = method;
-  String labelValue = label;
-  String classValue = buttonClassAttr;
-  String prefixValue = prefix;
-  String suffixValue = suffix;
-
-  registerDynamicStringPlaceholder(registry, "%ACTION%", actionValue, actionDescriptor);
-  registerDynamicStringPlaceholder(registry, "%METHOD%", methodValue, methodDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_LABEL%", labelValue, labelDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_CLASS_ATTR%", classValue, classDescriptor);
-  registerDynamicStringPlaceholder(registry, "%ACTION_PREFIX%", prefixValue, prefixDescriptor);
-  registerDynamicStringPlaceholder(registry, "%ACTION_SUFFIX%", suffixValue, suffixDescriptor);
-
-  return renderTemplateToString(WM_ACTION_FORM_TEMPLATE, registry);
+  String output;
+  reservePage(output, prefix.length() + suffix.length() + action.length() + method.length() +
+                        label.length() + buttonClassAttr.length() + 48);
+  output += prefix;
+  output += F("<form action='");
+  output += action;
+  output += F("' method='");
+  output += method;
+  output += F("'><button");
+  output += buttonClassAttr;
+  output += F(">");
+  output += label;
+  output += F("</button></form>");
+  output += suffix;
+  return output;
 }
 
 String renderSubmitButton(const String& label) {
-  PlaceholderRegistry registry(1);
-  DynamicTemplateDescriptor labelDescriptor;
-  String labelValue = label;
-  registerDynamicStringPlaceholder(registry, "%BUTTON_LABEL%", labelValue, labelDescriptor);
-  return renderTemplateToString(WM_SUBMIT_BUTTON_TEMPLATE, registry);
+  String output;
+  reservePage(output, label.length() + 40);
+  output += F("<br/><br/><button type='submit'>");
+  output += label;
+  output += F("</button>");
+  return output;
 }
 
 String renderCenteredButton(const String& id,
@@ -223,26 +255,21 @@ String renderCenteredButton(const String& id,
                             const String& onClick,
                             const String& label,
                             const String& extraAttrs = String()) {
-  PlaceholderRegistry registry(5);
-  DynamicTemplateDescriptor idDescriptor;
-  DynamicTemplateDescriptor typeDescriptor;
-  DynamicTemplateDescriptor onClickDescriptor;
-  DynamicTemplateDescriptor labelDescriptor;
-  DynamicTemplateDescriptor extraAttrsDescriptor;
-
-  String idValue = id;
-  String typeValue = type;
-  String onClickValue = onClick;
-  String labelValue = label;
-  String extraAttrsValue = extraAttrs;
-
-  registerDynamicStringPlaceholder(registry, "%BUTTON_ID%", idValue, idDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_TYPE%", typeValue, typeDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_ONCLICK%", onClickValue, onClickDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_LABEL%", labelValue, labelDescriptor);
-  registerDynamicStringPlaceholder(registry, "%BUTTON_EXTRA_ATTRS%", extraAttrsValue, extraAttrsDescriptor);
-
-  return renderTemplateToString(WM_CENTERED_BUTTON_TEMPLATE, registry);
+  String output;
+  reservePage(output, id.length() + type.length() + onClick.length() + label.length() +
+                        extraAttrs.length() + 72);
+  output += F("<br/><div class='c'><button id='");
+  output += id;
+  output += F("' type='");
+  output += type;
+  output += F("' onclick='");
+  output += onClick;
+  output += F("'");
+  output += extraAttrs;
+  output += F(">");
+  output += label;
+  output += F("</button></div>");
+  return output;
 }
 
 String renderSectionBreak(const String& content) {
@@ -250,19 +277,19 @@ String renderSectionBreak(const String& content) {
     return String();
   }
 
-  PlaceholderRegistry registry(1);
-  DynamicTemplateDescriptor contentDescriptor;
-  String contentValue = content;
-  registerDynamicStringPlaceholder(registry, "%SECTION_CONTENT%", contentValue, contentDescriptor);
-  return renderTemplateToString(WM_SECTION_BREAK_TEMPLATE, registry);
+  String output;
+  reservePage(output, content.length() + 16);
+  output += F("<hr><br/>");
+  output += content;
+  return output;
 }
 
 String renderScanMessage(const String& message) {
-  PlaceholderRegistry registry(1);
-  DynamicTemplateDescriptor messageDescriptor;
-  String messageValue = message;
-  registerDynamicStringPlaceholder(registry, "%SCAN_MESSAGE%", messageValue, messageDescriptor);
-  return renderTemplateToString(WM_SCAN_MESSAGE_TEMPLATE, registry);
+  String output;
+  reservePage(output, message.length() + 16);
+  output += message;
+  output += F("<br/><br/>");
+  return output;
 }
 
 String renderScanRow(const String& ssidAttr,
@@ -273,35 +300,31 @@ String renderScanRow(const String& ssidAttr,
                      const String& iconVisibilityClass,
                      const String& valueVisibilityClass,
                      const String& qualityValue) {
-  PlaceholderRegistry registry(8);
-  DynamicTemplateDescriptor ssidAttrDescriptor;
-  DynamicTemplateDescriptor ssidTextDescriptor;
-  DynamicTemplateDescriptor qualityLabelDescriptor;
-  DynamicTemplateDescriptor qualityIconDescriptor;
-  DynamicTemplateDescriptor lockClassDescriptor;
-  DynamicTemplateDescriptor iconVisibilityDescriptor;
-  DynamicTemplateDescriptor valueVisibilityDescriptor;
-  DynamicTemplateDescriptor qualityValueDescriptor;
-
-  String ssidAttrValue = ssidAttr;
-  String ssidTextValue = ssidText;
-  String qualityLabelValue = qualityLabel;
-  String qualityIconValue = qualityIcon;
-  String lockClassValue = lockClass;
-  String iconVisibilityValue = iconVisibilityClass;
-  String valueVisibilityValue = valueVisibilityClass;
-  String qualityValueValue = qualityValue;
-
-  registerDynamicStringPlaceholder(registry, "%SSID_ATTR%", ssidAttrValue, ssidAttrDescriptor);
-  registerDynamicStringPlaceholder(registry, "%SSID_TEXT%", ssidTextValue, ssidTextDescriptor);
-  registerDynamicStringPlaceholder(registry, "%QUALITY_LABEL%", qualityLabelValue, qualityLabelDescriptor);
-  registerDynamicStringPlaceholder(registry, "%QUALITY_ICON%", qualityIconValue, qualityIconDescriptor);
-  registerDynamicStringPlaceholder(registry, "%LOCK_CLASS%", lockClassValue, lockClassDescriptor);
-  registerDynamicStringPlaceholder(registry, "%ICON_VISIBILITY_CLASS%", iconVisibilityValue, iconVisibilityDescriptor);
-  registerDynamicStringPlaceholder(registry, "%VALUE_VISIBILITY_CLASS%", valueVisibilityValue, valueVisibilityDescriptor);
-  registerDynamicStringPlaceholder(registry, "%QUALITY_VALUE%", qualityValueValue, qualityValueDescriptor);
-
-  return renderTemplateToString(WM_SCAN_RESULT_ROW_TEMPLATE, registry);
+  String output;
+  reservePage(output, ssidAttr.length() + ssidText.length() + qualityLabel.length() +
+                        qualityIcon.length() + lockClass.length() +
+                        iconVisibilityClass.length() + valueVisibilityClass.length() +
+                        qualityValue.length() + 160);
+  output += F("<div><a href='#p' onclick='c(this)' data-ssid='");
+  output += ssidAttr;
+  output += F("'>");
+  output += ssidText;
+  output += F("</a><div role='img' aria-label='");
+  output += qualityLabel;
+  output += F("' title='");
+  output += qualityLabel;
+  output += F("' class='q q-");
+  output += qualityIcon;
+  output += F(" ");
+  output += lockClass;
+  output += F(" ");
+  output += iconVisibilityClass;
+  output += F("'></div><div class='q ");
+  output += valueVisibilityClass;
+  output += F("'>");
+  output += qualityValue;
+  output += F("</div></div>");
+  return output;
 }
 
 String renderFieldTemplate(const char* templateData,
@@ -310,105 +333,104 @@ String renderFieldTemplate(const char* templateData,
                            const String& maxLength,
                            const String& value,
                            const String& extraAttrs = String()) {
-  PlaceholderRegistry registry(6);
-  DynamicTemplateDescriptor idDescriptor;
-  DynamicTemplateDescriptor nameDescriptor;
-  DynamicTemplateDescriptor labelDescriptor;
-  DynamicTemplateDescriptor maxLengthDescriptor;
-  DynamicTemplateDescriptor valueDescriptor;
-  DynamicTemplateDescriptor extraAttrsDescriptor;
+  String input;
+  reservePage(input, id.length() + label.length() + maxLength.length() + value.length() +
+                       extraAttrs.length() + 96);
+  input += F("<input id='");
+  input += id;
+  input += F("' name='");
+  input += id;
+  input += F("' maxlength='");
+  input += maxLength;
+  input += F("' value='");
+  input += value;
+  input += F("'");
+  input += extraAttrs;
+  input += F(">");
 
-  String idValue = id;
-  String nameValue = id;
-  String labelValue = label;
-  String maxLengthValue = maxLength;
-  String valueValue = value;
-  String extraAttrsValue = extraAttrs;
+  if (templateData == WM_FIELD_LABEL_BEFORE_TEMPLATE) {
+    String output;
+    reservePage(output, label.length() + input.length() + 32);
+    output += F("<label for='");
+    output += id;
+    output += F("'>");
+    output += label;
+    output += F("</label><br/>");
+    output += input;
+    return output;
+  }
 
-  registerDynamicStringPlaceholder(registry, "%FIELD_ID%", idValue, idDescriptor);
-  registerDynamicStringPlaceholder(registry, "%FIELD_NAME%", nameValue, nameDescriptor);
-  registerDynamicStringPlaceholder(registry, "%FIELD_LABEL%", labelValue, labelDescriptor);
-  registerDynamicStringPlaceholder(registry, "%FIELD_MAXLENGTH%", maxLengthValue, maxLengthDescriptor);
-  registerDynamicStringPlaceholder(registry, "%FIELD_VALUE%", valueValue, valueDescriptor);
-  registerDynamicStringPlaceholder(registry, "%FIELD_EXTRA_ATTRS%", extraAttrsValue, extraAttrsDescriptor);
+  if (templateData == WM_FIELD_LABEL_AFTER_TEMPLATE) {
+    String output;
+    reservePage(output, label.length() + input.length() + 32);
+    output += F("<br/>");
+    output += input;
+    output += F("<label for='");
+    output += id;
+    output += F("'>");
+    output += label;
+    output += F("</label>");
+    return output;
+  }
 
-  return renderTemplateToString(templateData, registry);
+  String output;
+  reservePage(output, input.length() + 8);
+  output += F("<br/>");
+  output += input;
+  return output;
 }
 
 String renderInfoRow(const String& label, const String& value) {
-  PlaceholderRegistry registry(2);
-  DynamicTemplateDescriptor labelDescriptor;
-  DynamicTemplateDescriptor valueDescriptor;
-  String labelValue = label;
-  String valueValue = value;
-  registerDynamicStringPlaceholder(registry, "%INFO_LABEL%", labelValue, labelDescriptor);
-  registerDynamicStringPlaceholder(registry, "%INFO_VALUE%", valueValue, valueDescriptor);
-  return renderTemplateToString(WM_INFO_ROW_TEMPLATE, registry);
+  String output;
+  reservePage(output, label.length() + value.length() + 24);
+  output += F("<dt>");
+  output += label;
+  output += F("</dt><dd>");
+  output += value;
+  output += F("</dd>");
+  return output;
 }
 
 String renderInfoSection(const String& title,
                          const String& rows,
                          const String& prefix = String(),
                          const String& suffix = String()) {
-  PlaceholderRegistry registry(4);
-  DynamicTemplateDescriptor titleDescriptor;
-  DynamicTemplateDescriptor rowsDescriptor;
-  DynamicTemplateDescriptor prefixDescriptor;
-  DynamicTemplateDescriptor suffixDescriptor;
-
-  String titleValue = title;
-  String rowsValue = rows;
-  String prefixValue = prefix;
-  String suffixValue = suffix;
-
-  registerDynamicStringPlaceholder(registry, "%SECTION_TITLE%", titleValue, titleDescriptor);
-  registerDynamicStringPlaceholder(registry, "%SECTION_ROWS%", rowsValue, rowsDescriptor);
-  registerDynamicStringPlaceholder(registry, "%SECTION_PREFIX%", prefixValue, prefixDescriptor);
-  registerDynamicStringPlaceholder(registry, "%SECTION_SUFFIX%", suffixValue, suffixDescriptor);
-
-  return renderTemplateToString(WM_INFO_SECTION_TEMPLATE, registry);
+  String output;
+  reservePage(output, prefix.length() + suffix.length() + title.length() + rows.length() + 40);
+  output += prefix;
+  output += F("<h3>");
+  output += title;
+  output += F("</h3><hr><dl>");
+  output += rows;
+  output += F("</dl>");
+  output += suffix;
+  return output;
 }
 
 String renderStatusMessage(const String& title,
                            const String& body,
                            const String& statusClassSuffix = String()) {
-  PlaceholderRegistry registry(3);
-  DynamicTemplateDescriptor titleDescriptor;
-  DynamicTemplateDescriptor bodyDescriptor;
-  DynamicTemplateDescriptor classDescriptor;
-
-  String titleValue = title;
-  String bodyValue = body;
-  String classValue = statusClassSuffix;
-
-  registerDynamicStringPlaceholder(registry, "%STATUS_TITLE%", titleValue, titleDescriptor);
-  registerDynamicStringPlaceholder(registry, "%STATUS_BODY%", bodyValue, bodyDescriptor);
-  registerDynamicStringPlaceholder(registry, "%STATUS_CLASS_SUFFIX%", classValue, classDescriptor);
-
-  return renderTemplateToString(WM_STATUS_MESSAGE_TEMPLATE, registry);
-}
-
-void buildRootState(WiFiManagerHandlers* handlers, RootState& state) {
-  reservePage(state.menu, 768);
-  reservePage(state.status, 512);
-
-  handlers->getMenuOut(&state.menu);
-  handlers->reportStatus(state.status);
-
-  // Dynamic templates are parsed as template content, so escape literal '%' values.
-  escapePercentsForTemplate(state.menu);
-  escapePercentsForTemplate(state.status);
+  String output;
+  reservePage(output, title.length() + body.length() + statusClassSuffix.length() + 48);
+  output += F("<div class='msg");
+  output += statusClassSuffix;
+  output += F("'><strong>");
+  output += title;
+  output += F("</strong>");
+  output += body;
+  output += F("</div>");
+  return output;
 }
 
 String renderPageHeading(const String& title, const String& subtitle) {
-  PlaceholderRegistry registry(2);
-  DynamicTemplateDescriptor titleDescriptor;
-  DynamicTemplateDescriptor subtitleDescriptor;
-  String titleValue = title;
-  String subtitleValue = subtitle;
-  registerDynamicStringPlaceholder(registry, "%HEADER_TITLE%", titleValue, titleDescriptor);
-  registerDynamicStringPlaceholder(registry, "%HEADER_SUBTITLE%", subtitleValue, subtitleDescriptor);
-  return renderTemplateToString(WM_PAGE_HEADING_TEMPLATE, registry);
+  String output;
+  reservePage(output, title.length() + subtitle.length() + 20);
+  output += F("<h1>");
+  output += title;
+  output += F("</h1><h3>");
+  output += subtitle;
+  output += F("</h3>");
+  return output;
 }
 
 void buildMessagePageState(MessagePageState& state,
@@ -601,15 +623,16 @@ void buildParamPageState(WiFiManagerHandlers* handlers,
   escapePercentsForTemplate(state.status);
 }
 
-struct RootRenderBundle {
-  RootState state;
+struct ShellRenderBundle {
+  String bootstrapJson;
+  String pageTitleStatic;
   PlaceholderRegistry registry;
   TemplateContext context;
-  DynamicTemplateDescriptor menuDescriptor;
-  DynamicTemplateDescriptor statusDescriptor;
+  DynamicTemplateDescriptor bootstrapDescriptor;
+  DynamicTemplateDescriptor pageTitleDescriptor;
 
-  RootRenderBundle()
-      : registry(WM_TEMPLATE_REGISTRY_CAPACITY), menuDescriptor{}, statusDescriptor{} {}
+  ShellRenderBundle()
+      : registry(WM_TEMPLATE_REGISTRY_CAPACITY), bootstrapDescriptor{}, pageTitleDescriptor{} {}
 };
 
 struct MessageRenderBundle {
@@ -806,8 +829,8 @@ String WiFiManagerHandlers::getScanItemOut(){
   }
 
   if (!_wm->_scan.resultsValid || n == 0) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(F("No networks found"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("No networks found"));
     #endif
     if (_wm->_scan.state == WiFiManager::WM_SCAN_TIMEOUT) {
       page += renderScanMessage(F("Scan timed out. Refresh to try again."));
@@ -819,8 +842,8 @@ String WiFiManagerHandlers::getScanItemOut(){
     return page;
   }
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(n,F("networks found"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, n,F("networks found"));
   #endif
 
   String hiddenClass = _wm->_scanDispOptions ? "" : "h";
@@ -829,8 +852,8 @@ String WiFiManagerHandlers::getScanItemOut(){
   for (int i = 0; i < n; i++) {
     const auto* network = networks[static_cast<size_t>(i)];
 
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE,F("AP: "),(String)network->rssi + " " + network->ssid);
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("AP: "),(String)network->rssi + " " + network->ssid);
     #endif
 
     int rssiperc = _wm->getRSSIasQuality(network->rssi);
@@ -851,8 +874,8 @@ String WiFiManagerHandlers::getScanItemOut(){
       qualityPercent
     );
 
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("Added network item"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Added network item"));
     #endif
     delay(0);
   }
@@ -871,8 +894,8 @@ String WiFiManagerHandlers::getStaticOut(){
   String fields;
   reservePage(fields, 384);
   if ((_wm->_staShowStaticFields || _wm->_sta_static_ip) && _wm->_staShowStaticFields>=0) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV,F("_staShowStaticFields"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("_staShowStaticFields"));
     #endif
     fields += getIpForm(FPSTR(S_ip),F("Static IP"),(_wm->_sta_static_ip ? _wm->_sta_static_ip.toString() : ""));
     fields += getIpForm(FPSTR(S_gw),F("Static gateway"),(_wm->_sta_static_gw ? _wm->_sta_static_gw.toString() : ""));
@@ -895,8 +918,8 @@ String WiFiManagerHandlers::getParamOut(){
   String page;
   reservePage(page, 256 + (_wm->_paramsCount > 0 ? static_cast<size_t>(_wm->_paramsCount) * 128 : 64));
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV,F("getParamOut"),_wm->_paramsCount);
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("getParamOut"),_wm->_paramsCount);
   #endif
 
   if(_wm->_paramsCount > 0){
@@ -905,8 +928,8 @@ String WiFiManagerHandlers::getParamOut(){
 
     for (int i = 0; i < _wm->_paramsCount; i++) {
       if (_wm->_params[i] == NULL || _wm->_params[i]->getValueLength() > 99999) {
-        #ifdef WM_DEBUG_LEVEL
-        _wm->DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] WiFiManagerParameter is out of scope"));
+        #ifndef WM_NO_LOG
+        _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] WiFiManagerParameter is out of scope"));
         #endif
         return "";
       }
@@ -1122,8 +1145,8 @@ String WiFiManagerHandlers::getInfoData(String id){
 }
 
 void WiFiManagerHandlers::reportStatus(String &page){
-  _wm->DEBUG_WM(WM_DEBUG_DEV,F("[WIFI] reportStatus prev:"),_wm->getWLStatusString(_wm->_lastconxresult));
-  _wm->DEBUG_WM(WM_DEBUG_DEV,F("[WIFI] reportStatus current:"),_wm->getWLStatusString(WiFi.status()));
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("[WIFI] reportStatus prev:"),_wm->getWLStatusString(_wm->_lastconxresult));
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("[WIFI] reportStatus current:"),_wm->getWLStatusString(WiFi.status()));
   String str;
   if (_wm->WiFi_SSID() != ""){
     if (WiFi.status()==WL_CONNECTED){
@@ -1168,9 +1191,9 @@ boolean WiFiManagerHandlers::captivePortal(AsyncWebServerRequest *request) {
   
   String serverLoc = _wm->toStringIp(request->client()->localIP());
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, "-> " + request->host());
-  _wm->DEBUG_WM(WM_DEBUG_DEV, "serverLoc " + serverLoc);
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, "-> " + request->host());
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, "serverLoc " + serverLoc);
   #endif
 
   // fallback for ipv6 bug
@@ -1185,10 +1208,10 @@ boolean WiFiManagerHandlers::captivePortal(AsyncWebServerRequest *request) {
   bool doredirect = serverLoc != request->host();
   
   if (doredirect) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Request redirected to captive portal"));
-    _wm->DEBUG_WM(WM_DEBUG_DEV, "serverLoc " + serverLoc);
-    _wm->DEBUG_WM(WM_DEBUG_DEV, "Original URL " + request->url());
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- Request redirected to captive portal"));
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, "serverLoc " + serverLoc);
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, "Original URL " + request->url());
     #endif
     String redirectUrl = (String)F("http://") + serverLoc + request->url();
     if (request->params() > 0) {
@@ -1198,8 +1221,8 @@ boolean WiFiManagerHandlers::captivePortal(AsyncWebServerRequest *request) {
         redirectUrl += request->getParam(i)->name() + F("=") + request->getParam(i)->value();
       }
     }
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, "Redirect URL " + redirectUrl);
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, "Redirect URL " + redirectUrl);
     #endif
     request->redirect(redirectUrl);
     return true;
@@ -1218,152 +1241,59 @@ void WiFiManagerHandlers::handleRequest(AsyncWebServerRequest *request) {
 }
 
 void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Root"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Root"));
   #endif
   if (captivePortal(request)) return;
   handleRequest(request);
 
-  AsyncWebServerResponse *response = nullptr;
-  auto bundle = std::make_shared<RootRenderBundle>();
-  buildRootState(this, bundle->state);
+  auto bundle = std::make_shared<ShellRenderBundle>();
+  bundle->bootstrapJson = buildPortalBootstrapJson();
 
   if (_wm->_serverManager) {
     _wm->_serverManager->registerDefaultStyles(bundle->registry);
     _wm->_serverManager->registerDefaultScripts(bundle->registry);
     _wm->_serverManager->registerDefaultPageTitle(bundle->registry);
-    _wm->_serverManager->registerDefaultSubtitle(bundle->registry);
     _wm->_serverManager->applyTemplateSetupCallback(bundle->registry);
+  } else {
+    registerSharedShellPlaceholders(nullptr, bundle->registry);
+    bundle->pageTitleStatic = _wm->_title;
+    configureDynamicStringDescriptor(bundle->pageTitleDescriptor, bundle->pageTitleStatic);
+    bundle->registry.registerDynamicTemplate("%PAGE_TITLE%", &bundle->pageTitleDescriptor);
   }
 
-  if (bundle->registry.getPlaceholder("%MENU%") == nullptr) {
-    configureDynamicStringDescriptor(bundle->menuDescriptor, bundle->state.menu);
-    bundle->registry.registerDynamicTemplate("%MENU%", &bundle->menuDescriptor);
-  }
+  configureDynamicStringDescriptor(bundle->bootstrapDescriptor, bundle->bootstrapJson);
+  bundle->registry.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bundle->bootstrapDescriptor);
+  bundle->registry.registerProgmemData("%PORTAL_APP_JS%", PORTAL_APP_JS);
 
-  if (bundle->registry.getPlaceholder("%STATUS%") == nullptr) {
-    configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
-    bundle->registry.registerDynamicTemplate("%STATUS%", &bundle->statusDescriptor);
-  }
-
-  response = beginTemplateResponse(request, bundle, WM_ROOT_TEMPLATE);
-
-  request->send(response);
+  request->send(beginTemplateResponse(request, bundle, WM_ROOT_SHELL_TEMPLATE));
 }
 
 void WiFiManagerHandlers::handleWifi(AsyncWebServerRequest *request, boolean scan) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Wifi"));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("handleWifi called, scan="), scan ? "true" : "false");
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Wifi"));
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("handleWifi called, scan="), scan ? "true" : "false");
   #endif
+  (void)scan;
   if (captivePortal(request)) {
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("Captive portal redirect"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Captive portal redirect"));
     #endif
     return;
   }
   handleRequest(request);
-  auto bundle = std::make_shared<WiFiRenderBundle>();
-
-  String ssidPlaceholder = _wm->WiFi_SSID();
-  String passwordPlaceholder = "";
-  if(_wm->_showPassword){
-    passwordPlaceholder = _wm->WiFi_psk();
-  }
-  else if(_wm->WiFi_psk() != ""){
-    passwordPlaceholder = F("********");
-  }
-
-  buildWiFiPageState(this,
-                     bundle->state,
-                     scan,
-                     _wm->_showBack,
-                     ssidPlaceholder,
-                     passwordPlaceholder,
-                     _wm->_paramsInWifi && _wm->_paramsCount > 0);
-
-  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
-  registerShellTemplate(bundle->registry,
-                        bundle->docTitleDescriptor,
-                        bundle->state.docTitle,
-                        C_wifi,
-                        WM_WIFI_CONTENT_TEMPLATE,
-                        WIFI_POLLING_JS);
-  configureDynamicStringDescriptor(bundle->scanContentDescriptor, bundle->state.scanContent);
-  configureDynamicStringDescriptor(bundle->ssidPlaceholderDescriptor, bundle->state.ssidPlaceholder);
-  configureDynamicStringDescriptor(bundle->passwordPlaceholderDescriptor, bundle->state.passwordPlaceholder);
-  configureDynamicStringDescriptor(bundle->staticFieldsDescriptor, bundle->state.staticFields);
-  configureDynamicStringDescriptor(bundle->paramSectionDescriptor, bundle->state.paramSection);
-  configureDynamicStringDescriptor(bundle->formActionsDescriptor, bundle->state.formActions);
-  configureDynamicStringDescriptor(bundle->pageActionsDescriptor, bundle->state.pageActions);
-  configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
-
-  bundle->registry.registerDynamicTemplate("%WIFI_SCAN_CONTENT%", &bundle->scanContentDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_SSID_PLACEHOLDER%", &bundle->ssidPlaceholderDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_PASSWORD_PLACEHOLDER%", &bundle->passwordPlaceholderDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_STATIC_FIELDS%", &bundle->staticFieldsDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_PARAM_SECTION%", &bundle->paramSectionDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_FORM_ACTIONS%", &bundle->formActionsDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_PAGE_ACTIONS%", &bundle->pageActionsDescriptor);
-  bundle->registry.registerDynamicTemplate("%WIFI_STATUS%", &bundle->statusDescriptor);
-
-  #ifdef WM_DEBUG_LEVEL
-  size_t debugPageLength = bundle->state.scanContent.length() + bundle->state.staticFields.length()
-                         + bundle->state.paramSection.length()
-                         + bundle->state.formActions.length() + bundle->state.pageActions.length()
-                         + bundle->state.status.length();
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Page length: "), String(debugPageLength));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("_numNetworks: "), String(_wm->_numNetworks));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("_scanState: "), String(_wm->_scan.state));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("_lastscan: "), String(_wm->_lastscan));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("About to send response"));
-  #endif
-
-  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
-
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Response sent"));
-  #endif
+  request->redirect(String(F("/#/wifi")));
 }
 
 void WiFiManagerHandlers::handleParam(AsyncWebServerRequest *request){
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Param"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Param"));
   #endif
   handleRequest(request);
-  auto bundle = std::make_shared<ParamRenderBundle>();
-  buildParamPageState(this, bundle->state, _wm->_showBack);
-
-  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
-  registerShellTemplate(bundle->registry,
-                        bundle->docTitleDescriptor,
-                        bundle->state.docTitle,
-                        C_param,
-                        WM_PARAM_CONTENT_TEMPLATE);
-  configureDynamicStringDescriptor(bundle->fieldsDescriptor, bundle->state.fields);
-  configureDynamicStringDescriptor(bundle->formActionsDescriptor, bundle->state.formActions);
-  configureDynamicStringDescriptor(bundle->pageActionsDescriptor, bundle->state.pageActions);
-  configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
-
-  bundle->registry.registerDynamicTemplate("%PARAM_FIELDS%", &bundle->fieldsDescriptor);
-  bundle->registry.registerDynamicTemplate("%PARAM_FORM_ACTIONS%", &bundle->formActionsDescriptor);
-  bundle->registry.registerDynamicTemplate("%PARAM_PAGE_ACTIONS%", &bundle->pageActionsDescriptor);
-  bundle->registry.registerDynamicTemplate("%PARAM_STATUS%", &bundle->statusDescriptor);
-
-  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
-
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Sent param page"));
-  #endif
+  request->redirect(String(F("/#/setup")));
 }
 
-void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP WiFi save "));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Method:"), request->method() == HTTP_GET ? F("GET") : F("POST"));
-  #endif
-  handleRequest(request);
-
+void WiFiManagerHandlers::applyWifiAndParamsFromRequest(AsyncWebServerRequest *request) {
   WiFiManager::WiFiManagerRequestArgs requestArgs(request);
 
   if (request->hasParam("s", true)) {
@@ -1373,14 +1303,14 @@ void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
     _wm->_pass = request->getParam("p", true)->value().c_str();
   }
 
-  if(_wm->_ssid == "" && _wm->_pass != ""){
+  if (_wm->_ssid == "" && _wm->_pass != "") {
     _wm->_ssid = _wm->WiFi_SSID(true);
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("Detected WiFi password change"));
-    #endif    
+#ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("Detected WiFi password change"));
+#endif
   }
 
-  #ifdef WM_DEBUG_LEVEL
+#ifndef WM_NO_LOG
   String requestinfo = "SERVER_REQUEST\n----------------\n";
   requestinfo += "URI: ";
   requestinfo += request->url();
@@ -1389,48 +1319,60 @@ void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
   requestinfo += "\nArguments: ";
   requestinfo += request->params();
   requestinfo += "\n";
-    for (size_t i = 0; i < request->params(); i++) {
-      const AsyncWebParameter* p = request->getParam(i);
-      requestinfo += " " + p->name() + ": " + p->value() + "\n";
-    }
+  for (size_t i = 0; i < request->params(); i++) {
+    const AsyncWebParameter* p = request->getParam(i);
+    requestinfo += " " + p->name() + ": " + p->value() + "\n";
+  }
 
-  _wm->DEBUG_WM(WM_DEBUG_MAX, requestinfo);
-  #endif
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, requestinfo);
+#endif
 
   if (request->hasParam(FPSTR(S_ip), true)) {
     String ip = request->getParam(FPSTR(S_ip), true)->value();
     _wm->optionalIPFromString(&_wm->_sta_static_ip, ip.c_str());
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("static ip:"), ip);
-    #endif
+#ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("static ip:"), ip);
+#endif
   }
   if (request->hasParam(FPSTR(S_gw), true)) {
     String gw = request->getParam(FPSTR(S_gw), true)->value();
     _wm->optionalIPFromString(&_wm->_sta_static_gw, gw.c_str());
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("static gateway:"), gw);
-    #endif
+#ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("static gateway:"), gw);
+#endif
   }
   if (request->hasParam(FPSTR(S_sn), true)) {
     String sn = request->getParam(FPSTR(S_sn), true)->value();
     _wm->optionalIPFromString(&_wm->_sta_static_sn, sn.c_str());
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("static netmask:"), sn);
-    #endif
+#ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("static netmask:"), sn);
+#endif
   }
   if (request->hasParam(FPSTR(S_dns), true)) {
     String dns = request->getParam(FPSTR(S_dns), true)->value();
     _wm->optionalIPFromString(&_wm->_sta_static_dns, dns.c_str());
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_DEV, F("static DNS:"), dns);
-    #endif
+#ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("static DNS:"), dns);
+#endif
   }
 
   if (_wm->_presavewificallback != NULL) {
     _wm->_presavewificallback();
   }
 
-  if(_wm->_paramsInWifi) doParamSave(requestArgs);
+  if (_wm->_paramsInWifi) {
+    doParamSave(requestArgs);
+  }
+}
+
+void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP WiFi save "));
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Method:"), request->method() == HTTP_GET ? F("GET") : F("POST"));
+  #endif
+  handleRequest(request);
+
+  applyWifiAndParamsFromRequest(request);
 
   auto bundle = std::make_shared<MessageRenderBundle>();
   String messageBody;
@@ -1457,17 +1399,17 @@ void WiFiManagerHandlers::handleWifiSave(AsyncWebServerRequest *request) {
   response->addHeader(FPSTR(HTTP_HEAD_CORS), FPSTR(HTTP_HEAD_CORS_ALLOW_ALL));
   request->send(response);
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Sent wifi save page"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Sent wifi save page"));
   #endif
 
   _wm->connect = true;
 }
 
 void WiFiManagerHandlers::handleParamSave(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Param save "));
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Method:"), request->method() == HTTP_GET ? F("GET") : F("POST"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Param save "));
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Method:"), request->method() == HTTP_GET ? F("GET") : F("POST"));
   #endif
   handleRequest(request);
 
@@ -1491,8 +1433,8 @@ void WiFiManagerHandlers::handleParamSave(AsyncWebServerRequest *request) {
 
   request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Sent param save page"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Sent param save page"));
   #endif
 }
 
@@ -1502,15 +1444,15 @@ void WiFiManagerHandlers::doParamSave(WiFiManager::WiFiManagerRequestArgs reques
   }
 
   if(_wm->_paramsCount > 0){
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE,F("Parameters"));
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE,F("--------------------"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("Parameters"));
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("--------------------"));
     #endif
 
     for (int i = 0; i < _wm->_paramsCount; i++) {
       if (_wm->_params[i] == NULL || _wm->_params[i]->getValueLength() > 99999) {
-        #ifdef WM_DEBUG_LEVEL
-        _wm->DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] WiFiManagerParameter is out of scope"));
+        #ifndef WM_NO_LOG
+        _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] WiFiManagerParameter is out of scope"));
         #endif
         break;
       }
@@ -1535,12 +1477,12 @@ void WiFiManagerHandlers::doParamSave(WiFiManager::WiFiManagerRequestArgs reques
       }
 
       _wm->_params[i]->setValue(value.c_str(), value.length());
-      #ifdef WM_DEBUG_LEVEL
-      _wm->DEBUG_WM(WM_DEBUG_VERBOSE,(String)_wm->_params[i]->getID() + ":",value);
+      #ifndef WM_NO_LOG
+      _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,(String)_wm->_params[i]->getID() + ":",value);
       #endif
     }
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE,F("--------------------"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("--------------------"));
     #endif
   }
 
@@ -1551,41 +1493,16 @@ void WiFiManagerHandlers::doParamSave(WiFiManager::WiFiManagerRequestArgs reques
 }
 
 void WiFiManagerHandlers::handleInfo(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Info"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Info"));
   #endif
   handleRequest(request);
-  auto bundle = std::make_shared<InfoRenderBundle>();
-  buildInfoPageState(this, bundle->state, _wm->_showInfoUpdate, _wm->_showInfoErase, _wm->_showBack);
-
-  registerSharedShellPlaceholders(_wm->_serverManager.get(), bundle->registry);
-  registerShellTemplate(bundle->registry,
-                        bundle->docTitleDescriptor,
-                        bundle->state.docTitle,
-                        C_info,
-                        WM_INFO_CONTENT_TEMPLATE);
-  configureDynamicStringDescriptor(bundle->statusDescriptor, bundle->state.status);
-  configureDynamicStringDescriptor(bundle->deviceDescriptor, bundle->state.deviceSection);
-  configureDynamicStringDescriptor(bundle->wifiDescriptor, bundle->state.wifiSection);
-  configureDynamicStringDescriptor(bundle->aboutDescriptor, bundle->state.aboutSection);
-  configureDynamicStringDescriptor(bundle->footerDescriptor, bundle->state.footer);
-
-  bundle->registry.registerDynamicTemplate("%INFO_STATUS%", &bundle->statusDescriptor);
-  bundle->registry.registerDynamicTemplate("%INFO_DEVICE_SECTION%", &bundle->deviceDescriptor);
-  bundle->registry.registerDynamicTemplate("%INFO_WIFI_SECTION%", &bundle->wifiDescriptor);
-  bundle->registry.registerDynamicTemplate("%INFO_ABOUT_SECTION%", &bundle->aboutDescriptor);
-  bundle->registry.registerDynamicTemplate("%INFO_FOOTER%", &bundle->footerDescriptor);
-
-  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
-
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_DEV, F("Sent info page"));
-  #endif
+  request->redirect(String(F("/#/info")));
 }
 
 void WiFiManagerHandlers::handleExit(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Exit"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Exit"));
   #endif
   handleRequest(request);
   auto bundle = std::make_shared<MessageRenderBundle>();
@@ -1604,8 +1521,8 @@ void WiFiManagerHandlers::handleExit(AsyncWebServerRequest *request) {
 }
 
 void WiFiManagerHandlers::handleReset(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP Reset"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP Reset"));
   #endif
   handleRequest(request);
   auto bundle = std::make_shared<MessageRenderBundle>();
@@ -1617,16 +1534,16 @@ void WiFiManagerHandlers::handleReset(AsyncWebServerRequest *request) {
 
   request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
 
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(F("RESETTING ESP"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("RESETTING ESP"));
   #endif
   _wm->_rebootScheduled = true;
   _wm->_rebootTime = millis() + _wm->REBOOT_DELAY_MS;
 }
 
 void WiFiManagerHandlers::handleErase(AsyncWebServerRequest *request, boolean opt) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_NOTIFY, F("<- HTTP Erase"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("<- HTTP Erase"));
   #endif
   handleRequest(request);
   bool ret = _wm->erase(opt);
@@ -1637,8 +1554,8 @@ void WiFiManagerHandlers::handleErase(AsyncWebServerRequest *request, boolean op
   if(ret) messageBody += F("Module will reset in a few seconds.");
   else {
     messageBody += F("An error occured");
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] WiFi EraseConfig failed"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] WiFi EraseConfig failed"));
     #endif
   }
 
@@ -1653,17 +1570,17 @@ void WiFiManagerHandlers::handleErase(AsyncWebServerRequest *request, boolean op
   if(ret){
     _wm->_rebootScheduled = true;
     _wm->_rebootTime = millis() + _wm->ERASE_REBOOT_DELAY_MS;
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(F("RESETTING ESP"));
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("RESETTING ESP"));
     #endif
   }	
 }
 
 void WiFiManagerHandlers::handleClose(AsyncWebServerRequest *request){
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("Disabling Captive Portal"));
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("Disabling Captive Portal"));
   stopCaptivePortal();
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP close"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP close"));
   #endif
   handleRequest(request);
   auto bundle = std::make_shared<MessageRenderBundle>();
@@ -1688,8 +1605,8 @@ void WiFiManagerHandlers::handleNotFound(AsyncWebServerRequest *request) {
 }
 
 void WiFiManagerHandlers::handleWiFiScanStatus(AsyncWebServerRequest *request){
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP WiFi scan status"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP WiFi scan status"));
   #endif
   handleRequest(request);
 
@@ -1752,8 +1669,8 @@ void WiFiManagerHandlers::appendVisibleScanResultsJson(String& json, const std::
 }
 
 void WiFiManagerHandlers::handleWiFiScanRequest(AsyncWebServerRequest *request){
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- HTTP WiFi scan request"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- HTTP WiFi scan request"));
   #endif
   handleRequest(request);
   _wm->requestAsyncScan(true);
@@ -1765,22 +1682,12 @@ void WiFiManagerHandlers::handleWiFiScanRequest(AsyncWebServerRequest *request){
 }
 
 void WiFiManagerHandlers::handleUpdate(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Handle update"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- Handle update"));
   #endif
   if (captivePortal(request)) return;
   handleRequest(request);
-  auto bundle = std::make_shared<MessageRenderBundle>();
-  const String subtitle = _wm->configPortalActive
-    ? _wm->_apName
-    : (_wm->getWiFiHostname() + " - " + WiFi.localIP().toString());
-  sendMessageTemplateResponse(_wm->_serverManager.get(),
-                              bundle,
-                              F("Update"),
-                              C_update,
-                              buildUpdatePanelContent(_wm->_title, subtitle));
-
-  request->send(beginTemplateResponse(request, bundle, WM_PAGE_SHELL_TEMPLATE));
+  request->redirect(String(F("/#/update")));
 }
 
 void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -1794,8 +1701,8 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
     }
     _wm->_configPortalTimeout = 0;
     
-    #ifdef WM_DEBUG_LEVEL
-    _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("[OTA] Update file: "), filename.c_str());
+    #ifndef WM_NO_LOG
+    _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[OTA] Update file: "), filename.c_str());
     #endif
     
     if (_wm->_preotaupdatecallback != NULL) {
@@ -1810,8 +1717,8 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
     #endif
     
     if (!Update.begin(maxSketchSpace)) {
-      #ifdef WM_DEBUG_LEVEL
-      _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] OTA Update ERROR"), Update.getError());
+      #ifndef WM_NO_LOG
+      _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] OTA Update ERROR"), Update.getError());
       #endif
       request->send(500, "text/plain", "Update.begin failed");
       _wm->_configPortalTimeout = _configPortalTimeoutSAV;
@@ -1822,8 +1729,8 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
   
   if (len) {
     if (Update.write(data, len) != len) {
-      #ifdef WM_DEBUG_LEVEL
-      _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] OTA Update WRITE ERROR"), Update.getError());
+      #ifndef WM_NO_LOG
+      _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] OTA Update WRITE ERROR"), Update.getError());
       #endif
       request->send(500, "text/plain", "Update.write failed");
       _wm->_configPortalTimeout = _configPortalTimeoutSAV;
@@ -1834,12 +1741,12 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
   
   if (final) {
     if (Update.end(true)) {
-      #ifdef WM_DEBUG_LEVEL
-      _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("\n\n[OTA] OTA FILE END bytes: "), (String)index);
+      #ifndef WM_NO_LOG
+      _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("\n\n[OTA] OTA FILE END bytes: "), (String)index);
       #endif
     } else {
-      #ifdef WM_DEBUG_LEVEL
-      _wm->DEBUG_WM(WM_DEBUG_ERROR, F("[ERROR] OTA Update END ERROR"), Update.getError());
+      #ifndef WM_NO_LOG
+      _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] OTA Update END ERROR"), Update.getError());
       #endif
       request->send(500, "text/plain", "Update.end failed");
     }
@@ -1850,8 +1757,8 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
 }
 
 void WiFiManagerHandlers::handleUpdateDone(AsyncWebServerRequest *request) {
-  #ifdef WM_DEBUG_LEVEL
-  _wm->DEBUG_WM(WM_DEBUG_VERBOSE, F("<- Handle update done"));
+  #ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- Handle update done"));
   #endif
   handleRequest(request);
 
@@ -1869,6 +1776,276 @@ void WiFiManagerHandlers::handleUpdateDone(AsyncWebServerRequest *request) {
     delay(1000);
     ESP.restart();
   }
+}
+
+void WiFiManagerHandlers::sendApiJson(AsyncWebServerRequest *request, int code, const String& json) {
+  AsyncWebServerResponse *response = request->beginResponse(code, F("application/json"), json);
+  response->addHeader(FPSTR(HTTP_HEAD_CORS), FPSTR(HTTP_HEAD_CORS_ALLOW_ALL));
+  response->addHeader(F("Cache-Control"), F("no-cache"));
+  request->send(response);
+}
+
+String WiFiManagerHandlers::buildPortalBootstrapJson() {
+  std::vector<const WiFiManager::WiFiScanNetwork *> networks;
+  collectVisibleScanResults(networks);
+  const char *stateStr = "idle";
+  switch (_wm->_scan.state) {
+    case WiFiManager::WM_SCAN_IDLE:
+      stateStr = "idle";
+      break;
+    case WiFiManager::WM_SCAN_QUEUED:
+      stateStr = "queued";
+      break;
+    case WiFiManager::WM_SCAN_RUNNING:
+      stateStr = "running";
+      break;
+    case WiFiManager::WM_SCAN_COMPLETE:
+      stateStr = "complete";
+      break;
+    case WiFiManager::WM_SCAN_FAILED:
+      stateStr = "failed";
+      break;
+    case WiFiManager::WM_SCAN_TIMEOUT:
+      stateStr = "timeout";
+      break;
+    default:
+      stateStr = "idle";
+      break;
+  }
+  String json;
+  reservePage(json, 512);
+  json += F("{");
+  json += F("\"title\":\"");
+  jsonAppendEscaped(json, _wm->_title);
+  json += F("\",\"subtitle\":\"");
+  {
+    String sub;
+    if (_wm->configPortalActive) {
+      sub = _wm->_apName;
+    } else {
+      sub = _wm->getWiFiHostname() + " - " + WiFi.localIP().toString();
+    }
+    jsonAppendEscaped(json, sub);
+  }
+  json += F("\",\"portalActive\":");
+  json += _wm->configPortalActive ? F("true") : F("false");
+  json += F(",\"features\":{");
+  json += F("\"showInfo\":true,\"showUpdate\":");
+  json += _wm->_showInfoUpdate ? F("true") : F("false");
+  json += F(",\"showErase\":");
+  json += _wm->_showInfoErase ? F("true") : F("false");
+  json += F(",\"paramsInWifi\":");
+  json += _wm->_paramsInWifi ? F("true") : F("false");
+  json += F("},\"showBack\":");
+  json += _wm->_showBack ? F("true") : F("false");
+  json += F(",\"scan\":{\"state\":\"");
+  json += stateStr;
+  json += F("\",\"count\":");
+  json += String((unsigned int)networks.size());
+  json += F("}}");
+  return json;
+}
+
+void WiFiManagerHandlers::buildPlainStatusSummary(String &out) {
+  out = "";
+  if (_wm->WiFi_SSID() != "") {
+    if (WiFi.status() == WL_CONNECTED) {
+      out += F("Connected to ");
+      out += _wm->WiFi_SSID();
+      out += F(" — IP ");
+      out += WiFi.localIP().toString();
+    } else {
+      out += F("Not connected to ");
+      out += _wm->WiFi_SSID();
+      if (_wm->_lastconxresult == _wm->WL_STATION_WRONG_PASSWORD) {
+        out += F(" (wrong password)");
+      } else if (_wm->_lastconxresult == WL_NO_SSID_AVAIL) {
+        out += F(" (network not found)");
+      } else if (_wm->_lastconxresult == WL_CONNECT_FAILED || _wm->_lastconxresult == WL_CONNECTION_LOST) {
+        out += F(" (connection failed)");
+      }
+    }
+  } else {
+    out += F("No station network configured");
+  }
+}
+
+void WiFiManagerHandlers::handleApiBootstrap(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  sendApiJson(request, 200, buildPortalBootstrapJson());
+}
+
+void WiFiManagerHandlers::handleApiWifiScanStatus(AsyncWebServerRequest *request) {
+  handleWiFiScanStatus(request);
+}
+
+void WiFiManagerHandlers::handleApiWifiScan(AsyncWebServerRequest *request) {
+  handleWiFiScanRequest(request);
+}
+
+void WiFiManagerHandlers::handleApiWifiMeta(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  String ssidPlaceholder = _wm->WiFi_SSID();
+  String passwordPlaceholder = "";
+  if (_wm->_showPassword) {
+    passwordPlaceholder = _wm->WiFi_psk();
+  } else if (_wm->WiFi_psk() != "") {
+    passwordPlaceholder = F("********");
+  }
+  String staticHtml = getStaticOut();
+  String paramsHtml;
+  if (_wm->_paramsInWifi && _wm->_paramsCount > 0) {
+    paramsHtml = renderSectionBreak(getParamOut());
+  }
+  String json = F("{\"ssidPlaceholder\":\"");
+  jsonAppendEscaped(json, ssidPlaceholder);
+  json += F("\",\"passwordPlaceholder\":\"");
+  jsonAppendEscaped(json, passwordPlaceholder);
+  json += F("\",\"staticFieldsHtml\":\"");
+  jsonAppendEscaped(json, staticHtml);
+  json += F("\",\"paramsHtml\":\"");
+  jsonAppendEscaped(json, paramsHtml);
+  json += F("\"}");
+  sendApiJson(request, 200, json);
+}
+
+void WiFiManagerHandlers::handleApiWifiSave(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- API WiFi save"));
+#endif
+  handleRequest(request);
+  applyWifiAndParamsFromRequest(request);
+  String json = F("{\"ok\":true,\"message\":\"");
+  if (_wm->_ssid == "") {
+    json += F("Settings saved");
+  } else {
+    json += F("Credentials saved");
+  }
+  json += F("\",\"next\":{\"connectScheduled\":true}}");
+  sendApiJson(request, 200, json);
+  _wm->connect = true;
+}
+
+void WiFiManagerHandlers::handleApiParamsGet(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  String fields = getParamOut();
+  String json = F("{\"paramsHtml\":\"");
+  jsonAppendEscaped(json, fields);
+  json += F("\"}");
+  sendApiJson(request, 200, json);
+}
+
+void WiFiManagerHandlers::handleApiParamsSave(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("<- API params save"));
+#endif
+  handleRequest(request);
+  WiFiManager::WiFiManagerRequestArgs requestArgs(request);
+  doParamSave(requestArgs);
+  sendApiJson(request, 200, F("{\"ok\":true,\"message\":\"Setup saved\"}"));
+}
+
+void WiFiManagerHandlers::handleApiInfo(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  String summary;
+  buildPlainStatusSummary(summary);
+  String json = F("{\"status\":[{\"key\":\"summary\",\"label\":\"Status\",\"value\":\"");
+  jsonAppendEscaped(json, summary);
+  json += F("\"}],\"device\":[");
+  bool first = true;
+#ifdef ESP8266
+  static const char *const deviceIds[] = {"uptime",    "chipid",   "fchipid", "idesize", "flashsize",
+                                          "corever",   "bootver",  "cpufreq", "freeheap", "memsketch",
+                                          "memsmeter", "lastreset"};
+#elif defined(ESP32)
+  static const char *const deviceIds[] = {"uptime",   "chipid",   "chiprev", "idesize",  "flashsize",
+                                          "cpufreq", "freeheap", "memsketch", "memsmeter", "lastreset", "temp"};
+#endif
+  appendJsonInfoArrayFromIds(this, json, deviceIds, sizeof(deviceIds) / sizeof(deviceIds[0]), first);
+  json += F("],\"wifi\":[");
+  first = true;
+#ifdef ESP8266
+  static const char *const wifiIds[] = {"conx",   "stassid", "staip", "stagw", "stasub", "dnss", "host",
+                                        "stamac", "autoconx", "apssid", "apip", "apbssid", "apmac"};
+#elif defined(ESP32)
+  static const char *const wifiIds[] = {"conx",   "stassid", "staip", "stagw", "stasub", "dnss", "host",
+                                        "stamac", "apssid", "apip", "apmac", "aphost", "apbssid"};
+#endif
+  appendJsonInfoArrayFromIds(this, json, wifiIds, sizeof(wifiIds) / sizeof(wifiIds[0]), first);
+  json += F("],\"about\":[");
+  first = true;
+  static const char *const aboutIds[] = {"aboutver", "aboutarduinover", "aboutsdkver", "aboutdate"};
+  appendJsonInfoArrayFromIds(this, json, aboutIds, sizeof(aboutIds) / sizeof(aboutIds[0]), first);
+  json += F("],\"actions\":{");
+  json += F("\"showUpdate\":");
+  json += _wm->_showInfoUpdate ? F("true") : F("false");
+  json += F(",\"showErase\":");
+  json += _wm->_showInfoErase ? F("true") : F("false");
+  json += F(",\"showBack\":");
+  json += _wm->_showBack ? F("true") : F("false");
+  json += F("}}");
+  sendApiJson(request, 200, json);
+}
+
+void WiFiManagerHandlers::handleApiStatus(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  String summary;
+  buildPlainStatusSummary(summary);
+  String json = F("{\"text\":\"");
+  jsonAppendEscaped(json, summary);
+  json += F("\"}");
+  sendApiJson(request, 200, json);
+}
+
+void WiFiManagerHandlers::handleApiDeviceRestart(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("API device restart"));
+#endif
+  handleRequest(request);
+  sendApiJson(request, 200, F("{\"ok\":true,\"message\":\"Restart scheduled\"}"));
+  _wm->_rebootScheduled = true;
+  _wm->_rebootTime = millis() + _wm->REBOOT_DELAY_MS;
+}
+
+void WiFiManagerHandlers::handleApiDeviceErase(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("API device erase"));
+#endif
+  handleRequest(request);
+  bool ret = _wm->erase(false);
+  String json = F("{\"ok\":");
+  json += ret ? F("true") : F("false");
+  json += F(",\"message\":\"");
+  if (ret) {
+    json += F("WiFi configuration erased. Device will restart shortly.");
+  } else {
+    json += F("Erase failed");
+  }
+  json += F("\"}");
+  sendApiJson(request, ret ? 200 : 500, json);
+  if (ret) {
+    _wm->_rebootScheduled = true;
+    _wm->_rebootTime = millis() + _wm->ERASE_REBOOT_DELAY_MS;
+  }
+}
+
+void WiFiManagerHandlers::handleApiPortalClose(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("API portal close"));
+#endif
+  stopCaptivePortal();
+  handleRequest(request);
+  sendApiJson(request, 200, F("{\"ok\":true,\"message\":\"Captive portal detection disabled\"}"));
+}
+
+void WiFiManagerHandlers::handleApiPortalExit(AsyncWebServerRequest *request) {
+#ifndef WM_NO_LOG
+  _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("API portal exit"));
+#endif
+  handleRequest(request);
+  sendApiJson(request, 200, F("{\"ok\":true,\"message\":\"Exiting portal\"}"));
+  _wm->_abortScheduled = true;
+  _wm->_abortTime = millis() + _wm->EXIT_DELAY_MS;
 }
 
 #endif // defined(ESP8266) || defined(ESP32)
