@@ -40,8 +40,8 @@ void test_stop_web_portal();
 void test_config_portal_multiple_start_stop();
 void test_config_portal_already_active();
 void test_get_config_portal_ssid();
-void test_root_render_menu_state_transitions();
-void test_root_render_snapshot_consistency();
+void test_bootstrap_json_portal_feature_flags();
+void test_bootstrap_json_snapshot_consistency();
 void test_root_render_interleaved_context_isolation();
 
 // Non-blocking tests
@@ -123,15 +123,16 @@ void test_scan_cancels_when_lifecycle_blocked();
 void test_scan_generation_invalidated_on_reset();
 
 // Template rendering tests
-void test_page_shell_supports_page_assets();
-void test_root_template_renders_core_placeholders();
-void test_wifi_template_renders_scan_container_and_form_fields();
-void test_message_template_renders_body_and_actions();
-void test_param_template_renders_shared_actions();
-void test_info_template_renders_sections_and_footer();
-void test_fragment_action_form_renders_shared_button_markup();
-void test_fragment_info_row_and_section_render();
-void test_fragment_centered_button_supports_extra_attrs();
+void test_shell_template_renders_core_placeholders();
+
+// API JSON + captive helper tests
+void test_captive_redirect_host_rule();
+void test_api_wifi_meta_json_shape();
+void test_api_info_json_shape();
+void test_api_params_json_shape();
+void test_api_status_json_shape();
+void test_api_action_response_json_literals();
+void test_api_ota_done_success_json_literal();
 
 // State transition tests
 void test_portal_to_connected_transition();

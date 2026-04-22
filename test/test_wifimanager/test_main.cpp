@@ -30,8 +30,8 @@ TestCase tests[] = {
     TEST_ENTRY(test_config_portal_multiple_start_stop),
     TEST_ENTRY(test_config_portal_already_active),
     TEST_ENTRY(test_get_config_portal_ssid),
-    TEST_ENTRY(test_root_render_menu_state_transitions),
-    TEST_ENTRY(test_root_render_snapshot_consistency),
+    TEST_ENTRY(test_bootstrap_json_portal_feature_flags),
+    TEST_ENTRY(test_bootstrap_json_snapshot_consistency),
     TEST_ENTRY(test_root_render_interleaved_context_isolation),
     
     // Non-blocking tests
@@ -113,15 +113,15 @@ TestCase tests[] = {
     TEST_ENTRY(test_scan_generation_invalidated_on_reset),
 
     // Template rendering tests
-    TEST_ENTRY(test_page_shell_supports_page_assets),
-    TEST_ENTRY(test_root_template_renders_core_placeholders),
-    TEST_ENTRY(test_wifi_template_renders_scan_container_and_form_fields),
-    TEST_ENTRY(test_message_template_renders_body_and_actions),
-    TEST_ENTRY(test_param_template_renders_shared_actions),
-    TEST_ENTRY(test_info_template_renders_sections_and_footer),
-    TEST_ENTRY(test_fragment_action_form_renders_shared_button_markup),
-    TEST_ENTRY(test_fragment_info_row_and_section_render),
-    TEST_ENTRY(test_fragment_centered_button_supports_extra_attrs),
+    TEST_ENTRY(test_shell_template_renders_core_placeholders),
+
+    TEST_ENTRY(test_captive_redirect_host_rule),
+    TEST_ENTRY(test_api_wifi_meta_json_shape),
+    TEST_ENTRY(test_api_info_json_shape),
+    TEST_ENTRY(test_api_params_json_shape),
+    TEST_ENTRY(test_api_status_json_shape),
+    TEST_ENTRY(test_api_action_response_json_literals),
+    TEST_ENTRY(test_api_ota_done_success_json_literal),
     
     // State transition tests
     TEST_ENTRY(test_portal_to_connected_transition),

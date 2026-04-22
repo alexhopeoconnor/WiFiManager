@@ -1,0 +1,117 @@
+#include <unity.h>
+#include <Arduino.h>
+#include <WiFiManager.h>
+#include <WiFiManagerHandlers.h>
+#include "../test_main.h"
+
+void test_captive_redirect_host_rule() {
+    Serial.println("[TEST]   Testing captive redirect host comparison...");
+
+    TEST_ASSERT_TRUE(WiFiManagerHandlers::shouldRedirectCaptiveForHost("captive.apple.com", "192.168.4.1"));
+    TEST_ASSERT_TRUE(WiFiManagerHandlers::shouldRedirectCaptiveForHost("192.168.4.2", "192.168.4.1"));
+    TEST_ASSERT_FALSE(WiFiManagerHandlers::shouldRedirectCaptiveForHost("192.168.4.1", "192.168.4.1"));
+    TEST_ASSERT_FALSE(WiFiManagerHandlers::shouldRedirectCaptiveForHost("example.com", ""));
+
+    Serial.println("[TEST]   Captive redirect host rule test completed successfully");
+}
+
+void test_api_wifi_meta_json_shape() {
+    Serial.println("[TEST]   Testing /api/wifi/meta JSON shape...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    String j = handlers.buildApiWifiMetaJson();
+
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"wifiFields\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"staticFields\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"params\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"actions\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"canRefreshScan\":true")));
+
+    Serial.println("[TEST]   WiFi meta JSON shape test completed successfully");
+}
+
+void test_api_info_json_shape() {
+    Serial.println("[TEST]   Testing /api/info JSON shape...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    String j = handlers.buildApiInfoJson();
+
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"status\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"connected\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"device\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"wifi\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"about\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"actions\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"showUpdate\"")));
+
+    Serial.println("[TEST]   API info JSON shape test completed successfully");
+}
+
+void test_api_params_json_shape() {
+    Serial.println("[TEST]   Testing /api/params JSON shape...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    String j = handlers.buildApiParamsGetJson();
+
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"params\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"actions\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"showBack\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"params\":[")));
+
+    Serial.println("[TEST]   API params JSON shape test completed successfully");
+}
+
+void test_api_status_json_shape() {
+    Serial.println("[TEST]   Testing /api/status JSON shape...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    String j = handlers.buildApiStatusJson();
+
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"text\"")));
+    TEST_ASSERT_EQUAL('{', j.charAt(0));
+    TEST_ASSERT_EQUAL('}', j.charAt(j.length() - 1));
+
+    Serial.println("[TEST]   API status JSON shape test completed successfully");
+}
+
+void test_api_action_response_json_literals() {
+    Serial.println("[TEST]   Testing POST /api action JSON payloads...");
+
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"Restart scheduled\"}",
+        WiFiManagerHandlers::jsonApiDeviceRestartScheduled().c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"Setup saved\"}",
+        WiFiManagerHandlers::jsonApiParamsSaveOk().c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"Captive portal detection disabled\"}",
+        WiFiManagerHandlers::jsonApiPortalCloseOk().c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"Exiting portal\"}",
+        WiFiManagerHandlers::jsonApiPortalExitOk().c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":false,\"message\":\"Exit not allowed\"}",
+        WiFiManagerHandlers::jsonApiPortalExitForbidden().c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"WiFi configuration erased. Device will restart shortly.\"}",
+        WiFiManagerHandlers::jsonApiEraseResponse(true).c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":false,\"message\":\"Erase failed\"}",
+        WiFiManagerHandlers::jsonApiEraseResponse(false).c_str());
+
+    Serial.println("[TEST]   Action response JSON literals test completed successfully");
+}
+
+void test_api_ota_done_success_json_literal() {
+    Serial.println("[TEST]   Testing POST /u completion success JSON...");
+
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"ok\":true,\"message\":\"Firmware updated. Restarting...\"}",
+        WiFiManagerHandlers::jsonApiOtaUpdateSuccess().c_str());
+
+    Serial.println("[TEST]   OTA success JSON literal test completed successfully");
+}

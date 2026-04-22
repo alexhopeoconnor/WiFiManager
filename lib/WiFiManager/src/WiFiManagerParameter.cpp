@@ -1,3 +1,10 @@
+/**
+ * WiFiManagerParameter.cpp
+ *
+ * @author alexhopeoconnor
+ * @license MIT
+ */
+
 #include "WiFiManagerParameter.h"
 
 #include <cstring>

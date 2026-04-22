@@ -3,13 +3,12 @@
 #include <WiFiManager.h>
 #include <WiFiManagerHandlers.h>
 #include <TemplateEngine.h>
-#include "templates/RootSelector.h"
+#include "templates/RootShell.h"
 
 namespace {
 
 const char kEmptyTemplateChunk[] PROGMEM = "";
 const char kTestTitle[] PROGMEM = "WiFiManager";
-const char kTestSubtitle[] PROGMEM = "Root Test";
 
 const char* dynamicStringGetter(void* userData) {
     const auto* value = static_cast<const String*>(userData);
@@ -56,37 +55,29 @@ void renderContextsInterleaved(TemplateContext& first, String& firstOutput,
 
 } // namespace
 
-void test_root_render_menu_state_transitions() {
-    Serial.println("[TEST]   Testing root menu state transitions...");
+void test_bootstrap_json_portal_feature_flags() {
+    Serial.println("[TEST]   Testing bootstrap JSON portal feature flags...");
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
 
-    String menuBefore;
-    handlers.getMenuOut(&menuBefore);
-    TEST_ASSERT_EQUAL(-1, menuBefore.indexOf("/close"));
+    String idleBootstrap = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_EQUAL(-1, idleBootstrap.indexOf(F("\"showCloseCaptive\":true")));
 
-    wm.setConfigPortalTimeout(5);
-    wm.startConfigPortal("RootStateAP");
-    wm.process();
-    delay(100);
+    wm.wmTestSetPortalActive(true);
+    wm.setCaptivePortalEnable(true);
 
-    String menuActive;
-    handlers.getMenuOut(&menuActive);
-    TEST_ASSERT_NOT_EQUAL(-1, menuActive.indexOf("/close"));
+    String apBootstrap = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"showCloseCaptive\":true")));
+    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"showExitPortal\":true")));
 
-    wm.stopConfigPortal();
-    delay(100);
+    wm.wmTestSetPortalActive(false);
 
-    String menuAfter;
-    handlers.getMenuOut(&menuAfter);
-    TEST_ASSERT_EQUAL(-1, menuAfter.indexOf("/close"));
-
-    Serial.println("[TEST]   Root menu state transitions test completed successfully");
+    Serial.println("[TEST]   Bootstrap portal feature flags test completed successfully");
 }
 
-void test_root_render_snapshot_consistency() {
-    Serial.println("[TEST]   Testing root render snapshot consistency...");
+void test_bootstrap_json_snapshot_consistency() {
+    Serial.println("[TEST]   Testing bootstrap JSON snapshot consistency...");
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
@@ -96,24 +87,15 @@ void test_root_render_snapshot_consistency() {
     wm.process();
     delay(100);
 
-    String menuSnapshot1;
-    String statusSnapshot1;
-    handlers.getMenuOut(&menuSnapshot1);
-    handlers.reportStatus(statusSnapshot1);
+    String snap1 = handlers.buildPortalBootstrapJson();
+    String snap2 = handlers.buildPortalBootstrapJson();
 
-    String menuSnapshot2;
-    String statusSnapshot2;
-    handlers.getMenuOut(&menuSnapshot2);
-    handlers.reportStatus(statusSnapshot2);
-
-    TEST_ASSERT_GREATER_THAN(0, menuSnapshot1.length());
-    TEST_ASSERT_GREATER_THAN(0, statusSnapshot1.length());
-    TEST_ASSERT_EQUAL_STRING(menuSnapshot1.c_str(), menuSnapshot2.c_str());
-    TEST_ASSERT_EQUAL_STRING(statusSnapshot1.c_str(), statusSnapshot2.c_str());
+    TEST_ASSERT_GREATER_THAN(32, snap1.length());
+    TEST_ASSERT_EQUAL_STRING(snap1.c_str(), snap2.c_str());
 
     wm.stopConfigPortal();
 
-    Serial.println("[TEST]   Root render snapshot consistency test completed successfully");
+    Serial.println("[TEST]   Bootstrap JSON snapshot consistency test completed successfully");
 }
 
 void test_root_render_interleaved_context_isolation() {
@@ -125,58 +107,56 @@ void test_root_render_interleaved_context_isolation() {
     registryA.registerProgmemData("%SCRIPTS%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%PAGE_TITLE%", kTestTitle);
-    registryA.registerProgmemData("%SUBTITLE%", kTestSubtitle);
 
     registryB.registerProgmemData("%SCRIPTS%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%PAGE_TITLE%", kTestTitle);
-    registryB.registerProgmemData("%SUBTITLE%", kTestSubtitle);
 
-    String menuA = F("<div>Menu A</div>");
-    String statusA = F("<div>Status A</div>");
-    String menuB = F("<div>Menu B</div>");
-    String statusB = F("<div>Status B</div>");
+    String bootstrapA = F("{\"ctx\":\"A\"}");
+    String appJsA = F("// shell A");
+    String bootstrapB = F("{\"ctx\":\"B\"}");
+    String appJsB = F("// shell B");
 
-    DynamicTemplateDescriptor menuDescriptorA{};
-    DynamicTemplateDescriptor statusDescriptorA{};
-    DynamicTemplateDescriptor menuDescriptorB{};
-    DynamicTemplateDescriptor statusDescriptorB{};
+    DynamicTemplateDescriptor bootstrapDescriptorA{};
+    DynamicTemplateDescriptor appJsDescriptorA{};
+    DynamicTemplateDescriptor bootstrapDescriptorB{};
+    DynamicTemplateDescriptor appJsDescriptorB{};
 
-    configureDescriptor(menuDescriptorA, menuA);
-    configureDescriptor(statusDescriptorA, statusA);
-    configureDescriptor(menuDescriptorB, menuB);
-    configureDescriptor(statusDescriptorB, statusB);
+    configureDescriptor(bootstrapDescriptorA, bootstrapA);
+    configureDescriptor(appJsDescriptorA, appJsA);
+    configureDescriptor(bootstrapDescriptorB, bootstrapB);
+    configureDescriptor(appJsDescriptorB, appJsB);
 
-    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%MENU%", &menuDescriptorA),
-                             "Registry A menu placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%STATUS%", &statusDescriptorA),
-                             "Registry A status placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%MENU%", &menuDescriptorB),
-                             "Registry B menu placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%STATUS%", &statusDescriptorB),
-                             "Registry B status placeholder should register");
+    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bootstrapDescriptorA),
+                             "Registry A bootstrap placeholder should register");
+    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%PORTAL_APP_JS%", &appJsDescriptorA),
+                             "Registry A app JS placeholder should register");
+    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bootstrapDescriptorB),
+                             "Registry B bootstrap placeholder should register");
+    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%PORTAL_APP_JS%", &appJsDescriptorB),
+                             "Registry B app JS placeholder should register");
 
     TemplateContext contextA;
     TemplateContext contextB;
     contextA.setRegistry(&registryA);
     contextB.setRegistry(&registryB);
 
-    TemplateRenderer::initializeContext(contextA, WM_ROOT_TEMPLATE);
-    TemplateRenderer::initializeContext(contextB, WM_ROOT_TEMPLATE);
+    TemplateRenderer::initializeContext(contextA, WM_ROOT_SHELL_TEMPLATE);
+    TemplateRenderer::initializeContext(contextB, WM_ROOT_SHELL_TEMPLATE);
 
     String outputA;
     String outputB;
     renderContextsInterleaved(contextA, outputA, contextB, outputB);
 
-    TEST_ASSERT_NOT_EQUAL(-1, outputA.indexOf("Menu A"));
-    TEST_ASSERT_NOT_EQUAL(-1, outputA.indexOf("Status A"));
-    TEST_ASSERT_EQUAL(-1, outputA.indexOf("Menu B"));
-    TEST_ASSERT_EQUAL(-1, outputA.indexOf("Status B"));
+    TEST_ASSERT_NOT_EQUAL(-1, outputA.indexOf("{\"ctx\":\"A\"}"));
+    TEST_ASSERT_NOT_EQUAL(-1, outputA.indexOf("// shell A"));
+    TEST_ASSERT_EQUAL(-1, outputA.indexOf("{\"ctx\":\"B\"}"));
+    TEST_ASSERT_EQUAL(-1, outputA.indexOf("// shell B"));
 
-    TEST_ASSERT_NOT_EQUAL(-1, outputB.indexOf("Menu B"));
-    TEST_ASSERT_NOT_EQUAL(-1, outputB.indexOf("Status B"));
-    TEST_ASSERT_EQUAL(-1, outputB.indexOf("Menu A"));
-    TEST_ASSERT_EQUAL(-1, outputB.indexOf("Status A"));
+    TEST_ASSERT_NOT_EQUAL(-1, outputB.indexOf("{\"ctx\":\"B\"}"));
+    TEST_ASSERT_NOT_EQUAL(-1, outputB.indexOf("// shell B"));
+    TEST_ASSERT_EQUAL(-1, outputB.indexOf("{\"ctx\":\"A\"}"));
+    TEST_ASSERT_EQUAL(-1, outputB.indexOf("// shell A"));
 
     Serial.println("[TEST]   Root render interleaved context isolation test completed successfully");
 }

@@ -6,13 +6,13 @@
  * 
  * @author Creator tzapu
  * @author tablatronix
- * @author Alex Hope-O'Connor
+ * @author alexhopeoconnor
  * @license MIT
  */
 
 #include "WiFiManager.h"
 #include "WiFiManagerLogSink.h"
-#include "WiFiManagerServer.h" // Need menu tokens
+#include "WiFiManagerServer.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -508,7 +508,6 @@ void WiFiManager::setupConfigPortal() {
   // Lazy initialization: only create server manager when config portal is actually needed
   if (!_serverManager) {
     _serverManager = std::make_unique<WiFiManagerServer>(this);
-    _serverManager->registerTemplateSetupCallback(_templateSetupCallback);
   }
   _serverManager->createServer(_httpPort);
   _serverManager->registerRoutes();
@@ -2013,6 +2012,10 @@ void WiFiManager::setShowInfoUpdate(boolean enabled){
   _showInfoUpdate = enabled;
 }
 
+void WiFiManager::setShowInfo(boolean enabled){
+  _showInfo = enabled;
+}
+
 /**
  * check if the config portal is running
  * @return bool true if active
@@ -2052,20 +2055,6 @@ DNSServer* WiFiManager::getDNSServer() {
  */
 void WiFiManager::setTitle(String title){
   _title = title;
-}
-
-void WiFiManager::registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb) {
-  _templateSetupCallback = std::move(cb);
-  if (_serverManager) {
-    _serverManager->registerTemplateSetupCallback(_templateSetupCallback);
-    _serverManager->rebuildPlaceholderRegistry();
-  }
-}
-
-void WiFiManager::rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer) {
-  if (_serverManager) {
-    _serverManager->rebuildPlaceholderRegistry(std::move(customizer));
-  }
 }
 
 /**

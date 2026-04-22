@@ -1,3 +1,10 @@
+/**
+ * WiFiManagerParameter.h
+ *
+ * @author alexhopeoconnor
+ * @license MIT
+ */
+
 #ifndef WiFiManagerParameter_h
 #define WiFiManagerParameter_h
 

@@ -1,7 +1,11 @@
 /**
  * CSS.h
- * CSS stylesheet for WiFiManager web interface
- * Embedded styles to avoid external file dependencies
+ *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
+ * CSS stylesheet for WiFiManager web interface.
+ * Embedded styles to avoid external file dependencies.
  */
 
 #ifndef _CSS_TEMPLATES_H_
@@ -39,6 +43,21 @@ const char CSS_STYLE[] PROGMEM = "<style>"
 "body.invert .msg{color:#fff;background-color:#282828;border-top:1px solid #555;border-right:1px solid #555;border-bottom:1px solid #555;}"
 "body.invert .q[role=img]{-webkit-filter:invert(1);filter:invert(1);}"
 ":disabled {opacity: 0.5;}"
+// toast + modal (SPA-native feedback; no window.alert)
+".wm-toast{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:10001;max-width:92%;padding:10px 14px;border-radius:.35rem;"
+"box-shadow:0 2px 8px rgba(0,0,0,.2);font-size:.95rem;text-align:center;font-weight:600}"
+".wm-toast.ok{background:#e8f7ef;border:1px solid #5cb85c;color:#1a3d24}"
+".wm-toast.err{background:#fdeaea;border:1px solid #dc3630;color:#5c1616}"
+".wm-dialog{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}"
+".wm-dialog-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}"
+".wm-dialog-panel{position:relative;z-index:1;background:#fff;border-radius:.4rem;padding:16px 18px;max-width:420px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.25);text-align:left}"
+".wm-dialog-msg{margin:0 0 12px 0;line-height:1.35}"
+".wm-dialog-actions{display:flex;gap:10px;justify-content:flex-end}"
+".wm-dialog-actions button{width:auto;min-width:100px}"
+".wm-dialog-ok{background-color:#1fa3ec !important}"
+"body.invert .wm-dialog-panel{background:#222;color:#fff;border:1px solid #444}"
+"body.invert .wm-toast.ok{background:#1a3322;border-color:#5cb85c;color:#d8f5e4}"
+"body.invert .wm-toast.err{background:#3a1818;border-color:#dc3630;color:#ffd4d4}"
 "</style>";
 
 #endif // _CSS_TEMPLATES_H_

@@ -1,11 +1,9 @@
 /**
  * WiFiManagerHandlers.h
- * 
- * HTTP request handlers and rendering logic for WiFiManager
- * Handles all web portal page generation and request processing
- * 
- * @author tablatronix
- * @author Alex Hope-O'Connor
+ *
+ * HTTP request handlers for WiFiManager: single HTML shell + JSON APIs.
+ *
+ * @author alexhopeoconnor
  * @license MIT
  */
 
@@ -16,20 +14,7 @@
 
 #include <ESPAsyncWebServer.h>
 #include <memory>
-#include "WiFiManager.h" // Need full definition for WiFiManagerRequestArgs
-
-// -----------------------------------------------------------------------------------------------
-// CSS CLASSES (for body class attribute)
-
-const char C_root[]               PROGMEM = "home";
-const char C_wifi[]               PROGMEM = "wifi";
-const char C_info[]               PROGMEM = "info";
-const char C_param[]              PROGMEM = "param";
-const char C_close[]              PROGMEM = "close";
-const char C_restart[]            PROGMEM = "restart";
-const char C_exit[]               PROGMEM = "exit";
-const char C_erase[]              PROGMEM = "erase";
-const char C_update[]             PROGMEM = "update";
+#include "WiFiManager.h"
 
 // -----------------------------------------------------------------------------------------------
 // FORM FIELD NAMES (for IP configuration forms)
@@ -50,27 +35,13 @@ const char HTTP_HEAD_CORS_ALLOW_ALL[]  PROGMEM = "*";
 class WiFiManagerHandlers {
   public:
     WiFiManagerHandlers(WiFiManager* wm);
-    
-    // HTTP Request Handlers
+
     void handleRoot(AsyncWebServerRequest *request);
-    void handleWifi(AsyncWebServerRequest *request, boolean scan);
-    void handleWifiSave(AsyncWebServerRequest *request);
-    void handleParam(AsyncWebServerRequest *request);
-    void handleParamSave(AsyncWebServerRequest *request);
-    void handleInfo(AsyncWebServerRequest *request);
-    void handleReset(AsyncWebServerRequest *request);
-    void handleExit(AsyncWebServerRequest *request);
-    void handleClose(AsyncWebServerRequest *request);
-    void handleErase(AsyncWebServerRequest *request, boolean opt);
     void handleNotFound(AsyncWebServerRequest *request);
     void handleRequest(AsyncWebServerRequest *request);
-    void handleWiFiScanRequest(AsyncWebServerRequest *request);
-    void handleWiFiScanStatus(AsyncWebServerRequest *request);
-    void handleUpdate(AsyncWebServerRequest *request);
     void handleUpdating(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
     void handleUpdateDone(AsyncWebServerRequest *request);
 
-    // JSON / SPA API (portal is a single-page app; only GET / serves HTML)
     void handleApiBootstrap(AsyncWebServerRequest *request);
     void handleApiWifiScanStatus(AsyncWebServerRequest *request);
     void handleApiWifiScan(AsyncWebServerRequest *request);
@@ -81,39 +52,58 @@ class WiFiManagerHandlers {
     void handleApiInfo(AsyncWebServerRequest *request);
     void handleApiStatus(AsyncWebServerRequest *request);
     void handleApiDeviceRestart(AsyncWebServerRequest *request);
-    void handleApiDeviceErase(AsyncWebServerRequest *request);
+    void handleApiDeviceErase(AsyncWebServerRequest *request, boolean optionalErase = false);
     void handleApiPortalClose(AsyncWebServerRequest *request);
     void handleApiPortalExit(AsyncWebServerRequest *request);
-    
-    // Captive Portal
+
     boolean captivePortal(AsyncWebServerRequest *request);
     void stopCaptivePortal();
-    
-    // Rendering Methods
-    String getMenuOut();
-    String getMenuOut(String* outOpt);
-    String getScanItemOut();
-    String getParamOut();
-    String getStaticOut();
-    String getIpForm(String id, String title, String value);
-    String getInfoData(String id);
-    void reportStatus(String &page);
-    
-    // Internal helper (needed by handlers)
+
+    /** True when the HTTP Host header does not match the portal’s canonical host:port (captive redirect needed). */
+    static bool shouldRedirectCaptiveForHost(const String& requestHost, const String& serverLocWithPort);
+
     void doParamSave(WiFiManager::WiFiManagerRequestArgs requestArgs);
-    
+
+    /** Portal bootstrap JSON (same payload as GET /api/bootstrap). Public for tests and host integration. */
+    String buildPortalBootstrapJson();
+    /** Same JSON body as GET /api/wifi/meta (tests + embedding). */
+    String buildApiWifiMetaJson();
+    /** Same JSON body as GET /api/info (tests + embedding). */
+    String buildApiInfoJson();
+    /** Same JSON body as GET /api/params (tests + embedding). */
+    String buildApiParamsGetJson();
+    /** Same JSON body as GET /api/status (tests + embedding). */
+    String buildApiStatusJson();
+
+    /** Fixed JSON bodies for POST action endpoints (single source for handlers + tests). */
+    static String jsonApiDeviceRestartScheduled();
+    static String jsonApiParamsSaveOk();
+    static String jsonApiPortalCloseOk();
+    static String jsonApiPortalExitOk();
+    static String jsonApiPortalExitForbidden();
+    static String jsonApiOtaUpdateSuccess();
+    static String jsonApiEraseResponse(boolean success);
+
   private:
     WiFiManager* _wm;
     void collectVisibleScanResults(std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
     void appendVisibleScanResultsJson(String& json, const std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
 
-    String buildPortalBootstrapJson();
     void applyWifiAndParamsFromRequest(AsyncWebServerRequest *request);
     void buildPlainStatusSummary(String& out);
+    void appendPortalJsonStaticFields(String& json, bool& first);
+    void appendPortalJsonCustomParams(String& json, bool& first);
+
+    void appendJsonKvItem(String& json, bool& first, const char* key, const String& label, const String& value);
+    void appendOneInfoItemForId(String& json, bool& first, const char* id);
+    void appendInfoSectionFromIds(String& json, const char* const* ids, size_t count, bool& first);
+
+    void appendPortalUiFeatureFlagsJson(String& json);
+    void appendApiInfoActionsJson(String& json);
+
     static void sendApiJson(AsyncWebServerRequest *request, int code, const String& json);
 };
 
 #endif // defined(ESP8266) || defined(ESP32)
 
 #endif // WiFiManagerHandlers_h
-

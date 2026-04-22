@@ -1,7 +1,11 @@
 /**
  * RootShell.h
+ *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
  * Single-page portal shell: only HTML document served for GET /.
- * Dynamic UI is driven by embedded JS + JSON APIs under /api/*.
+ * Dynamic UI is driven by embedded JS + JSON APIs under /api/...
  */
 
 #ifndef _WM_ROOT_SHELL_TEMPLATE_H_
@@ -21,6 +25,15 @@ const char WM_ROOT_SHELL_TEMPLATE[] PROGMEM =
     "%STYLES%"
     "</head>"
     "<body class='portal'>"
+    "<div id='wm-toast' class='wm-toast' aria-live='polite' role='status' style='display:none'></div>"
+    "<div id='wm-dialog' class='wm-dialog' style='display:none' aria-hidden='true'>"
+    "<div class='wm-dialog-backdrop' id='wm-dialog-backdrop'></div>"
+    "<div class='wm-dialog-panel'>"
+    "<p class='wm-dialog-msg' id='wm-dialog-msg'></p>"
+    "<div class='wm-dialog-actions'>"
+    "<button type='button' id='wm-dialog-cancel'>Cancel</button>"
+    "<button type='button' id='wm-dialog-ok' class='wm-dialog-ok'>OK</button>"
+    "</div></div></div>"
     "<div id='app'></div>"
     "<script id='wm-bootstrap' type='application/json'>%BOOTSTRAP_JSON%</script>"
     "<script>"

@@ -4,7 +4,7 @@
  * String conversions, HTML encoding, and helper calculations
  * These functions have no dependency on WiFiManager instance state
  *
- * @author Alex Hope-O'Connor
+ * @author alexhopeoconnor
  * @license MIT
  */
 

@@ -1,6 +1,9 @@
 /**
  * WiFiManagerLogLevel.h
  *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
  * Compile-time and runtime log levels for WiFiManager. Higher numeric values
  * mean more verbose output. Matches the old 0..5 tier model for build flags.
  */

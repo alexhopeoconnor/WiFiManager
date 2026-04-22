@@ -1,7 +1,11 @@
 /**
  * JS.h
- * JavaScript code for WiFiManager web interface
- * Client-side functionality for WiFi configuration
+ *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
+ * JavaScript code for WiFiManager web interface.
+ * Client-side functionality for WiFi configuration.
  */
 
 #ifndef _JS_TEMPLATES_H_

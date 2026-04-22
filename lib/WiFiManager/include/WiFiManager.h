@@ -6,7 +6,7 @@
  * 
  * @author Creator tzapu
  * @author tablatronix
- * @author Alex Hope-O'Connor
+ * @author alexhopeoconnor
  * @license MIT
  */
 
@@ -139,8 +139,6 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
-#include <TemplateEngine.h>
-
 // Include utility functions
 #include "WiFiManagerUtils.h"
 
@@ -437,6 +435,9 @@ class WiFiManager
     // show OTA upload button on info page
     void          setShowInfoUpdate(boolean enabled);
 
+    // show Info nav / info view (portal SPA); default true
+    void          setShowInfo(boolean enabled);
+
     // set ap channel
     void          setWiFiAPChannel(int32_t channel);
     
@@ -448,13 +449,6 @@ class WiFiManager
     
     // set the webapp title, default WiFiManager
     void          setTitle(String title);
-
-    // DFTE (portal HTML): register extra placeholders or override defaults (%STYLES%, %PAGE_TITLE%, …).
-    // Call before startConfigPortal / startWebPortal to have it applied when the server starts; if the
-    // portal is already running, the shared registry is rebuilt immediately.
-    void          registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb);
-    // Rebuild the server’s shared PlaceholderRegistry (defaults + registerTemplateSetupCallback, or customizer if passed).
-    void          rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer = nullptr);
 
     // add params to its own menu page and remove from wifi, NOT TO BE COMBINED WITH setMenu!
     void          setParamsPage(bool enable);
@@ -589,7 +583,6 @@ class WiFiManager
   protected:
     // vars
     std::unique_ptr<WiFiManagerServer> _serverManager;
-    std::function<void(PlaceholderRegistry&)> _templateSetupCallback;
 
     // ip configs @todo struct ?
     IPAddress     _ap_static_ip;
@@ -684,6 +677,7 @@ class WiFiManager
     boolean       _webClientCheck         = true;  // keep cp alive if web have client
     boolean       _scanDispOptions        = false; // show percentage in scans not icons
     boolean       _paramsInWifi           = true;  // show custom parameters on wifi page
+    boolean       _showInfo               = true;  // show Info in portal SPA
     boolean       _showInfoErase          = true;  // info page erase button
     boolean       _showInfoUpdate         = true;  // info page update button
     boolean       _showBack               = false; // show back button

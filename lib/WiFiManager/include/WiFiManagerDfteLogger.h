@@ -1,6 +1,9 @@
 /**
  * WiFiManagerDfteLogger.h
  *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
  * Optional bridge from DFTE's logging hooks to WiFiManager::log.
  * Enabled only when the sketch / library build defines WM_DFTE_LOGGING.
  */

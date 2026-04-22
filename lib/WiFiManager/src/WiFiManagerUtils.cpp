@@ -2,7 +2,7 @@
  * WiFiManagerUtils.cpp
  * Implementation of pure utility functions for WiFiManager
  *
- * @author Alex Hope-O'Connor
+ * @author alexhopeoconnor
  * @license MIT
  */
 

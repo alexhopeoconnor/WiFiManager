@@ -1,6 +1,9 @@
 /**
  * WiFiManagerLogSink.h
  *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
  * Optional host-provided sink for WiFiManager log output. When set, logs are
  * delivered here instead of the configured Print stream (usually Serial).
  */

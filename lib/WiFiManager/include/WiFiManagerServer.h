@@ -1,12 +1,29 @@
 /**
  * WiFiManagerServer.h
- * 
- * Server lifecycle management for WiFiManager
- * Handles AsyncWebServer creation, route registration, and shutdown
- * 
- * @author tablatronix
- * @author Alex Hope-O'Connor
+ *
+ * @author alexhopeoconnor
  * @license MIT
+ *
+ * HTTP server for the config portal: single HTML shell (GET /), JSON under /api/..., OTA POST /u,
+ * captive-portal redirects, and 404 handling. No legacy page routes.
+ *
+ * Supported surface (authoritative; registerRoutes mirrors this):
+ *   GET  /
+ *   GET  /api/bootstrap
+ *   GET  /api/wifi/scan-status
+ *   POST /api/wifi/scan
+ *   GET  /api/wifi/meta
+ *   POST /api/wifi/save
+ *   GET  /api/params
+ *   POST /api/params/save
+ *   GET  /api/info
+ *   GET  /api/status
+ *   POST /api/device/restart
+ *   POST /api/device/erase
+ *   POST /api/portal/close
+ *   POST /api/portal/exit
+ *   POST /u                      (multipart firmware upload; JSON completion response)
+ *   notFound -> captive redirect or 404
  */
 
 #ifndef WiFiManagerServer_h
@@ -19,17 +36,13 @@
 #include <functional>
 #include <memory>
 
-// DFTE (template engine)
 #include <TemplateEngine.h>
 
 #ifndef WM_TEMPLATE_REGISTRY_CAPACITY
-#define WM_TEMPLATE_REGISTRY_CAPACITY 24
+#define WM_TEMPLATE_REGISTRY_CAPACITY 16
 #endif
 
-// Forward declarations
 class WiFiManager;
-
-// Forward declaration - full definition needed in .cpp file
 class WiFiManagerHandlers;
 
 #ifdef WM_DFTE_LOGGING
@@ -37,23 +50,9 @@ class WiFiManagerDfteLogger;
 #endif
 
 // -----------------------------------------------------------------------------------------------
-// HTTP ROUTES
+// HTTP routes (portal API only; no legacy /wifi, /info, … page URLs)
 
 const char R_root[]               PROGMEM = "/";
-const char R_wifi[]               PROGMEM = "/wifi";
-const char R_wifinoscan[]         PROGMEM = "/0wifi";
-const char R_wifisave[]           PROGMEM = "/wifisave";
-const char R_info[]               PROGMEM = "/info";
-const char R_param[]              PROGMEM = "/param";
-const char R_paramsave[]          PROGMEM = "/paramsave";
-const char R_restart[]            PROGMEM = "/restart";
-const char R_exit[]               PROGMEM = "/exit";
-const char R_close[]              PROGMEM = "/close";
-const char R_erase[]              PROGMEM = "/erase";
-const char R_scanstatus[]         PROGMEM = "/wifistatus";
-const char R_scan[]               PROGMEM = "/wifi/scan";
-const char R_update[]             PROGMEM = "/update";
-const char R_updatedone[]         PROGMEM = "/u";
 
 const char R_api_bootstrap[]      PROGMEM = "/api/bootstrap";
 const char R_api_wifi_scan_status[] PROGMEM = "/api/wifi/scan-status";
@@ -69,85 +68,49 @@ const char R_api_device_erase[]   PROGMEM = "/api/device/erase";
 const char R_api_portal_close[]   PROGMEM = "/api/portal/close";
 const char R_api_portal_exit[]    PROGMEM = "/api/portal/exit";
 
+const char R_updatedone[]         PROGMEM = "/u";
+
 class WiFiManagerServer {
   public:
-    // Singleton access
     static WiFiManagerServer* instance();
-    
+
     WiFiManagerServer(WiFiManager* wm);
     ~WiFiManagerServer();
-    
-    // Template engine setup and access
+
     void setupTemplateEngine();
     PlaceholderRegistry* getPlaceholderRegistry() { return _tplRegistry.get(); }
-    
-    // Static zero-arg getters for DFTE RAM placeholders
+
     static const char* tplGetPageTitle();
-    static const char* tplGetSubtitle();
-    static const char* tplGetMenu();
-    static const char* tplGetStatus();
-    
-    // Template customization API
-    // Consumers can register a callback to customize placeholders
-    void registerTemplateSetupCallback(std::function<void(PlaceholderRegistry&)> cb) { _tplSetupCallback = cb; }
-    
-    // Convenience helpers to register our defaults (granular + all)
+
     void registerDefaultStyles(PlaceholderRegistry& reg);
     void registerDefaultScripts(PlaceholderRegistry& reg);
     void registerDefaultPageTitle(PlaceholderRegistry& reg);
-    void registerDefaultSubtitle(PlaceholderRegistry& reg);
-    void registerDefaultMenu(PlaceholderRegistry& reg);
-    void registerDefaultStatus(PlaceholderRegistry& reg);
+    /** Shell placeholders only: %STYLES%, %SCRIPTS%, %PAGE_TITLE%. */
     void registerDefaultPlaceholders(PlaceholderRegistry& reg);
-    void applyTemplateSetupCallback(PlaceholderRegistry& reg);
-    
-    // Rebuild registry with defaults and optional customizer
-    void rebuildPlaceholderRegistry(std::function<void(PlaceholderRegistry&)> customizer = nullptr);
-    
-    // Create server instance
+
     void createServer(uint16_t port);
-    
-    // Register all routes (takes handler callbacks)
     void registerRoutes();
-    
-    // Setup DNS server for captive portal
     void setupDNSD();
-    
-    // Process DNS requests (call periodically)
     void processDNS();
-    
-    // Shutdown and cleanup server and DNS
     void shutdownServer();
-    
-    // Get server instance
     AsyncWebServer* getServer() { return server.get(); }
-    
-    // Get DNS server instance (for testing)
     DNSServer* getDNSServer() { return dnsServer.get(); }
-    
+
   private:
     WiFiManager* _wm;
     std::unique_ptr<WiFiManagerHandlers> _handlers;
     std::unique_ptr<AsyncWebServer> server;
     std::unique_ptr<DNSServer> dnsServer;
-    
-    // Shared DFTE placeholder registry
+
     std::unique_ptr<PlaceholderRegistry> _tplRegistry;
-    std::function<void(PlaceholderRegistry&)> _tplSetupCallback;
 
 #ifdef WM_DFTE_LOGGING
-    // DFTE -> WiFiManager::log bridge (only installed when WM_DFTE_LOGGING and no other logger registered)
     std::unique_ptr<WiFiManagerDfteLogger> _dfteLogger;
     bool _wmOwnsDfteLogSink = false;
 #endif
-    
-    // Singleton instance
+
     static WiFiManagerServer* s_instance;
 };
-
-// Include WiFiManagerHandlers.h after class definition to provide full definition
-// needed for std::unique_ptr destructor
-#include "WiFiManagerHandlers.h"
 
 #endif // defined(ESP8266) || defined(ESP32)
 

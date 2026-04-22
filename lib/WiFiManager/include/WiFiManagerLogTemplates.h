@@ -1,6 +1,9 @@
 /**
  * WiFiManagerLogTemplates.h
  *
+ * @author alexhopeoconnor
+ * @license MIT
+ *
  * Template implementations for WiFiManager::log(...). Included at the end of WiFiManager.h.
  */
 
