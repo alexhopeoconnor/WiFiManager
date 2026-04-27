@@ -2080,7 +2080,7 @@ String WiFiManager::getConfigPortalSSID() {
 
 /**
  * return the last known connection result
- * logged on autoconnect and wifisave, can be used to check why failed
+ * logged on autoconnect and portal credential-save attempts; can be used to check why failed
  * get as readable string with getWLStatusString(getLastConxResult);
  * @since $dev
  * @access public

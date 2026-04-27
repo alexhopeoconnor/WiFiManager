@@ -453,7 +453,7 @@ class WiFiManager
     // add params to its own menu page and remove from wifi, NOT TO BE COMBINED WITH setMenu!
     void          setParamsPage(bool enable);
 
-    // get last connection result, includes autoconnect and wifisave
+    // get last connection result, including autoconnect and portal credential-save attempts
     uint8_t       getLastConxResult();
     
     // get a status as string
@@ -638,7 +638,7 @@ class WiFiManager
         "WM"
 #endif
         ; // auto apname prefix prefix+chipid
-    int           _cpclosedelay           = 2000; // delay before wifisave, prevents captive portal from closing to fast.
+    int           _cpclosedelay           = 2000; // delay before portal save completes; prevents captive portal from closing too fast.
     bool          _cleanConnect           = false; // disconnect before connect in connectwifi, increases stability on connects
     bool          _connectonsave          = true; // connect to wifi when saving creds
     bool          _disableSTA             = false; // disable sta when starting ap, always
