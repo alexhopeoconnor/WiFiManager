@@ -31,7 +31,7 @@ This fork currently includes the following architectural improvements:
 - **Data-first JSON generation** for portal APIs, including info/device/about data, instead of HTML-to-JSON parsing.
 - **Capability-driven UI flags** in bootstrap/API payloads so features like info, update, erase, and action visibility can be controlled by backend state.
 - **SPA-native feedback UX** using in-DOM dialog/toast behavior rather than page-based action flows.
-- A **shell-scoped placeholder model** centered on `%PAGE_TITLE%`, `%STYLES%`, `%SCRIPTS%`, `%BOOTSTRAP_JSON%`, and `%PORTAL_APP_JS%`.
+- A **single shell render contract** with default shell placeholders (`%PAGE_TITLE%`, `%STYLES%`) plus embedded runtime payloads (`%BOOTSTRAP_JSON%`, `%PORTAL_APP_JS%`).
 - A clearer separation between:
   - shell rendering
   - API responses

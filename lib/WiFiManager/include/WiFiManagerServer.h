@@ -14,6 +14,7 @@
  *   POST /api/wifi/scan
  *   GET  /api/wifi/meta
  *   POST /api/wifi/save
+ *   GET  /api/wifi/connect-status
  *   GET  /api/params
  *   POST /api/params/save
  *   GET  /api/info
@@ -59,6 +60,7 @@ const char R_api_wifi_scan_status[] PROGMEM = "/api/wifi/scan-status";
 const char R_api_wifi_scan[]      PROGMEM = "/api/wifi/scan";
 const char R_api_wifi_meta[]      PROGMEM = "/api/wifi/meta";
 const char R_api_wifi_save[]      PROGMEM = "/api/wifi/save";
+const char R_api_wifi_connect_status[] PROGMEM = "/api/wifi/connect-status";
 const char R_api_params[]         PROGMEM = "/api/params";
 const char R_api_params_save[]    PROGMEM = "/api/params/save";
 const char R_api_info[]           PROGMEM = "/api/info";
@@ -83,9 +85,8 @@ class WiFiManagerServer {
     static const char* tplGetPageTitle();
 
     void registerDefaultStyles(PlaceholderRegistry& reg);
-    void registerDefaultScripts(PlaceholderRegistry& reg);
     void registerDefaultPageTitle(PlaceholderRegistry& reg);
-    /** Shell placeholders only: %STYLES%, %SCRIPTS%, %PAGE_TITLE%. */
+    /** Shell placeholders only: %STYLES%, %PAGE_TITLE%. */
     void registerDefaultPlaceholders(PlaceholderRegistry& reg);
 
     void createServer(uint16_t port);

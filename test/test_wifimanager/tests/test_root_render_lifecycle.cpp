@@ -104,11 +104,9 @@ void test_root_render_interleaved_context_isolation() {
     PlaceholderRegistry registryA(8);
     PlaceholderRegistry registryB(8);
 
-    registryA.registerProgmemData("%SCRIPTS%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%PAGE_TITLE%", kTestTitle);
 
-    registryB.registerProgmemData("%SCRIPTS%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%PAGE_TITLE%", kTestTitle);
 

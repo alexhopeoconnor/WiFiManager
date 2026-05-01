@@ -9,6 +9,14 @@ TestCase tests[] = {
     TEST_ENTRY(test_basic_wifimanager_instantiation),
     TEST_ENTRY(test_reset_settings),
     TEST_ENTRY(test_disconnect),
+    // JSON API shape (buildApiInfoJson is large — run with fresh heap, before stress tests)
+    TEST_ENTRY(test_captive_redirect_host_rule),
+    TEST_ENTRY(test_api_wifi_meta_json_shape),
+    TEST_ENTRY(test_api_info_json_shape),
+    TEST_ENTRY(test_api_params_json_shape),
+    TEST_ENTRY(test_api_status_json_shape),
+    TEST_ENTRY(test_api_action_response_json_literals),
+    TEST_ENTRY(test_api_ota_done_success_json_literal),
     
     // Configuration tests
     TEST_ENTRY(test_configuration_setters),
@@ -115,14 +123,6 @@ TestCase tests[] = {
     // Template rendering tests
     TEST_ENTRY(test_shell_template_renders_core_placeholders),
 
-    TEST_ENTRY(test_captive_redirect_host_rule),
-    TEST_ENTRY(test_api_wifi_meta_json_shape),
-    TEST_ENTRY(test_api_info_json_shape),
-    TEST_ENTRY(test_api_params_json_shape),
-    TEST_ENTRY(test_api_status_json_shape),
-    TEST_ENTRY(test_api_action_response_json_literals),
-    TEST_ENTRY(test_api_ota_done_success_json_literal),
-    
     // State transition tests
     TEST_ENTRY(test_portal_to_connected_transition),
     TEST_ENTRY(test_concurrent_operations),

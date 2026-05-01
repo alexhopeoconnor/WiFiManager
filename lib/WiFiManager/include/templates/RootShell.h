@@ -21,7 +21,6 @@ const char WM_ROOT_SHELL_TEMPLATE[] PROGMEM =
     "<meta charset='UTF-8'/>"
     "<meta name='viewport' content='width=device-width,initial-scale=1,user-scalable=no'/>"
     "<title>%PAGE_TITLE%</title>"
-    "%SCRIPTS%"
     "%STYLES%"
     "</head>"
     "<body class='portal'>"

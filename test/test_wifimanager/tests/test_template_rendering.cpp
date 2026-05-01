@@ -34,7 +34,6 @@ void test_shell_template_renders_core_placeholders() {
     Serial.println("[TEST]   Testing portal shell template rendering...");
 
     PlaceholderRegistry registry(8);
-    registry.registerProgmemData("%SCRIPTS%", kEmpty);
     registry.registerProgmemData("%STYLES%", kEmpty);
     registry.registerProgmemData("%PAGE_TITLE%", kDocTitle);
     registry.registerProgmemData("%BOOTSTRAP_JSON%", kBootstrapJson);

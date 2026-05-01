@@ -47,6 +47,7 @@ class WiFiManagerHandlers {
     void handleApiWifiScan(AsyncWebServerRequest *request);
     void handleApiWifiMeta(AsyncWebServerRequest *request);
     void handleApiWifiSave(AsyncWebServerRequest *request);
+    void handleApiWifiConnectStatus(AsyncWebServerRequest *request);
     void handleApiParamsGet(AsyncWebServerRequest *request);
     void handleApiParamsSave(AsyncWebServerRequest *request);
     void handleApiInfo(AsyncWebServerRequest *request);
@@ -74,6 +75,8 @@ class WiFiManagerHandlers {
     String buildApiParamsGetJson();
     /** Same JSON body as GET /api/status (tests + embedding). */
     String buildApiStatusJson();
+    /** GET /api/wifi/connect-status (portal connect progress). */
+    String buildApiWifiConnectStatusJson();
 
     /** Fixed JSON bodies for POST action endpoints (single source for handlers + tests). */
     static String jsonApiDeviceRestartScheduled();

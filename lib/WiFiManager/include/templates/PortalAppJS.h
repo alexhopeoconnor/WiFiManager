@@ -53,6 +53,7 @@ function showConfirm(msg,onOk){
 function setView(html){
   var a=$('app');
   if(!a)return;
+  stopWifiScanPolling();
   a.innerHTML="<div class='wrap'>"+html+"</div>";
 }
 
@@ -120,7 +121,26 @@ function api(path, opt){
     .then(function(r){return r.text().then(function(t){return {ok:r.ok,status:r.status,body:t};});});
 }
 
-function scanPollTimer(){}
+var _wmWifiScanPollTimer=null;
+
+function stopWifiScanPolling(){
+  if(_wmWifiScanPollTimer){
+    clearInterval(_wmWifiScanPollTimer);
+    _wmWifiScanPollTimer=null;
+  }
+}
+
+function startWifiScanPolling(box){
+  stopWifiScanPolling();
+  _wmWifiScanPollTimer=setInterval(function(){
+    api('/api/wifi/scan-status').then(function(res){
+      var d={};
+      try{d=JSON.parse(res.body);}catch(e){return;}
+      if(box)box.innerHTML=renderScanList(d);
+      if(!d.scanning)stopWifiScanPolling();
+    });
+  },800);
+}
 
 function renderScanList(data){
   if(!data||data.scanning){return '<p>Scanning for networks...</p>';}
@@ -133,33 +153,51 @@ function renderScanList(data){
     pct=(n.quality||0)+'%';
     qi=Math.round((n.quality/100)*3)+1;if(qi<1)qi=1;if(qi>4)qi=4;
     enc=n.encrypted?'l':'';
-    html+="<div><a href='#p' onclick='return portalPickSsid(this)' data-ssid='"+esc(n.ssid)+"'>"+esc(n.ssid)+"</a>";
+    html+="<div><a href='#p' data-ssid='"+esc(n.ssid)+"'>"+esc(n.ssid)+"</a>";
     html+="<div role='img' aria-label='"+pct+"' title='"+pct+"' class='q q-"+qi+" "+enc+"'></div>";
     html+="<div class='q'>"+pct+"</div></div>";
   }
   return html;
 }
 
-window.portalPickSsid=function(el){
-  var s=el.getAttribute('data-ssid');
-  var inp=document.getElementById('wm-s');
-  if(inp&&s){inp.value=s;}
-  return false;
-};
-
 function wifiRefresh(){
   var box=document.getElementById('wm-scan-results');
   if(!box)return;
   box.innerHTML='<p>Starting scan...</p>';
   api('/api/wifi/scan',{method:'POST'}).then(function(){
-    var iv=setInterval(function(){
-      api('/api/wifi/scan-status').then(function(res){
-        try{var d=JSON.parse(res.body);}catch(e){return;}
-        if(box)box.innerHTML=renderScanList(d);
-        if(!d.scanning)clearInterval(iv);
-      });
-    },800);
+    startWifiScanPolling(box);
   });
+}
+
+function bindWifiViewEvents(){
+  var refreshBtn=$('wm-refresh-scan');
+  if(refreshBtn){
+    refreshBtn.addEventListener('click', wifiRefresh);
+  }
+
+  var showPass=$('wm-showpass');
+  if(showPass){
+    showPass.addEventListener('change', function(){
+      var p=$('wm-p');
+      if(p)p.type=this.checked?'text':'password';
+    });
+  }
+
+  var scanResults=$('wm-scan-results');
+  if(scanResults){
+    scanResults.addEventListener('click', function(ev){
+      var el=ev.target;
+      while(el && el !== scanResults){
+        if(el.tagName==='A' && el.getAttribute('data-ssid')){
+          ev.preventDefault();
+          var inp=$('wm-s');
+          if(inp)inp.value=el.getAttribute('data-ssid')||'';
+          return;
+        }
+        el=el.parentElement;
+      }
+    });
+  }
 }
 
 function viewWifi(){
@@ -175,31 +213,58 @@ function viewWifi(){
     var i;
     for(i=0;i<wf.length;i++){if(wf[i]&&wf[i].id==='p'){hasPass=true;break;}}
     if(hasPass){
-      html+="<input type='checkbox' id='wm-showpass' onclick='var p=document.getElementById(\"wm-p\");if(p)p.type=this.checked?\"text\":\"password\"'/> <label for='wm-showpass'>Show password</label>";
+      html+="<input type='checkbox' id='wm-showpass'/> <label for='wm-showpass'>Show password</label>";
     }
     html+=renderFieldList(m.staticFields||[]);
     html+=renderFieldList(m.params||[]);
     html+="<button type='submit'>Save</button></form>";
-    html+="<br/><button type='button' id='wm-refresh-scan' onclick='wifiRefresh()'>Refresh scan</button>";
+    html+="<br/><button type='button' id='wm-refresh-scan'>Refresh scan</button>";
     html+="<div id='wm-wifi-msg'></div>";
     setView(html);
+    bindWifiViewEvents();
     api('/api/wifi/scan-status').then(function(r2){
       try{var d=JSON.parse(r2.body);}catch(e){d={};}
       var box=document.getElementById('wm-scan-results');
       if(box)box.innerHTML=renderScanList(d);
-      if(d&&d.scanning){wifiRefresh();}
+      if(d&&d.scanning){startWifiScanPolling(box);}
     });
   });
 }
 
+function pollWifiConnectStatus(){
+  var msg=$('wm-wifi-msg');
+  var iv=setInterval(function(){
+    api('/api/wifi/connect-status').then(function(res){
+      var j={};
+      try{j=JSON.parse(res.body);}catch(e){}
+      if(msg&&j.message){
+        msg.innerHTML=esc(j.message);
+      }
+      if(j.state==='success'){
+        clearInterval(iv);
+        showToast(j.message||'WiFi connected',false);
+        location.hash='#/';
+      }else if(j.state==='failed'){
+        clearInterval(iv);
+        showToast(j.message||'WiFi connect failed',true);
+      }
+    });
+  },700);
+}
 window.portalWifiSave=function(ev){
   ev.preventDefault();
   var fd=new FormData(document.getElementById('wm-wifi-form'));
   var msg=$('wm-wifi-msg');
-  if(msg)msg.innerHTML='Saving...';
+  if(msg)msg.innerHTML='Submitting...';
   api('/api/wifi/save',{method:'POST',body:fd}).then(function(res){
-    try{var j=JSON.parse(res.body);}catch(e){j={ok:false};}
-    if(msg)msg.innerHTML=(j&&j.message)?esc(j.message):(res.ok?'Saved.':'Error');
+    var j={};
+    try{j=JSON.parse(res.body);}catch(e){}
+    if(msg){
+      msg.innerHTML=(j&&j.message)?esc(j.message):(res.ok?'Queued.':'Error');
+    }
+    if(res.status===202){
+      pollWifiConnectStatus();
+    }
   });
   return false;
 };

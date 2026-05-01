@@ -10,7 +10,6 @@
 #include "WiFiManagerHandlers.h"
 #include "WiFiManagerServer.h"
 #include "templates/CSS.h"
-#include "templates/JS.h"
 #include "templates/RootShell.h"
 #include "templates/PortalAppJS.h"
 #include <TemplateEngine.h>
@@ -80,12 +79,10 @@ AsyncWebServerResponse* beginTemplateResponse(AsyncWebServerRequest* request,
 void registerSharedShellPlaceholders(WiFiManagerServer* server, PlaceholderRegistry& registry) {
   if (server) {
     server->registerDefaultStyles(registry);
-    server->registerDefaultScripts(registry);
     return;
   }
 
   registry.registerProgmemData("%STYLES%", CSS_STYLE);
-  registry.registerProgmemData("%SCRIPTS%", JS_SCRIPT);
 }
 
 struct ShellRenderBundle {
@@ -555,7 +552,6 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
 
   if (_wm->_serverManager) {
     _wm->_serverManager->registerDefaultStyles(bundle->registry);
-    _wm->_serverManager->registerDefaultScripts(bundle->registry);
     _wm->_serverManager->registerDefaultPageTitle(bundle->registry);
   } else {
     registerSharedShellPlaceholders(nullptr, bundle->registry);
@@ -1059,15 +1055,40 @@ void WiFiManagerHandlers::handleApiWifiSave(AsyncWebServerRequest *request) {
 #endif
   handleRequest(request);
   applyWifiAndParamsFromRequest(request);
-  String json = F("{\"ok\":true,\"message\":\"");
-  if (_wm->_ssid == "") {
-    json += F("Settings saved");
-  } else {
-    json += F("Credentials saved");
+  _wm->queuePortalConnect(_wm->_ssid, _wm->_pass);
+  sendApiJson(
+      request, 202,
+      F("{\"ok\":true,\"message\":\"Settings accepted\",\"next\":{\"poll\":\"/api/wifi/connect-status\"}}"));
+}
+
+String WiFiManagerHandlers::buildApiWifiConnectStatusJson() {
+  String json = F("{\"state\":\"");
+  switch (_wm->getConfigPortalConnectState()) {
+    case WiFiManager::WM_CP_CONNECT_WAITING:
+      json += "waiting";
+      break;
+    case WiFiManager::WM_CP_CONNECT_SUCCESS:
+      json += "success";
+      break;
+    case WiFiManager::WM_CP_CONNECT_FAILED:
+      json += "failed";
+      break;
+    case WiFiManager::WM_CP_CONNECT_IDLE:
+    default:
+      json += "idle";
+      break;
   }
-  json += F("\",\"next\":{\"connectScheduled\":true}}");
-  sendApiJson(request, 200, json);
-  _wm->connect = true;
+  json += F("\",\"message\":\"");
+  jsonAppendEscaped(json, _wm->getConfigPortalConnectMessage());
+  json += F("\",\"wifiStatus\":\"");
+  jsonAppendEscaped(json, _wm->getWLStatusString(_wm->getConfigPortalConnectStatus()));
+  json += F("\"}");
+  return json;
+}
+
+void WiFiManagerHandlers::handleApiWifiConnectStatus(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  sendApiJson(request, 200, buildApiWifiConnectStatusJson());
 }
 
 String WiFiManagerHandlers::buildApiParamsGetJson() {

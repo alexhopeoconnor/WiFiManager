@@ -249,6 +249,26 @@ class WiFiManager
       int visibleNetworkCount = 0;
       wm_scan_schedule_reason_t scheduledReason = WM_SCAN_SCHEDULE_NONE;
     };
+
+    /** Exposed to consumers: high-level result of a portal "save & connect" attempt. */
+    enum wm_configportal_connect_state_t : uint8_t {
+      WM_CP_CONNECT_IDLE = 0,
+      WM_CP_CONNECT_QUEUED,
+      WM_CP_CONNECT_WAITING,
+      WM_CP_CONNECT_SUCCESS,
+      WM_CP_CONNECT_FAILED,
+    };
+
+    /** Optional notification hook; prefer getters for consumers. */
+    enum wm_event_t : uint8_t {
+      WM_EVENT_PORTAL_STARTED = 0,
+      WM_EVENT_PORTAL_STOPPED,
+      WM_EVENT_PORTAL_CONNECT_QUEUED,
+      WM_EVENT_PORTAL_CONNECT_START,
+      WM_EVENT_PORTAL_CONNECT_SUCCESS,
+      WM_EVENT_PORTAL_CONNECT_FAILED
+    };
+    using WiFiManagerEventCallback = std::function<void(wm_event_t)>;
     
     WiFiManager(Print& consolePort);
     WiFiManager();
@@ -495,7 +515,18 @@ class WiFiManager
     void          setHttpPort(uint16_t port);
 
     // check if config portal is active (true)
-    bool          getConfigPortalActive();
+    bool          getConfigPortalActive() const;
+
+    /** True once the config portal has been entered in this power-on / runtime session. */
+    bool          hasEnteredConfigPortal() const;
+    /** Summarized state for the last portal submit of WiFi credentials. */
+    wm_configportal_connect_state_t getConfigPortalConnectState() const;
+    bool          isConfigPortalConnectPending() const;
+    bool          didConfigPortalConnectSucceed() const;
+    bool          didConfigPortalConnectFail() const;
+    uint8_t       getConfigPortalConnectStatus() const;
+    String        getConfigPortalConnectMessage() const;
+    void          setEventCallback(WiFiManagerEventCallback cb);
     
     // check if web portal is active (true)
     bool          getWebPortalActive();
@@ -735,6 +766,13 @@ protected:
 
     bool          startAP();
     void          setupDNSD();
+    enum class wm_autoconnect_result_t : uint8_t {
+      connected = 0,
+      no_credentials,
+      failed,
+      fatal
+    };
+    wm_autoconnect_result_t attemptAutoConnect();
 
     uint8_t       connectWifi(String ssid, String pass, bool connect = true);
     bool          setSTAConfig();
@@ -767,6 +805,9 @@ protected:
     bool          WiFi_scanNetworks(unsigned int cachetime);
     void          WiFi_scanComplete(int networksFound);
     void          processScan();
+    void          processPortalConnect();
+    void          queuePortalConnect(const String& ssid, const String& pass);
+    void          emitPortalEvent(wm_event_t event);
     bool          shouldScheduleScan(unsigned int cachetime,
                                      wm_scan_schedule_reason_t reason,
                                      bool forceRefresh = false) const;
@@ -835,7 +876,7 @@ protected:
       _scan.completionResult = completionResult;
     }
     void          wmTestSetPortalActive(bool active) { configPortalActive = active; }
-    void          wmTestSetConnectPending(bool active) { connect = active; }
+    void          wmTestSetConnectPending(bool active);
     void          wmTestSetScanLifecycleBlocked(bool blocked) { _scanLifecycleBlocked = blocked; }
     void          wmTestSetScanGenerations(uint32_t generation, uint32_t runningGeneration, uint32_t completionGeneration) {
       _scan.generation = generation;
@@ -846,6 +887,32 @@ protected:
     #endif
 
   protected:
+    /**
+     * Internal portal-connect workflow. Distinct from wm_configportal_connect_state_t (unscoped
+     * public enum) — enum class avoids name clashes with WM_CP_CONNECT_* in the public API.
+     */
+    enum class wm_cp_connect_state_t : uint8_t {
+      idle = 0,
+      queued,
+      delaying,
+      starting,
+      waiting,
+      success,
+      failed
+    };
+
+    bool                    _hasEnteredConfigPortal = false;
+    wm_cp_connect_state_t   _cpConnectState         = wm_cp_connect_state_t::idle;
+    String        _cpConnectSsid;
+    String        _cpConnectPass;
+    String        _cpConnectMessage;
+    uint8_t       _cpConnectStatus = WL_IDLE_STATUS;
+    unsigned long _cpConnectQueuedAt = 0;
+    unsigned long _cpConnectStartedAt = 0;
+    unsigned long _cpConnectDelayUntil = 0;
+    unsigned long _cpConnectTimeoutMs = 0;
+    WiFiManagerEventCallback _eventCallback = nullptr;
+
     //helpers (rendering methods moved to WiFiManagerHandlers)
     boolean       isIp(String str);
     String        toStringIp(IPAddress ip);
@@ -853,7 +920,6 @@ protected:
     String        encryptionTypeStr(uint8_t authmode);
 
     // flags
-    boolean       connect             = false;
     boolean       abort               = false;
     boolean       reset               = false;
     boolean       configPortalActive  = false;

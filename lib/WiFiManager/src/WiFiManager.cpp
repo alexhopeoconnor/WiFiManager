@@ -194,9 +194,6 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect"));
   #endif
 
-  // Assume WiFi credentials are saved (workaround for ESP32 detection)
-  bool wifiIsSaved = true;
-
   #ifdef ESP32
   setupHostname(true);
 
@@ -213,76 +210,24 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   }
   #endif
 
-  // check if wifi is saved, (has autoconnect) to speed up cp start
-  // NOT wifi init safe
-  if(wifiIsSaved){
-     _startconn = millis();
-    _begin();
-
-    // attempt to connect using saved settings, on fail fallback to AP config portal
-    if(!WiFi.enableSTA(true)){
-      // handle failure mode Brownout detector etc.
-      #ifndef WM_NO_LOG
-      log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[FATAL] Unable to enable wifi!"));
-      #endif
-      return false;
-    }
-    
-    WiFiSetCountry();
-
-    #ifdef ESP32
-    if(esp32persistent) WiFi.persistent(false); // disable persistent for esp32 after esp_wifi_start or else saves wont work
-    #endif
-
-    _usermode = WIFI_STA; // When using autoconnect , assume the user wants sta mode on permanently.
-
-    // no getter for autoreconnectpolicy before this
-    // https://github.com/esp8266/Arduino/pull/4359
-    // so we must force it on else, if not connectimeout then waitforconnectionresult gets stuck endless loop
-    WiFi_autoReconnect();
-
-    #ifdef ESP8266
-    if(_hostname != ""){
-      setupHostname(true);
-    }
-    #endif
-
-    // Check if already connected, otherwise try stored credentials
-    bool connected = false;
-    if (WiFi.status() == WL_CONNECTED){
-      connected = true;
-      #ifndef WM_NO_LOG
-      log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: ESP Already Connected"));
-      #endif
-      setSTAConfig();
-    }
-
-    if(connected || connectWifi(_defaultssid, _defaultpass) == WL_CONNECTED){
-      //connected
-      #ifndef WM_NO_LOG
-      log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: SUCCESS"));
-      log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("Connected in"),(String)((millis()-_startconn)) + " ms");
-      log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("STA IP Address:"),WiFi.localIP());
-      #endif
-      _lastconxresult = WL_CONNECTED;
-
-      if(_hostname != ""){
-        #ifndef WM_NO_LOG
-          log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("hostname: STA: "),getWiFiHostname());
-        #endif
-      }
-      return true; // connected success
-    }
-
-    #ifndef WM_NO_LOG
-    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: FAILED for "),(String)((millis()-_startconn)) + " ms");
-    #endif
+  // Try the startup STA path first; only fall back to the config portal after that workflow finishes.
+  _startconn = millis();
+  _begin();
+  const wm_autoconnect_result_t autoConnectResult = attemptAutoConnect();
+  if(autoConnectResult == wm_autoconnect_result_t::connected){
+    return true; // connected success
   }
-  else {
-    #ifndef WM_NO_LOG
+  if(autoConnectResult == wm_autoconnect_result_t::fatal){
+    return false;
+  }
+
+  #ifndef WM_NO_LOG
+  if(autoConnectResult == wm_autoconnect_result_t::no_credentials){
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("No Credentials are Saved, skipping connect"));
-    #endif
+  } else {
+    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: FAILED for "),(String)((millis()-_startconn)) + " ms");
   }
+  #endif
 
   // possibly skip the config portal
   if (!_enableConfigPortal) {
@@ -296,6 +241,69 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   // not connected start configportal
   startConfigPortal(apName, apPassword);
   return false; // Config portal started, but not connected yet
+}
+
+WiFiManager::wm_autoconnect_result_t WiFiManager::attemptAutoConnect() {
+  // Attempt the startup STA path only; portal fallback is handled by autoConnect().
+  if(!WiFi.enableSTA(true)){
+    // handle failure mode Brownout detector etc.
+    #ifndef WM_NO_LOG
+    log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[FATAL] Unable to enable wifi!"));
+    #endif
+    return wm_autoconnect_result_t::fatal;
+  }
+  
+  WiFiSetCountry();
+
+  #ifdef ESP32
+  if(esp32persistent) WiFi.persistent(false); // disable persistent for esp32 after esp_wifi_start or else saves wont work
+  #endif
+
+  _usermode = WIFI_STA; // When using autoconnect , assume the user wants sta mode on permanently.
+
+  // no getter for autoreconnectpolicy before this
+  // https://github.com/esp8266/Arduino/pull/4359
+  // so we must force it on else, if not connectimeout then waitforconnectionresult gets stuck endless loop
+  WiFi_autoReconnect();
+
+  #ifdef ESP8266
+  if(_hostname != ""){
+    setupHostname(true);
+  }
+  #endif
+
+  // Check if already connected, otherwise try stored credentials
+  bool connected = false;
+  if (WiFi.status() == WL_CONNECTED){
+    connected = true;
+    #ifndef WM_NO_LOG
+    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: ESP Already Connected"));
+    #endif
+    setSTAConfig();
+  }
+
+  const bool hasSavedCredentials = _defaultssid != "" || WiFi_hasAutoConnect();
+  if (!connected && !hasSavedCredentials) {
+    return wm_autoconnect_result_t::no_credentials;
+  }
+
+  if(connected || connectWifi(_defaultssid, _defaultpass) == WL_CONNECTED){
+    #ifndef WM_NO_LOG
+    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("AutoConnect: SUCCESS"));
+    log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("Connected in"),(String)((millis()-_startconn)) + " ms");
+    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("STA IP Address:"),WiFi.localIP());
+    #endif
+    _lastconxresult = WL_CONNECTED;
+
+    if(_hostname != ""){
+      #ifndef WM_NO_LOG
+        log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("hostname: STA: "),getWiFiHostname());
+      #endif
+    }
+    return wm_autoconnect_result_t::connected;
+  }
+
+  return wm_autoconnect_result_t::failed;
 }
 
 bool WiFiManager::setupHostname(bool restart){
@@ -447,7 +455,7 @@ bool WiFiManager::startAP(){
  */
 void WiFiManager::startWebPortal() {
   if(configPortalActive || webPortalActive) return;
-  connect = abort = false;
+  abort = false;
   setupConfigPortal();
   webPortalActive = true;
 }
@@ -561,8 +569,12 @@ void WiFiManager::startConfigPortal(char const *apName, char const *apPassword) 
 
   // init configportal globals to known states
   configPortalActive = true;
-  connect = abort = false; // loop flags, connect true success, abort true break
+  abort = false;
+  _hasEnteredConfigPortal = true;
+  _cpConnectState = wm_cp_connect_state_t::idle;
+  _cpConnectMessage = F("Config portal active");
   _scanLifecycleBlocked = true;
+  emitPortalEvent(WM_EVENT_PORTAL_STARTED);
 
   _configPortalStart = millis();
 
@@ -625,7 +637,8 @@ boolean WiFiManager::process(){
     #endif
     
     processScan();
-	
+    processPortalConnect();
+
     if(webPortalActive || configPortalActive){
       // if timed out or abort, break
       if(_allowExit && (configPortalHasTimeout() || abort)){
@@ -643,89 +656,142 @@ boolean WiFiManager::process(){
         return false;
       }
 
-      uint8_t state = processConfigPortal(); // state is WL_IDLE or WL_CONNECTED/FAILED
-      return state == WL_CONNECTED;
+      processConfigPortal();
+      return false;
     }
     return false;
 }
 
+void WiFiManager::emitPortalEvent(wm_event_t event) {
+  if (_eventCallback) {
+    _eventCallback(event);
+  }
+}
+
+void WiFiManager::queuePortalConnect(const String& ssid, const String& pass) {
+  _cpConnectSsid = ssid;
+  _cpConnectPass = pass;
+  _cpConnectStatus = WL_IDLE_STATUS;
+  _cpConnectQueuedAt = millis();
+  _cpConnectStartedAt = 0;
+  _cpConnectDelayUntil = 0;
+  _cpConnectTimeoutMs = (_saveTimeout > 0) ? (unsigned long)_saveTimeout : _connectTimeout;
+  _cpConnectState = wm_cp_connect_state_t::queued;
+  _cpConnectMessage = ssid.length() ? F("WiFi connect queued") : F("Settings saved");
+  emitPortalEvent(WM_EVENT_PORTAL_CONNECT_QUEUED);
+}
+
+void WiFiManager::processPortalConnect() {
+  const unsigned long now = millis();
+  auto failPortalConnect = [&](uint8_t status, const String& message) {
+    _cpConnectStatus = status;
+    _cpConnectMessage = message;
+    _cpConnectState = wm_cp_connect_state_t::failed;
+    updateConxResult(status);
+    if (_shouldBreakAfterConfig) {
+      if (_savewificallback != NULL) {
+        #ifndef WM_NO_LOG
+        log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _savewificallback calling"));
+        #endif
+        _savewificallback();
+      }
+      shutdownConfigPortal();
+    }
+    emitPortalEvent(WM_EVENT_PORTAL_CONNECT_FAILED);
+  };
+
+  switch (_cpConnectState) {
+    case wm_cp_connect_state_t::idle:
+    case wm_cp_connect_state_t::success:
+    case wm_cp_connect_state_t::failed:
+      return;
+    case wm_cp_connect_state_t::queued:
+      resetAsyncScan(false);
+      if (_cpConnectSsid.length() == 0) {
+        _cpConnectStatus = WL_IDLE_STATUS;
+        _cpConnectMessage = F("Settings saved");
+        _cpConnectState = wm_cp_connect_state_t::success;
+        emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
+        return;
+      }
+      _cpConnectDelayUntil =
+        (_enableCaptivePortal && _cpclosedelay > 0) ? (now + (unsigned long)_cpclosedelay) : now;
+      _cpConnectMessage = F("Preparing WiFi connect");
+      _cpConnectState = wm_cp_connect_state_t::delaying;
+      return;
+    case wm_cp_connect_state_t::delaying:
+      if (now < _cpConnectDelayUntil) {
+        return;
+      }
+      _cpConnectState = wm_cp_connect_state_t::starting;
+      return;
+    case wm_cp_connect_state_t::starting: {
+      setSTAConfig();
+      if (!_connectonsave) {
+        if (!wifiConnectNew(_cpConnectSsid, _cpConnectPass, false)) {
+          failPortalConnect(WL_CONNECT_FAILED, F("WiFi begin failed"));
+          return;
+        }
+        _cpConnectStatus = WL_IDLE_STATUS;
+        _cpConnectMessage = F("Settings saved");
+        _cpConnectState = wm_cp_connect_state_t::success;
+        if (_savewificallback != NULL) {
+          #ifndef WM_NO_LOG
+          log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _savewificallback calling"));
+          #endif
+          _savewificallback();
+        }
+        emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
+        return;
+      }
+      if (!wifiConnectNew(_cpConnectSsid, _cpConnectPass, _connectonsave)) {
+        failPortalConnect(WL_CONNECT_FAILED, F("WiFi begin failed"));
+        return;
+      }
+      _cpConnectStartedAt = now;
+      _cpConnectMessage = F("Connecting to WiFi");
+      _cpConnectState = wm_cp_connect_state_t::waiting;
+      emitPortalEvent(WM_EVENT_PORTAL_CONNECT_START);
+      return;
+    }
+    case wm_cp_connect_state_t::waiting: {
+      const uint8_t status = WiFi.status();
+      _cpConnectStatus = status;
+      if (status == WL_CONNECTED) {
+        updateConxResult(status);
+        _cpConnectMessage = F("WiFi connected");
+        _cpConnectState = wm_cp_connect_state_t::success;
+        if (_savewificallback != NULL) {
+          #ifndef WM_NO_LOG
+          log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _savewificallback calling"));
+          #endif
+          _savewificallback();
+        }
+        emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
+        if (_disableConfigPortal) {
+          shutdownConfigPortal();
+        }
+        return;
+      }
+      if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL || status == WL_CONNECTION_LOST) {
+        failPortalConnect(status, getWLStatusString(status));
+        return;
+      }
+      if (_cpConnectTimeoutMs > 0U && (now - _cpConnectStartedAt) >= _cpConnectTimeoutMs) {
+        failPortalConnect(WL_CONNECT_FAILED, F("WiFi connect timeout"));
+      }
+      return;
+    }
+  }
+}
+
 /**
- * Process config portal state machine
- * @return WL_IDLE_STATUS, WL_CONNECTED, or WL_CONNECT_FAILED
+ * Config portal maintenance (DNS). WiFi connect workflow is in processPortalConnect().
+ * @return legacy status; connect result is reported via getConfigPortalConnectState().
  */
 uint8_t WiFiManager::processConfigPortal(){
     if(configPortalActive && _serverManager){
       _serverManager->processDNS();
-    }
-
-    // Waiting for save...
-    if(connect) {
-      connect = false;
-      _scanLifecycleBlocked = true;
-      resetAsyncScan(false);
-      #ifndef WM_NO_LOG
-      log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("processing save"));
-      #endif
-      if(_enableCaptivePortal) delay(_cpclosedelay); // keeps the captiveportal from closing to fast.
-
-      // skip wifi if no ssid
-      if(_ssid == ""){
-        #ifndef WM_NO_LOG
-        log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("No ssid, skipping wifi save"));
-        #endif
-      }
-      else{
-        // attempt sta connection to submitted _ssid, _pass
-        uint8_t res = connectWifi(_ssid, _pass, _connectonsave) == WL_CONNECTED;
-        if (res || (!_connectonsave)) {
-          #ifndef WM_NO_LOG
-          if(!_connectonsave){
-            log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("SAVED with no connect to new AP"));
-          } else {
-            log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("Connect to new AP [SUCCESS]"));
-            log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("Got IP Address:"));
-            log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, WiFi.localIP());
-          }
-          #endif
-
-          if ( _savewificallback != NULL) {
-            #ifndef WM_NO_LOG
-            log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("[CB] _savewificallback calling"));
-            #endif
-            _savewificallback(); // @CALLBACK
-          }
-          if(!_connectonsave) {
-            _scanLifecycleBlocked = false;
-            return WL_IDLE_STATUS;
-          }
-          if(_disableConfigPortal) shutdownConfigPortal();
-          _scanLifecycleBlocked = false;
-          return WL_CONNECTED; // CONNECT SUCCESS
-        }
-        #ifndef WM_NO_LOG
-        log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] Connect to new AP Failed"));
-        #endif
-      }
- 
-      if (_shouldBreakAfterConfig) {
-        // Execute save callback when breaking after config
-        if ( _savewificallback != NULL) {
-          #ifndef WM_NO_LOG
-          log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("[CB] WiFi/Param save callback"));
-          #endif
-          _savewificallback(); // @CALLBACK
-        }
-        if(_disableConfigPortal) shutdownConfigPortal();
-        _scanLifecycleBlocked = false;
-        return WL_CONNECT_FAILED; // CONNECT FAIL
-      }
-      else{
-        // Portal remaining open
-        #ifndef WM_NO_LOG
-        log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("Portal remaining open"));
-        #endif        
-      }
-      _scanLifecycleBlocked = false;
     }
 
     return WL_IDLE_STATUS;
@@ -757,6 +823,12 @@ bool WiFiManager::shutdownConfigPortal(){
 
   if(!configPortalActive) return false;
 
+  if (_cpConnectState == wm_cp_connect_state_t::queued || _cpConnectState == wm_cp_connect_state_t::delaying
+      || _cpConnectState == wm_cp_connect_state_t::starting || _cpConnectState == wm_cp_connect_state_t::waiting) {
+    _cpConnectState = wm_cp_connect_state_t::idle;
+    _cpConnectMessage = F("Portal closed");
+  }
+
   _scanLifecycleBlocked = true;
 
   // Turn off AP
@@ -783,6 +855,7 @@ bool WiFiManager::shutdownConfigPortal(){
   log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("configportal closed"));
   _end();
   _scanLifecycleBlocked = false;
+  emitPortalEvent(WM_EVENT_PORTAL_STOPPED);
   return ret;
 }
 
@@ -1350,7 +1423,11 @@ bool WiFiManager::canRunAsyncScan() const {
     return false;
   }
 
-  if (_scanLifecycleBlocked || connect || _abortScheduled || _rebootScheduled || abort) {
+  if (_scanLifecycleBlocked) {
+    return false;
+  }
+
+  if (isConfigPortalConnectPending() || _abortScheduled || _rebootScheduled || abort) {
     return false;
   }
 
@@ -2020,7 +2097,7 @@ void WiFiManager::setShowInfo(boolean enabled){
  * check if the config portal is running
  * @return bool true if active
  */
-bool WiFiManager::getConfigPortalActive(){
+bool WiFiManager::getConfigPortalActive() const {
   return configPortalActive;
 }
 
@@ -2032,6 +2109,51 @@ bool WiFiManager::getWebPortalActive(){
   return webPortalActive;
 }
 
+bool WiFiManager::hasEnteredConfigPortal() const {
+  return _hasEnteredConfigPortal;
+}
+
+WiFiManager::wm_configportal_connect_state_t WiFiManager::getConfigPortalConnectState() const {
+  switch (_cpConnectState) {
+    case wm_cp_connect_state_t::queued:
+    case wm_cp_connect_state_t::delaying:
+    case wm_cp_connect_state_t::starting:
+    case wm_cp_connect_state_t::waiting:
+      return WM_CP_CONNECT_WAITING;
+    case wm_cp_connect_state_t::success:
+      return WM_CP_CONNECT_SUCCESS;
+    case wm_cp_connect_state_t::failed:
+      return WM_CP_CONNECT_FAILED;
+    case wm_cp_connect_state_t::idle:
+    default:
+      return WM_CP_CONNECT_IDLE;
+  }
+}
+
+bool WiFiManager::isConfigPortalConnectPending() const {
+  return _cpConnectState == wm_cp_connect_state_t::queued || _cpConnectState == wm_cp_connect_state_t::delaying
+         || _cpConnectState == wm_cp_connect_state_t::starting || _cpConnectState == wm_cp_connect_state_t::waiting;
+}
+
+bool WiFiManager::didConfigPortalConnectSucceed() const {
+  return _cpConnectState == wm_cp_connect_state_t::success;
+}
+
+bool WiFiManager::didConfigPortalConnectFail() const {
+  return _cpConnectState == wm_cp_connect_state_t::failed;
+}
+
+uint8_t WiFiManager::getConfigPortalConnectStatus() const {
+  return _cpConnectStatus;
+}
+
+String WiFiManager::getConfigPortalConnectMessage() const {
+  return _cpConnectMessage;
+}
+
+void WiFiManager::setEventCallback(WiFiManagerEventCallback cb) {
+  _eventCallback = cb;
+}
 
 String WiFiManager::getWiFiHostname(){
   #ifdef ESP32
@@ -2591,5 +2713,11 @@ void WiFiManager::WiFi_autoReconnect(){
     if(wm_event_id == 0) wm_event_id = WiFi.onEvent(std::bind(&WiFiManager::WiFiEvent,this,_1,_2));
   #endif
 }
+
+#ifdef UNIT_TEST
+void WiFiManager::wmTestSetConnectPending(bool active) {
+  _cpConnectState = active ? wm_cp_connect_state_t::waiting : wm_cp_connect_state_t::idle;
+}
+#endif
 
 #endif

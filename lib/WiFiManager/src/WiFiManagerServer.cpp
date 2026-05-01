@@ -16,7 +16,6 @@
 #include <DeviceFrameworkTemplateEngineDebug.h>
 #endif
 #include "templates/CSS.h"
-#include "templates/JS.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
@@ -43,17 +42,12 @@ void WiFiManagerServer::registerDefaultStyles(PlaceholderRegistry& reg) {
   reg.registerProgmemData("%STYLES%", CSS_STYLE);
 }
 
-void WiFiManagerServer::registerDefaultScripts(PlaceholderRegistry& reg) {
-  reg.registerProgmemData("%SCRIPTS%", JS_SCRIPT);
-}
-
 void WiFiManagerServer::registerDefaultPageTitle(PlaceholderRegistry& reg) {
   reg.registerRamData("%PAGE_TITLE%", &WiFiManagerServer::tplGetPageTitle);
 }
 
 void WiFiManagerServer::registerDefaultPlaceholders(PlaceholderRegistry& reg) {
   registerDefaultStyles(reg);
-  registerDefaultScripts(reg);
   registerDefaultPageTitle(reg);
 }
 
@@ -137,6 +131,9 @@ void WiFiManagerServer::registerRoutes() {
   });
   server->on(WM_G(R_api_wifi_save), HTTP_POST, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleApiWifiSave(request);
+  });
+  server->on(WM_G(R_api_wifi_connect_status), HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiConnectStatus(request);
   });
   server->on(WM_G(R_api_params), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleApiParamsGet(request);
