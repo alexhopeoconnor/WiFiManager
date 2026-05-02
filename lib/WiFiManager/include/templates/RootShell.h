@@ -6,6 +6,10 @@
  *
  * Single-page portal shell: only HTML document served for GET /.
  * Dynamic UI is driven by embedded JS + JSON APIs under /api/...
+ *
+ * Placeholder keys (%PAGE_TITLE%, %STYLES%, %BOOTSTRAP_JSON%, %PORTAL_APP_JS%) are filled per request in
+ * WiFiManagerHandlers::handleRoot (shell contract comment in WiFiManagerHandlers.cpp); do not treat
+ * placeholders as a customization API.
  */
 
 #ifndef _WM_ROOT_SHELL_TEMPLATE_H_

@@ -16,6 +16,14 @@
 #include <memory>
 #include "WiFiManager.h"
 
+#ifndef WM_TEMPLATE_REGISTRY_CAPACITY
+#define WM_TEMPLATE_REGISTRY_CAPACITY 16
+#endif
+
+// Portal UI customization is driven by WiFiManager state and helpers such as setTitle(), setShowInfo(),
+// setParamsPage(), setShowInfoUpdate(), etc., surfaced through bootstrap/API JSON — not by mutating template
+// placeholder registries.
+
 // -----------------------------------------------------------------------------------------------
 // FORM FIELD NAMES (for IP configuration forms)
 
@@ -79,6 +87,7 @@ class WiFiManagerHandlers {
     String buildApiWifiConnectStatusJson();
 
     /** Fixed JSON bodies for POST action endpoints (single source for handlers + tests). */
+    static String jsonApiWifiScanAccepted();
     static String jsonApiDeviceRestartScheduled();
     static String jsonApiParamsSaveOk();
     static String jsonApiPortalCloseOk();

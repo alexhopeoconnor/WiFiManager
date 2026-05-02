@@ -37,12 +37,6 @@
 #include <functional>
 #include <memory>
 
-#include <TemplateEngine.h>
-
-#ifndef WM_TEMPLATE_REGISTRY_CAPACITY
-#define WM_TEMPLATE_REGISTRY_CAPACITY 16
-#endif
-
 class WiFiManager;
 class WiFiManagerHandlers;
 
@@ -74,20 +68,8 @@ const char R_updatedone[]         PROGMEM = "/u";
 
 class WiFiManagerServer {
   public:
-    static WiFiManagerServer* instance();
-
     WiFiManagerServer(WiFiManager* wm);
     ~WiFiManagerServer();
-
-    void setupTemplateEngine();
-    PlaceholderRegistry* getPlaceholderRegistry() { return _tplRegistry.get(); }
-
-    static const char* tplGetPageTitle();
-
-    void registerDefaultStyles(PlaceholderRegistry& reg);
-    void registerDefaultPageTitle(PlaceholderRegistry& reg);
-    /** Shell placeholders only: %STYLES%, %PAGE_TITLE%. */
-    void registerDefaultPlaceholders(PlaceholderRegistry& reg);
 
     void createServer(uint16_t port);
     void registerRoutes();
@@ -103,14 +85,10 @@ class WiFiManagerServer {
     std::unique_ptr<AsyncWebServer> server;
     std::unique_ptr<DNSServer> dnsServer;
 
-    std::unique_ptr<PlaceholderRegistry> _tplRegistry;
-
 #ifdef WM_DFTE_LOGGING
     std::unique_ptr<WiFiManagerDfteLogger> _dfteLogger;
     bool _wmOwnsDfteLogSink = false;
 #endif
-
-    static WiFiManagerServer* s_instance;
 };
 
 #endif // defined(ESP8266) || defined(ESP32)

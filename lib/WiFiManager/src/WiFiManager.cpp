@@ -727,6 +727,9 @@ void WiFiManager::processPortalConnect() {
       return;
     case wm_cp_connect_state_t::starting: {
       setSTAConfig();
+      if (_cleanConnect) {
+        WiFi_Disconnect(); // match connectWifi(): force a clean STA begin for portal saves too
+      }
       if (!_connectonsave) {
         if (!wifiConnectNew(_cpConnectSsid, _cpConnectPass, false)) {
           failPortalConnect(WL_CONNECT_FAILED, F("WiFi begin failed"));

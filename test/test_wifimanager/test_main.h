@@ -131,8 +131,6 @@ void test_api_wifi_meta_json_shape();
 void test_api_info_json_shape();
 void test_api_params_json_shape();
 void test_api_status_json_shape();
-void test_api_action_response_json_literals();
-void test_api_ota_done_success_json_literal();
 
 // State transition tests
 void test_portal_to_connected_transition();

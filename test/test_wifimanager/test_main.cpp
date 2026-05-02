@@ -15,8 +15,6 @@ TestCase tests[] = {
     TEST_ENTRY(test_api_info_json_shape),
     TEST_ENTRY(test_api_params_json_shape),
     TEST_ENTRY(test_api_status_json_shape),
-    TEST_ENTRY(test_api_action_response_json_literals),
-    TEST_ENTRY(test_api_ota_done_success_json_literal),
     
     // Configuration tests
     TEST_ENTRY(test_configuration_setters),

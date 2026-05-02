@@ -4,7 +4,8 @@
  * @author alexhopeoconnor
  * @license MIT
  *
- * Server lifecycle: single shell + JSON APIs + OTA + captive portal.
+ * HTTP server lifecycle and route registration only. HTML shell rendering is request-scoped in
+ * WiFiManagerHandlers (WM_ROOT_SHELL_TEMPLATE + per-request placeholder registry).
  * Route inventory matches WiFiManagerServer.h (GET /, /api/..., POST /u, onNotFound).
  */
 
@@ -15,60 +16,13 @@
 #include "WiFiManagerDfteLogger.h"
 #include <DeviceFrameworkTemplateEngineDebug.h>
 #endif
-#include "templates/CSS.h"
 
 #if defined(ESP8266) || defined(ESP32)
 
-WiFiManagerServer* WiFiManagerServer::s_instance = nullptr;
-
-WiFiManagerServer* WiFiManagerServer::instance() {
-  return s_instance;
-}
-
 WiFiManagerServer::WiFiManagerServer(WiFiManager* wm)
-    : _wm(wm), _handlers(std::make_unique<WiFiManagerHandlers>(wm)) {
-  s_instance = this;
-}
+    : _wm(wm), _handlers(std::make_unique<WiFiManagerHandlers>(wm)) {}
 
 WiFiManagerServer::~WiFiManagerServer() = default;
-
-const char* WiFiManagerServer::tplGetPageTitle() {
-  auto srv = WiFiManagerServer::instance();
-  if (!srv || !srv->_wm) return "";
-  return srv->_wm->_title.c_str();
-}
-
-void WiFiManagerServer::registerDefaultStyles(PlaceholderRegistry& reg) {
-  reg.registerProgmemData("%STYLES%", CSS_STYLE);
-}
-
-void WiFiManagerServer::registerDefaultPageTitle(PlaceholderRegistry& reg) {
-  reg.registerRamData("%PAGE_TITLE%", &WiFiManagerServer::tplGetPageTitle);
-}
-
-void WiFiManagerServer::registerDefaultPlaceholders(PlaceholderRegistry& reg) {
-  registerDefaultStyles(reg);
-  registerDefaultPageTitle(reg);
-}
-
-void WiFiManagerServer::setupTemplateEngine() {
-  if (!_tplRegistry) {
-    _tplRegistry = std::unique_ptr<PlaceholderRegistry>(new PlaceholderRegistry(WM_TEMPLATE_REGISTRY_CAPACITY));
-  } else {
-    _tplRegistry->clear();
-  }
-  registerDefaultPlaceholders(*_tplRegistry);
-
-#ifdef WM_DFTE_LOGGING
-  if (!deviceFrameworkTemplateEngineIsLoggingEnabled()) {
-    if (!_dfteLogger) {
-      _dfteLogger = std::make_unique<WiFiManagerDfteLogger>(_wm);
-    }
-    deviceFrameworkTemplateEngineEnableLogging(_dfteLogger.get(), static_cast<const void*>(this));
-    _wmOwnsDfteLogSink = true;
-  }
-#endif
-}
 
 void WiFiManagerServer::createServer(uint16_t port) {
   if (server) {
@@ -89,7 +43,18 @@ void WiFiManagerServer::createServer(uint16_t port) {
   }
 
   server.reset(new AsyncWebServer(port));
-  setupTemplateEngine();
+
+#ifdef WM_DFTE_LOGGING
+  // DFTE logging is still owned by server lifecycle; it is intentionally independent of
+  // request-scoped shell rendering / placeholder registration.
+  if (!deviceFrameworkTemplateEngineIsLoggingEnabled()) {
+    if (!_dfteLogger) {
+      _dfteLogger = std::make_unique<WiFiManagerDfteLogger>(_wm);
+    }
+    deviceFrameworkTemplateEngineEnableLogging(_dfteLogger.get(), static_cast<const void*>(this));
+    _wmOwnsDfteLogSink = true;
+  }
+#endif
 }
 
 void WiFiManagerServer::registerRoutes() {
@@ -98,10 +63,6 @@ void WiFiManagerServer::registerRoutes() {
     _wm->log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem, F("[ERROR] Server not created, call createServer() first"));
 #endif
     return;
-  }
-
-  if (!_tplRegistry) {
-    setupTemplateEngine();
   }
 
   if (_wm->_webservercallback != NULL) {
@@ -212,8 +173,6 @@ void WiFiManagerServer::shutdownServer() {
     dnsServer->stop();
     dnsServer.reset();
   }
-
-  if (s_instance == this) s_instance = nullptr;
 }
 
 #endif

@@ -31,10 +31,11 @@ This fork currently includes the following architectural improvements:
 - **Data-first JSON generation** for portal APIs, including info/device/about data, instead of HTML-to-JSON parsing.
 - **Capability-driven UI flags** in bootstrap/API payloads so features like info, update, erase, and action visibility can be controlled by backend state.
 - **SPA-native feedback UX** using in-DOM dialog/toast behavior rather than page-based action flows.
-- A **single shell render contract** with default shell placeholders (`%PAGE_TITLE%`, `%STYLES%`) plus embedded runtime payloads (`%BOOTSTRAP_JSON%`, `%PORTAL_APP_JS%`).
+- **Request-scoped shell rendering**: the root portal page is built for each `GET /` from `WM_ROOT_SHELL_TEMPLATE` using a fresh placeholder registry. Shell inputs are only `%PAGE_TITLE%`, `%STYLES%`, `%BOOTSTRAP_JSON%`, and `%PORTAL_APP_JS%` — filled in `WiFiManagerHandlers` from WiFiManager state and embedded assets (not from a server-wide template registry).
+- **Customization via WiFiManager APIs** (`setTitle`, `setShowInfo`, `setParamsPage`, bootstrap-facing flags, etc.), not by exposing placeholder-registry mutation to consumers.
 - A clearer separation between:
-  - shell rendering
-  - API responses
+  - shell rendering (handlers + SPA bootstrap)
+  - JSON API responses
   - captive portal behavior
   - OTA handling
 - Updated tests focused on the **shell contract**, **bootstrap payloads**, and **API JSON shapes** rather than removed legacy portal pages.

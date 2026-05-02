@@ -8,7 +8,6 @@
  */
 
 #include "WiFiManagerHandlers.h"
-#include "WiFiManagerServer.h"
 #include "templates/CSS.h"
 #include "templates/RootShell.h"
 #include "templates/PortalAppJS.h"
@@ -39,8 +38,6 @@ static void jsonAppendEscaped(String& out, const String& s) {
 }
 
 namespace {
-
-const char kEmptyTemplateChunk[] PROGMEM = "";
 
 inline void reservePage(String& page, size_t extraBytes = WM_PAGE_RESERVE_BYTES) {
   if (extraBytes == 0) return;
@@ -76,16 +73,13 @@ AsyncWebServerResponse* beginTemplateResponse(AsyncWebServerRequest* request,
   );
 }
 
-void registerSharedShellPlaceholders(WiFiManagerServer* server, PlaceholderRegistry& registry) {
-  if (server) {
-    server->registerDefaultStyles(registry);
-    return;
-  }
+// Shell contract (must match templates/RootShell.h — customize UI via WiFiManager APIs + bootstrap JSON, not registries):
+//   %PAGE_TITLE%      -> document title (from WiFiManager title state)
+//   %STYLES%          -> embedded portal CSS
+//   %BOOTSTRAP_JSON%  -> initial SPA runtime payload
+//   %PORTAL_APP_JS%   -> embedded SPA source
 
-  registry.registerProgmemData("%STYLES%", CSS_STYLE);
-}
-
-struct ShellRenderBundle {
+struct PortalShellRenderBundle {
   String bootstrapJson;
   String pageTitleStatic;
   PlaceholderRegistry registry;
@@ -93,9 +87,22 @@ struct ShellRenderBundle {
   DynamicTemplateDescriptor bootstrapDescriptor;
   DynamicTemplateDescriptor pageTitleDescriptor;
 
-  ShellRenderBundle()
+  PortalShellRenderBundle()
       : registry(WM_TEMPLATE_REGISTRY_CAPACITY), bootstrapDescriptor{}, pageTitleDescriptor{} {}
 };
+
+void populatePortalShellBundle(PortalShellRenderBundle& bundle,
+                               const String& pageTitle,
+                               const String& bootstrapJson) {
+  bundle.pageTitleStatic = pageTitle;
+  bundle.bootstrapJson = bootstrapJson;
+  bundle.registry.registerProgmemData("%STYLES%", CSS_STYLE);
+  bundle.registry.registerProgmemData("%PORTAL_APP_JS%", PORTAL_APP_JS);
+  configureDynamicStringDescriptor(bundle.pageTitleDescriptor, bundle.pageTitleStatic);
+  bundle.registry.registerDynamicTemplate("%PAGE_TITLE%", &bundle.pageTitleDescriptor);
+  configureDynamicStringDescriptor(bundle.bootstrapDescriptor, bundle.bootstrapJson);
+  bundle.registry.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bundle.bootstrapDescriptor);
+}
 
 }  // namespace
 
@@ -547,22 +554,15 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
   if (captivePortal(request)) return;
   handleRequest(request);
 
-  auto bundle = std::make_shared<ShellRenderBundle>();
-  bundle->bootstrapJson = buildPortalBootstrapJson();
-
-  if (_wm->_serverManager) {
-    _wm->_serverManager->registerDefaultStyles(bundle->registry);
-    _wm->_serverManager->registerDefaultPageTitle(bundle->registry);
-  } else {
-    registerSharedShellPlaceholders(nullptr, bundle->registry);
-    bundle->pageTitleStatic = _wm->_title;
-    configureDynamicStringDescriptor(bundle->pageTitleDescriptor, bundle->pageTitleStatic);
-    bundle->registry.registerDynamicTemplate("%PAGE_TITLE%", &bundle->pageTitleDescriptor);
-  }
-
-  configureDynamicStringDescriptor(bundle->bootstrapDescriptor, bundle->bootstrapJson);
-  bundle->registry.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bundle->bootstrapDescriptor);
-  bundle->registry.registerProgmemData("%PORTAL_APP_JS%", PORTAL_APP_JS);
+  // Root shell render model:
+  // - WiFiManagerHandlers owns request-time shell assembly; WiFiManagerServer owns HTTP lifecycle only.
+  // - Build one request-scoped PortalShellRenderBundle.
+  // - Populate one request-scoped PlaceholderRegistry with shell defaults + request payloads.
+  // - Render WM_ROOT_SHELL_TEMPLATE.
+  auto bundle = std::make_shared<PortalShellRenderBundle>();
+  populatePortalShellBundle(*bundle,
+                            _wm ? _wm->_title : String(),
+                            buildPortalBootstrapJson());
 
   request->send(beginTemplateResponse(request, bundle, WM_ROOT_SHELL_TEMPLATE));
 }
@@ -1011,7 +1011,7 @@ void WiFiManagerHandlers::handleApiWifiScan(AsyncWebServerRequest *request) {
   _wm->requestAsyncScan(true);
 
   AsyncWebServerResponse *response =
-      request->beginResponse(202, "application/json", "{\"accepted\":true,\"state\":\"queued\"}");
+      request->beginResponse(202, "application/json", jsonApiWifiScanAccepted());
   response->addHeader(F("Cache-Control"), F("no-cache"));
   request->send(response);
 }
@@ -1179,6 +1179,10 @@ String WiFiManagerHandlers::buildApiStatusJson() {
 void WiFiManagerHandlers::handleApiStatus(AsyncWebServerRequest *request) {
   handleRequest(request);
   sendApiJson(request, 200, buildApiStatusJson());
+}
+
+String WiFiManagerHandlers::jsonApiWifiScanAccepted() {
+  return F("{\"accepted\":true,\"state\":\"queued\"}");
 }
 
 String WiFiManagerHandlers::jsonApiDeviceRestartScheduled() {

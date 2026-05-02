@@ -18,9 +18,11 @@ const char PORTAL_APP_JS[] PROGMEM = R"rawliteral(
 var boot={};
 try{var el=document.getElementById('wm-bootstrap');if(el&&el.textContent)boot=JSON.parse(el.textContent);}catch(e){boot={};}
 
+// --- Core / DOM ---
 function $(id){return document.getElementById(id);}
 function esc(t){if(!t)return'';return String(t).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
 
+// --- Toast / dialog ---
 var _wmToastTimer=null;
 function showToast(msg,isErr){
   var el=$('wm-toast');
@@ -50,13 +52,37 @@ function showConfirm(msg,onOk){
   ok.onclick=function(){hide();if(onOk)onOk();};
 }
 
+function bindPortalChromeEvents(){
+  var back=$('wm-nav-back');
+  if(back){
+    back.addEventListener('click', function(ev){ ev.preventDefault(); history.back(); });
+  }
+  var r=$('wm-restart-btn'), e=$('wm-exit-btn'), c=$('wm-close-captive-btn'), er=$('wm-erase-btn');
+  if(r && window.portalRestart) r.addEventListener('click', window.portalRestart);
+  if(e && window.portalExit) e.addEventListener('click', window.portalExit);
+  if(c && window.portalCloseCaptive) c.addEventListener('click', window.portalCloseCaptive);
+  if(er && window.portalErase) er.addEventListener('click', window.portalErase);
+}
+
+function bindFormSubmitHandlers(){
+  var wf=$('wm-wifi-form'), pf=$('wm-param-form'), of=$('wm-ota-form');
+  if(wf && window.portalWifiSave) wf.addEventListener('submit', window.portalWifiSave);
+  if(pf && window.portalParamSave) pf.addEventListener('submit', window.portalParamSave);
+  if(of && window.portalOtaSubmit) of.addEventListener('submit', window.portalOtaSubmit);
+}
+
+// --- View shell ---
 function setView(html){
   var a=$('app');
   if(!a)return;
   stopWifiScanPolling();
+  stopWifiConnectPolling();
   a.innerHTML="<div class='wrap'>"+html+"</div>";
+  bindPortalChromeEvents();
+  bindFormSubmitHandlers();
 }
 
+// --- Field render (WiFi / params meta) ---
 function renderMetaField(f){
   if(!f)return'';
   if(f.html)return f.html;
@@ -89,7 +115,7 @@ function navBar(){
   if(!f.paramsInWifi){h+=" &middot; <a href='#/setup'>Setup</a>";}
   if(f.showInfo!==false){h+=" &middot; <a href='#/info'>Info</a>";}
   if(f.showUpdate){h+=" &middot; <a href='#/update'>Update</a>";}
-  if(boot.showBack){h+=" &middot; <a href='#' onclick='history.back();return false;'>Back</a>";}
+  if(boot.showBack){h+=" &middot; <a href='#' id='wm-nav-back'>Back</a>";}
   h+="</p><hr/>";
   return h;
 }
@@ -97,9 +123,9 @@ function navBar(){
 function deviceActionsHtml(){
   var f=boot.features||{};
   var h='', ok=false;
-  if(f.showRestart){h+="<p><button type='button' onclick='portalRestart()'>Restart</button></p>";ok=true;}
-  if(f.showExitPortal){h+="<p><button type='button' onclick='portalExit()'>Exit portal</button></p>";ok=true;}
-  if(f.showCloseCaptive){h+="<p><button type='button' onclick='portalCloseCaptive()'>Stop captive portal detection</button></p>";ok=true;}
+  if(f.showRestart){h+="<p><button type='button' id='wm-restart-btn'>Restart</button></p>";ok=true;}
+  if(f.showExitPortal){h+="<p><button type='button' id='wm-exit-btn'>Exit portal</button></p>";ok=true;}
+  if(f.showCloseCaptive){h+="<p><button type='button' id='wm-close-captive-btn'>Stop captive portal detection</button></p>";ok=true;}
   if(!ok)return'';
   return "<div class='device-actions'><h3>Device actions</h3>"+h+"</div>";
 }
@@ -115,12 +141,14 @@ function viewHome(){
   setView(html);
 }
 
+// --- HTTP ---
 function api(path, opt){
   opt=opt||{};
   return fetch(path,{method:opt.method||'GET',headers:opt.headers,body:opt.body,credentials:'same-origin'})
     .then(function(r){return r.text().then(function(t){return {ok:r.ok,status:r.status,body:t};});});
 }
 
+// --- WiFi scan view ---
 var _wmWifiScanPollTimer=null;
 
 function stopWifiScanPolling(){
@@ -206,7 +234,7 @@ function viewWifi(){
     try{var m=JSON.parse(res.body);}catch(e){m={};}
     var html=navBar()+"<h2>WiFi</h2>";
     html+="<div id='wm-scan-results'></div>";
-    html+="<form id='wm-wifi-form' onsubmit='return portalWifiSave(event)'>";
+    html+="<form id='wm-wifi-form'>";
     html+=renderFieldList(m.wifiFields||[]);
     var wf=m.wifiFields||[];
     var hasPass=false;
@@ -231,26 +259,38 @@ function viewWifi(){
   });
 }
 
+// --- WiFi connect polling ---
+var _wmWifiConnectPollTimer=null;
+
+function stopWifiConnectPolling(){
+  if(_wmWifiConnectPollTimer){
+    clearInterval(_wmWifiConnectPollTimer);
+    _wmWifiConnectPollTimer=null;
+  }
+}
+
 function pollWifiConnectStatus(){
-  var msg=$('wm-wifi-msg');
-  var iv=setInterval(function(){
+  stopWifiConnectPolling();
+  _wmWifiConnectPollTimer=setInterval(function(){
     api('/api/wifi/connect-status').then(function(res){
       var j={};
+      var msg=$('wm-wifi-msg');
       try{j=JSON.parse(res.body);}catch(e){}
       if(msg&&j.message){
         msg.innerHTML=esc(j.message);
       }
       if(j.state==='success'){
-        clearInterval(iv);
+        stopWifiConnectPolling();
         showToast(j.message||'WiFi connected',false);
         location.hash='#/';
       }else if(j.state==='failed'){
-        clearInterval(iv);
+        stopWifiConnectPolling();
         showToast(j.message||'WiFi connect failed',true);
       }
     });
   },700);
 }
+
 window.portalWifiSave=function(ev){
   ev.preventDefault();
   var fd=new FormData(document.getElementById('wm-wifi-form'));
@@ -269,6 +309,7 @@ window.portalWifiSave=function(ev){
   return false;
 };
 
+// --- Info view ---
 function viewInfo(){
   setView(navBar()+"<p>Loading info...</p>");
   api('/api/info').then(function(res){
@@ -300,11 +341,11 @@ function viewInfo(){
     html+=section('About',d.about||[]);
     var act=d.actions||{};
     html+="<h3>Actions</h3><hr/>";
-    if(act.showRestart)html+="<p><button type='button' onclick='portalRestart()'>Restart</button></p>";
-    if(act.showExitPortal)html+="<p><button type='button' onclick='portalExit()'>Exit portal</button></p>";
-    if(act.showCloseCaptive)html+="<p><button type='button' onclick='portalCloseCaptive()'>Stop captive portal detection</button></p>";
+    if(act.showRestart)html+="<p><button type='button' id='wm-restart-btn'>Restart</button></p>";
+    if(act.showExitPortal)html+="<p><button type='button' id='wm-exit-btn'>Exit portal</button></p>";
+    if(act.showCloseCaptive)html+="<p><button type='button' id='wm-close-captive-btn'>Stop captive portal detection</button></p>";
     if(act.showUpdate)html+="<p><a href='#/update'>Firmware update</a></p>";
-    if(act.showErase)html+="<p><button type='button' class='D' onclick='portalErase()'>Erase WiFi config</button></p>";
+    if(act.showErase)html+="<p><button type='button' class='D' id='wm-erase-btn'>Erase WiFi config</button></p>";
     setView(html);
   });
 }
@@ -332,12 +373,13 @@ window.portalErase=function(){
   });
 };
 
+// --- Params / OTA ---
 function viewSetup(){
   setView(navBar()+"<p>Loading...</p>");
   api('/api/params').then(function(res){
     try{var d=JSON.parse(res.body);}catch(e){d={};}
     var html=navBar()+"<h2>Parameters</h2>";
-    html+="<form id='wm-param-form' onsubmit='return portalParamSave(event)'>";
+    html+="<form id='wm-param-form'>";
     html+=renderFieldList(d.params||[]);
     html+="<button type='submit'>Save</button></form>";
     html+="<div id='wm-param-msg'></div>";
@@ -361,7 +403,7 @@ function viewUpdate(){
   var f=boot.features||{};
   var html=navBar()+"<h2>Firmware update</h2>";
   if(!f.showUpdate){html+="<p>Firmware update is disabled.</p>";setView(html);return;}
-  html+="<form id='wm-ota-form' onsubmit='return portalOtaSubmit(event)'>";
+  html+="<form id='wm-ota-form'>";
   html+="<input type='file' id='wm-ota-file' name='update'/>";
   html+="<button type='submit'>Upload</button></form>";
   html+="<p><small>Upload a .bin firmware. The device restarts after a successful update.</small></p>";
@@ -405,6 +447,7 @@ window.portalOtaSubmit=function(ev){
   return false;
 };
 
+// --- Routing ---
 function route(){
   var h=location.hash||'#/';
   if(h.indexOf('#/')!==0)h='#/';
