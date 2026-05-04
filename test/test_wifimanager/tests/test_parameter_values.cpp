@@ -44,7 +44,7 @@ void test_parameter_value_persistence() {
     WiFiManager wm;
     
     WiFiManagerParameter param("server", "Server", "default", 40);
-    wm.addParameter(&param);
+    wm.portalAddParameter(&param);
     
     // Set value
     param.setValue("persisted_value", 40);
@@ -87,9 +87,9 @@ void test_multiple_parameters_different_values() {
     WiFiManagerParameter p2("port", "Port", "1883", 6);
     WiFiManagerParameter p3("key", "Key", "default_key", 32);
     
-    wm.addParameter(&p1);
-    wm.addParameter(&p2);
-    wm.addParameter(&p3);
+    wm.portalAddParameter(&p1);
+    wm.portalAddParameter(&p2);
+    wm.portalAddParameter(&p3);
     
     // Set different values
     p1.setValue("10.0.0.1", 40);

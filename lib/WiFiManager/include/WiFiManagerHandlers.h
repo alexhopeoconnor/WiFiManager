@@ -20,8 +20,7 @@
 #define WM_TEMPLATE_REGISTRY_CAPACITY 16
 #endif
 
-// Portal UI customization is driven by WiFiManager state and helpers such as setTitle(), setShowInfo(),
-// setParametersEmbeddedInWifi(), setShowInfoUpdate(), etc., surfaced through bootstrap/API JSON — not by mutating template
+// Portal UI customization is driven by WiFiManager `portal*` APIs and JSON (/api/...) — not by mutating template
 // placeholder registries.
 
 // -----------------------------------------------------------------------------------------------
@@ -106,11 +105,14 @@ class WiFiManagerHandlers {
     void appendPortalJsonStaticFields(String& json, bool& first);
     void appendPortalJsonCustomParams(String& json, bool& first);
 
+    String composePortalStylesheet() const;
+    void appendPortalExtraInfoSectionsJson(String& json, bool& first);
+    void appendPortalExtraHomeCardsJson(String& json, bool& first);
+
     void appendJsonKvItem(String& json, bool& first, const char* key, const String& label, const String& value);
     void appendOneInfoItemForId(String& json, bool& first, const char* id);
     void appendInfoSectionFromIds(String& json, const char* const* ids, size_t count, bool& first);
 
-    void appendPortalUiFeatureFlagsJson(String& json);
     void appendApiInfoActionsJson(String& json);
 
     static void sendApiJson(AsyncWebServerRequest *request, int code, const String& json);

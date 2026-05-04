@@ -57,7 +57,7 @@ void test_scan_status_checking() {
     TEST_ASSERT_EQUAL(static_cast<size_t>(2), wm.getScanResults().size());
     TEST_ASSERT_EQUAL_STRING("Office", wm.getScanResults()[0].ssid.c_str());
 #else
-    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
 #endif
 
     Serial.println("[TEST]   Cached scan snapshot state test completed successfully");
@@ -79,7 +79,7 @@ void test_scan_completion_wait() {
     TEST_ASSERT_FALSE_MESSAGE(wm.hasValidScanResults(),
                               "Timed out scans should not leave cached results marked valid");
 #else
-    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
 #endif
 
     Serial.println("[TEST]   Scan timeout transition test completed successfully");
@@ -101,7 +101,7 @@ void test_scan_cancels_when_connect_pending() {
     TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().schedulePending,
                               "Connect flow should cancel any in-flight async scan");
 #else
-    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
 #endif
 
     Serial.println("[TEST]   Scan cancellation during connect test completed successfully");
@@ -122,7 +122,7 @@ void test_scan_cancels_when_lifecycle_blocked() {
     TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().schedulePending,
                               "Lifecycle blocking should leave scan engine idle");
 #else
-    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
 #endif
 
     Serial.println("[TEST]   Scan cancellation during lifecycle block test completed successfully");
@@ -144,7 +144,7 @@ void test_scan_generation_invalidated_on_reset() {
     TEST_ASSERT_FALSE_MESSAGE(wm.getScanSnapshot().completionPending,
                               "Resetting scan state should clear pending completion callbacks");
 #else
-    TEST_ASSERT_TRUE_MESSAGE(true, "UNIT_TEST helpers unavailable");
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
 #endif
 
     Serial.println("[TEST]   Scan generation invalidation on reset test completed successfully");

@@ -70,7 +70,7 @@ void test_parameter_add_and_retrieve() {
     
     // 1. Add parameters
     WiFiManagerParameter param("server", "Server", "default", 40);
-    wm.addParameter(&param);
+    wm.portalAddParameter(&param);
     
     TEST_ASSERT_EQUAL(1, wm.getParametersCount());
     
@@ -135,8 +135,8 @@ void test_portal_with_parameters_and_infrastructure() {
     // Add parameters
     WiFiManagerParameter p1("server", "Server", "192.168.1.1", 40);
     WiFiManagerParameter p2("port", "Port", "1883", 6);
-    wm.addParameter(&p1);
-    wm.addParameter(&p2);
+    wm.portalAddParameter(&p1);
+    wm.portalAddParameter(&p2);
     
     // Start portal
     wm.startConfigPortal("TestAP");

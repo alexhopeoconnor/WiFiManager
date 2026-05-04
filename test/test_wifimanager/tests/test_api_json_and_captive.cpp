@@ -29,6 +29,14 @@ void test_api_wifi_meta_json_shape() {
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"actions\"")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"canRefreshScan\":true")));
 
+    WiFiManagerParameter fieldParam("mqtt_host", "MQTT host", "broker.local", 64, "placeholder='broker.local'");
+    WiFiManagerParameter htmlParam("<div class='wm-callout wm-callout--info'><p>GPS settings...</p></div>");
+    wm.portalAddParameter(&fieldParam);
+    wm.portalAddParameter(&htmlParam);
+    j = handlers.buildApiWifiMetaJson();
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"kind\":\"field\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"kind\":\"html\"")));
+
     Serial.println("[TEST]   WiFi meta JSON shape test completed successfully");
 }
 
@@ -37,6 +45,12 @@ void test_api_info_json_shape() {
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
+    PortalInfoSection battery;
+    battery.id = "battery";
+    battery.title = "Battery";
+    battery.items.push_back({"soc", "State of charge", "84%"});
+    battery.items.push_back({"voltage", "Voltage", "13.2V"});
+    wm.portalAddInfoSection(battery);
     String j = handlers.buildApiInfoJson();
     const char* p = j.c_str();
     // Shape checks only: "status" is a nested object (},\n"device" not ],"device"); require
@@ -48,6 +62,10 @@ void test_api_info_json_shape() {
     TEST_ASSERT_NOT_NULL(strstr(p, "\"status\":"));
     TEST_ASSERT_NOT_NULL(strstr(p, "\"connected\":"));
     TEST_ASSERT_NOT_NULL(strstr(p, "},\"device\":["));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"extraSections\":"));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"id\":\"battery\""));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"title\":\"Battery\""));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"label\":\"State of charge\""));
     TEST_ASSERT_NOT_NULL(strstr(p, "\"showUpdate\":"));
 
     Serial.println("[TEST]   API info JSON shape test completed successfully");

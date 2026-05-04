@@ -36,25 +36,17 @@ void test_configuration_setters() {
     wm.setShowDnsFields(false);
     
     // Test portal behavior
-    wm.setCaptivePortalEnable(true);
-    wm.setCaptivePortalEnable(false);
+    wm.portalSetBehaviorCaptivePortalEnabled(true);
+    wm.portalSetBehaviorCaptivePortalEnabled(false);
     
-    // Test custom title (no getter available, but we can verify it doesn't crash)
-    wm.setTitle("TestTitle");
-    
-    // Verify some settings can be retrieved (if getters exist)
-    // Note: Not all setters have getters, but we verify they don't crash
-    // All setters executed without crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "All configuration setters executed without crash");
-    
-    // Verify setters can be called multiple times with different values
+    // Test custom title path
+    wm.portalSetBrandTitle("TestTitle");
+
+    // Call setters multiple times with different values.
     wm.setConfigPortalTimeout(60);
     wm.setConnectTimeout(30);
     wm.setHttpPort(8080);
     wm.setMinimumSignalQuality(50);
-    
-    // Verify no crash after multiple calls
-    TEST_ASSERT_TRUE_MESSAGE(true, "Configuration setters can be called multiple times");
     
     Serial.println("[TEST]   Configuration setters test completed successfully");
 }
@@ -76,7 +68,6 @@ void test_set_and_get_hostname() {
     TEST_ASSERT_FALSE_MESSAGE(wm.setHostname("trailing-"), "Hostnames cannot end with a hyphen");
 
     (void)wm.getWiFiHostname();
-    TEST_ASSERT_TRUE_MESSAGE(true, "getWiFiHostname() executed after hostname validation checks");
     
     Serial.println("[TEST]   setHostname() and getWiFiHostname() test completed successfully");
 }
@@ -107,9 +98,6 @@ void test_wifi_ap_configuration_setters() {
     // Test auto reconnect
     wm.setWiFiAutoReconnect(true);
     wm.setWiFiAutoReconnect(false);
-    
-    // All setters executed without crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "All WiFi AP configuration setters executed without crash");
     
     Serial.println("[TEST]   WiFi AP configuration setters test completed successfully");
 }

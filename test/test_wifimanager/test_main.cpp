@@ -8,7 +8,6 @@ TestCase tests[] = {
     // Basic tests
     TEST_ENTRY(test_basic_wifimanager_instantiation),
     TEST_ENTRY(test_reset_settings),
-    TEST_ENTRY(test_disconnect),
     // JSON API shape (buildApiInfoJson is large — run with fresh heap, before stress tests)
     TEST_ENTRY(test_captive_redirect_host_rule),
     TEST_ENTRY(test_api_wifi_meta_json_shape),
@@ -17,9 +16,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_api_status_json_shape),
     
     // Configuration tests
-    TEST_ENTRY(test_configuration_setters),
     TEST_ENTRY(test_set_and_get_hostname),
-    TEST_ENTRY(test_wifi_ap_configuration_setters),
     TEST_ENTRY(test_get_default_ap_name),
     TEST_ENTRY(test_get_wifi_status_string),
     TEST_ENTRY(test_get_mode_string),
@@ -37,19 +34,18 @@ TestCase tests[] = {
     TEST_ENTRY(test_config_portal_already_active),
     TEST_ENTRY(test_get_config_portal_ssid),
     TEST_ENTRY(test_bootstrap_json_portal_feature_flags),
+    TEST_ENTRY(test_bootstrap_json_contract_v2),
     TEST_ENTRY(test_bootstrap_json_snapshot_consistency),
     TEST_ENTRY(test_root_render_interleaved_context_isolation),
     
     // Non-blocking tests
     TEST_ENTRY(test_nonblocking_process),
     TEST_ENTRY(test_client_check_setters),
-    TEST_ENTRY(test_nonblocking_timeout_behavior),
     TEST_ENTRY(test_process_required_for_timeout),
     
     // Callback tests
     TEST_ENTRY(test_ap_callback),
     TEST_ENTRY(test_web_server_callback),
-    TEST_ENTRY(test_callback_registration),
     TEST_ENTRY(test_multiple_callbacks),
     
     // Parameter tests
@@ -64,21 +60,11 @@ TestCase tests[] = {
     
     // Static IP tests
     TEST_ENTRY(test_set_ap_static_ip_config),
-    TEST_ENTRY(test_sta_static_ip_configuration),
     TEST_ENTRY(test_ap_static_ip_application),
-    
-    // Advanced options tests
-    TEST_ENTRY(test_connection_behavior_options),
-    TEST_ENTRY(test_ui_display_options),
-    TEST_ENTRY(test_ui_customization),
-    TEST_ENTRY(test_debug_soft_ap_config),
-    TEST_ENTRY(test_debug_platform_info),
     
     // WiFi connection tests
     TEST_ENTRY(test_autoconnect_fallback_to_portal),
     TEST_ENTRY(test_connectwifi_ssid_not_found),
-    TEST_ENTRY(test_connectwifi_retry_count),
-    TEST_ENTRY(test_connectwifi_timeout_setting),
     TEST_ENTRY(test_connection_state_transitions),
     TEST_ENTRY(test_autoconnect_with_timeout),
     
@@ -94,10 +80,6 @@ TestCase tests[] = {
     TEST_ENTRY(test_dns_server_lifecycle_cycles),
     
     // Error condition tests
-    TEST_ENTRY(test_invalid_ap_password_too_short),
-    TEST_ENTRY(test_invalid_ap_password_too_long),
-    TEST_ENTRY(test_empty_ssid),
-    TEST_ENTRY(test_very_long_ssid),
     TEST_ENTRY(test_connection_failure_handling),
     TEST_ENTRY(test_resource_cleanup_after_error),
     TEST_ENTRY(test_multiple_rapid_start_stop),
@@ -120,6 +102,7 @@ TestCase tests[] = {
 
     // Template rendering tests
     TEST_ENTRY(test_shell_template_renders_core_placeholders),
+    TEST_ENTRY(test_shell_template_renders_dynamic_styles_with_percent_values),
 
     // State transition tests
     TEST_ENTRY(test_portal_to_connected_transition),

@@ -200,6 +200,74 @@ class WiFiManagerHandlers;
 class WiFiManagerDfteLogger;
 class WiFiManagerLogSink;
 
+// ---------------------------------------------------------------------------
+// Portal customization (v2 contract: nested JSON; all entry points use portal* API)
+// ---------------------------------------------------------------------------
+enum class PortalParamsLocation : uint8_t { WiFiPage = 0, SetupPage = 1 };
+
+enum class PortalPasswordPlaceholderMode : uint8_t { Hidden = 0, Masked = 1, Actual = 2 };
+
+enum class PortalFieldVisibility : uint8_t { Hidden = 0, Auto = 1, Always = 2 };
+
+enum class PortalHomeCardKind : uint8_t { Text = 0, Callout = 1, KeyValue = 2 };
+
+struct PortalKeyValueItem {
+  String key;
+  String label;
+  String value;
+};
+
+struct PortalInfoSection {
+  String id;
+  String title;
+  std::vector<PortalKeyValueItem> items;
+};
+
+struct PortalHomeCard {
+  String id;
+  String title;
+  PortalHomeCardKind kind = PortalHomeCardKind::KeyValue;
+  String text;
+  std::vector<PortalKeyValueItem> items;
+};
+
+struct PortalBrandState {
+  String title = "WiFiManager";
+  String identityTextOverride;
+  String homeIntro;
+  String logoSvg;
+};
+
+struct PortalPageState {
+  bool infoVisible = true;
+  bool updateVisible = true;
+  bool setupVisible = true;
+};
+
+struct PortalActionState {
+  bool eraseVisible = true;
+  bool restartVisible = true;
+  bool exitVisible = true;
+  bool closeCaptiveVisible = true;
+  bool backVisible = false;
+};
+
+struct PortalLayoutState {
+  /** When true, custom parameters render on the Wi-Fi page; when false, only on #/setup. */
+  bool paramsOnWifiPage = true;
+};
+
+struct PortalAssetState {
+  String appendedCss;
+  String overriddenCss;
+  String appendedJs;
+};
+
+struct PortalStructuredExtrasState {
+  std::vector<PortalInfoSection> infoSections;
+  std::vector<PortalHomeCard> homeCards;
+};
+
 class WiFiManager
 {
   public:
@@ -322,7 +390,7 @@ class WiFiManager
     bool          erase(bool opt);
 
     //adds a custom parameter, returns false on failure
-    bool          addParameter(WiFiManagerParameter *p);
+    bool          portalAddParameter(WiFiManagerParameter *p);
 
     //returns the list of Parameters
     WiFiManagerParameter** getParameters();
@@ -421,12 +489,6 @@ class WiFiManager
     //if true, always show static dns, esle only show if set via setSTAStaticIPConfig
     void          setShowDnsFields(boolean alwaysShow);
     
-    // toggle showing the saved wifi password in wifi form, could be a security issue.
-    void          setShowPassword(boolean show);
-    
-    //if false, disable captive portal redirection
-    void          setCaptivePortalEnable(boolean enabled);
-    
     //if false, timeout captive portal even if a STA client connected to softAP (false), suggest disabling if captiveportal is open
     void          setAPClientCheck(boolean enabled);
     
@@ -449,15 +511,6 @@ class WiFiManager
     bool          setHostname(const char * hostname);
     bool          setHostname(String hostname);
 
-    // show erase wifi onfig button on info page, true
-    void          setShowInfoErase(boolean enabled);
-
-    // show OTA upload button on info page
-    void          setShowInfoUpdate(boolean enabled);
-
-    // show Info nav / info view (portal SPA); default true
-    void          setShowInfo(boolean enabled);
-
     // set ap channel
     void          setWiFiAPChannel(int32_t channel);
     
@@ -467,18 +520,46 @@ class WiFiManager
     // clean connect, always disconnect before connecting
     void          setCleanConnect(bool enable); // default false
     
-    // set the webapp title, default WiFiManager
-    void          setTitle(String title);
+    // ---- Portal (all customization entry points use the portal* prefix) ----
+    void          portalSetBrandTitle(const String& title);
+    void          portalSetContextIdentityText(const String& identityText);
+    void          portalSetBrandHomeIntro(const String& text);
+    void          portalSetBrandLogoSvg(const String& svgMarkup);
 
-    /**
-     * Where custom parameters (`WiFiManagerParameter`) appear in the portal SPA (one placement only).
-     *
-     * - true (default): parameters render on the WiFi route (`#/wifi`) together with SSID/password.
-     * - false: parameters render only on the Setup route (`#/setup`); they are not duplicated on WiFi.
-     *
-     * Bootstrap exposes the same flag as `features.paramsInWifi`.
-     */
-    void          setParametersEmbeddedInWifi(boolean embedded);
+    void          portalSetPageInfoVisible(bool visible);
+    void          portalSetPageUpdateVisible(bool visible);
+    void          portalSetPageSetupVisible(bool visible);
+
+    void          portalSetActionEraseVisible(bool visible);
+    void          portalSetActionRestartVisible(bool visible);
+    void          portalSetActionExitVisible(bool visible);
+    void          portalSetActionCloseCaptiveVisible(bool visible);
+    void          portalSetActionBackVisible(bool visible);
+
+    void          portalSetLayoutParamsLocation(PortalParamsLocation location);
+
+    void          portalSetBehaviorCaptivePortalEnabled(bool enabled);
+    void          portalSetBehaviorConnectOnSave(bool enabled);
+    void          portalSetBehaviorExitAllowed(bool allowed);
+    void          portalSetBehaviorConnectTimeoutSeconds(unsigned long seconds);
+    void          portalSetBehaviorPortalTimeoutSeconds(unsigned long seconds);
+    void          portalSetBehaviorAutoReconnect(bool enabled);
+    void          portalSetBehaviorApClientCheck(bool enabled);
+    void          portalSetBehaviorWebClientCheck(bool enabled);
+
+    void          portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode mode);
+    void          portalSetFieldStaticIpVisibility(PortalFieldVisibility visibility);
+    void          portalSetFieldStaticDnsVisibility(PortalFieldVisibility visibility);
+
+    void          portalClearParameters();
+    void          portalAddInfoSection(const PortalInfoSection& section);
+    void          portalClearInfoSections();
+    void          portalAddHomeCard(const PortalHomeCard& card);
+    void          portalClearHomeCards();
+
+    void          portalAppendCss(const String& css);
+    void          portalOverrideCss(const String& css);
+    void          portalAppendJs(const String& js);
 
     // get last connection result, including autoconnect and portal credential-save attempts
     uint8_t       getLastConxResult();
@@ -706,7 +787,7 @@ class WiFiManager
     int           _staShowStaticFields    = 0;     // ternary 1=always show static ip fields, 0=only if set, -1=never(cannot change ips via web!)
     int           _staShowDns             = 0;     // ternary 1=always show dns, 0=only if set, -1=never(cannot change dns via web!)
     boolean       _removeDuplicateAPs     = true;  // remove dup aps from wifiscan
-    boolean       _showPassword           = false; // show or hide saved password on wifi form, might be a security issue!
+    PortalPasswordPlaceholderMode _portalPasswordPlaceholderMode = PortalPasswordPlaceholderMode::Masked;
     boolean       _shouldBreakAfterConfig = false; // stop configportal on save failure
     boolean       _enableCaptivePortal    = true;  // enable captive portal redirection
     boolean       _userpersistent         = true;  // users preffered persistence to restore
@@ -714,15 +795,17 @@ class WiFiManager
     boolean       _apClientCheck          = false; // keep cp alive if ap have station
     boolean       _webClientCheck         = true;  // keep cp alive if web have client
     boolean       _scanDispOptions        = false; // show percentage in scans not icons
-    boolean       _paramsInWifi           = true;  // if false, custom params only on #/setup (see setParametersEmbeddedInWifi)
-    boolean       _showInfo               = true;  // show Info in portal SPA
-    boolean       _showInfoErase          = true;  // info page erase button
-    boolean       _showInfoUpdate         = true;  // info page update button
-    boolean       _showBack               = false; // show back button
     boolean       _enableConfigPortal     = true;  // FOR autoconnect - start config portal if autoconnect failed
     boolean       _disableConfigPortal    = true;  // FOR autoconnect - stop config portal if cp wifi save
     String        _hostname               = "";    // hostname for esp8266 for dhcp, and or MDNS
-    String        _title                  = "WiFiManager"; // app title - default WiFiManager
+
+    // Grouped portal presentation / customization (see portal* setters; JSON in v2 bootstrap)
+    PortalBrandState            _portalBrand;
+    PortalPageState             _portalPages;
+    PortalActionState           _portalActions;
+    PortalLayoutState           _portalLayout;
+    PortalAssetState            _portalAssets;
+    PortalStructuredExtrasState _portalStructured;
 
     // internal options
     

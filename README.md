@@ -30,15 +30,115 @@ This fork currently includes the following architectural improvements:
 - **Captive portal redirect handling** retained while removing duplicate legacy UI architecture.
 - **Data-first JSON generation** for portal APIs, including info/device/about data, instead of HTML-to-JSON parsing.
 - **Capability-driven UI flags** in bootstrap/API payloads so features like info, update, erase, and action visibility can be controlled by backend state.
+- **Portal bootstrap contract v2**: nested `brand`, `context`, `pages`, `actions`, `layout`, `extraHomeCards`; Wi-Fi meta params include `kind` (`field` | `html`) for first-class custom HTML parameters.
 - **SPA-native feedback UX** using in-DOM dialog/toast behavior rather than page-based action flows.
-- **Request-scoped shell rendering**: the root portal page is built for each `GET /` from `WM_ROOT_SHELL_TEMPLATE` using a fresh placeholder registry. Shell inputs are only `%PAGE_TITLE%`, `%STYLES%`, `%BOOTSTRAP_JSON%`, and `%PORTAL_APP_JS%` — filled in `WiFiManagerHandlers` from WiFiManager state and embedded assets (not from a server-wide template registry).
-- **Customization via WiFiManager APIs** (`setTitle`, `setShowInfo`, `setParametersEmbeddedInWifi`, bootstrap-facing flags, etc.), not by exposing placeholder-registry mutation to consumers.
+- **Request-scoped shell rendering**: the root portal page is built for each `GET /` from `WM_ROOT_SHELL_TEMPLATE` using a fresh placeholder registry. Shell inputs are `%PAGE_TITLE%`, `%STYLES%`, `%BOOTSTRAP_JSON%`, `%PORTAL_APP_JS%`, and `%PORTAL_APPEND_JS%` — filled in `WiFiManagerHandlers` from WiFiManager state and embedded assets (not from a server-wide template registry).
+- **Customization via WiFiManager `portal*` APIs** (`portalSetBrandTitle`, `portalSetPageInfoVisible`, `portalSetLayoutParamsLocation`, `portalAddParameter`, asset hooks, etc.) and JSON under `/api/...`, not by exposing placeholder-registry mutation to consumers.
 - A clearer separation between:
   - shell rendering (handlers + SPA bootstrap)
   - JSON API responses
   - captive portal behavior
   - OTA handling
 - Updated tests focused on the **shell contract**, **bootstrap payloads**, and **API JSON shapes** rather than removed legacy portal pages.
+
+## Portal Customization Boundary
+
+Stable, supported portal customization is intentionally scoped:
+
+- `portalSetBrand*` for title, intro text, and logo SVG, plus `portalSetContextIdentityText(...)` for the user-facing runtime identity string on the home view.
+- `portalSetPage*`, `portalSetAction*`, `portalSetLayout*`, and `portalSetBehavior*` for built-in portal capabilities and runtime behavior.
+- `portalAddParameter(...)` for first-class custom parameters, including raw HTML blocks inside parameter-rendering surfaces (`#/wifi` or `#/setup`).
+- `portalAddInfoSection(...)` and `portalAddHomeCard(...)` for structured extra content rendered by the built-in SPA.
+- `portalAppendCss(...)`, `portalOverrideCss(...)`, and `portalAppendJs(...)` for light theming and enhancement hooks.
+
+Not part of the stable API:
+
+- arbitrary HTML injection into home/info/nav/shell
+- replacing built-in SPA routing or action flow
+- depending on undocumented DOM IDs or route internals
+- treating `include/templates/*` as a supported consumer override surface
+
+Appended JS should enhance rather than replace the built-in SPA. The documented hook contract is:
+
+- `wm:ready` with `detail.boot`
+- `wm:view-changed` with `detail.route`
+
+If a consumer needs custom live widgets, new primary navigation concepts, or new backend-to-frontend workflows, that is considered **fork territory** rather than portal customization.
+
+## Portal Customization Example
+
+```cpp
+WiFiManager wm;
+
+wm.portalSetBrandTitle("Solar Battery Monitor Setup");
+wm.portalSetContextIdentityText("Solar Battery Monitor");
+wm.portalSetBrandHomeIntro(
+    "Connect your monitor to WiFi, then review battery and inverter settings."
+);
+wm.portalSetBrandLogoSvg(
+    "<svg viewBox='0 0 24 24' aria-hidden='true'>"
+    "<path d='M12 2L4 12h5l-1 10 8-10h-5z'></path>"
+    "</svg>"
+);
+
+wm.portalSetPageInfoVisible(true);
+wm.portalSetPageUpdateVisible(false);
+wm.portalSetActionEraseVisible(false);
+wm.portalSetActionRestartVisible(true);
+wm.portalSetLayoutParamsLocation(PortalParamsLocation::SetupPage);
+
+wm.portalSetBehaviorCaptivePortalEnabled(true);
+wm.portalSetBehaviorConnectOnSave(true);
+wm.portalSetBehaviorExitAllowed(true);
+
+wm.portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode::Masked);
+wm.portalSetFieldStaticIpVisibility(PortalFieldVisibility::Auto);
+wm.portalSetFieldStaticDnsVisibility(PortalFieldVisibility::Auto);
+
+WiFiManagerParameter mqttHost(
+    "mqtt_host",
+    "MQTT host",
+    "broker.local",
+    64,
+    "placeholder='broker.local'"
+);
+wm.portalAddParameter(&mqttHost);
+
+// Raw HTML remains first-class for custom parameters, but only inside the
+// parameter-rendering surfaces (#/wifi or #/setup), not arbitrary portal regions.
+WiFiManagerParameter gpsHelp(
+    "<div class='wm-callout wm-callout--info'>"
+    "<p>GPS options below apply only when a GPS module is connected.</p>"
+    "</div>"
+);
+wm.portalAddParameter(&gpsHelp);
+
+PortalInfoSection battery;
+battery.id = "battery";
+battery.title = "Battery";
+battery.items.push_back({"soc", "State of charge", "84%"});
+battery.items.push_back({"voltage", "Voltage", "13.2V"});
+wm.portalAddInfoSection(battery);
+
+PortalHomeCard solar;
+solar.id = "solar";
+solar.title = "Solar summary";
+solar.kind = PortalHomeCardKind::KeyValue;
+solar.items.push_back({"pv", "PV input", "420W"});
+solar.items.push_back({"load", "Load", "180W"});
+wm.portalAddHomeCard(solar);
+
+wm.portalAppendCss(
+    ".wm-brand-logo svg{width:40px;height:40px;display:block;}"
+    ".wm-hero-intro{max-width:42ch;}"
+);
+
+wm.portalAppendJs(
+    "document.addEventListener('wm:ready', function(e){"
+    "  console.log('Portal booted', e.detail.boot);"
+    "});"
+);
+```
 
 ## Dependencies
 

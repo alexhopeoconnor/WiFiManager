@@ -172,10 +172,7 @@ void test_multiple_rapid_start_stop() {
         wm.process();
         delay(10);
     }
-    
-    // Should not crash
-    TEST_ASSERT_TRUE_MESSAGE(true, "Multiple rapid start/stop calls handled without crash");
-    
+
     // Final state should be stopped
     TEST_ASSERT_FALSE(wm.getConfigPortalActive());
     

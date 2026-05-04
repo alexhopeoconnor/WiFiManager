@@ -24,6 +24,7 @@ function esc(t){if(!t)return'';return String(t).replace(/[&<>"']/g,function(c){r
 
 // --- Toast / dialog ---
 var _wmToastTimer=null;
+var _wmPortalTimeoutTimer=null;
 function showToast(msg,isErr){
   var el=$('wm-toast');
   if(!el)return;
@@ -72,9 +73,17 @@ function bindFormSubmitHandlers(){
 }
 
 // --- View shell ---
+function stopPortalTimeoutCountdown(){
+  if(_wmPortalTimeoutTimer){
+    clearInterval(_wmPortalTimeoutTimer);
+    _wmPortalTimeoutTimer=null;
+  }
+}
+
 function setView(html){
   var a=$('app');
   if(!a)return;
+  stopPortalTimeoutCountdown();
   stopWifiScanPolling();
   stopWifiConnectPolling();
   a.innerHTML="<div class='wm-layout'>"+html+"</div>";
@@ -82,10 +91,35 @@ function setView(html){
   bindFormSubmitHandlers();
 }
 
+function formatDurationSeconds(totalSeconds){
+  totalSeconds=Math.max(0,Math.floor(totalSeconds||0));
+  var hours=Math.floor(totalSeconds/3600);
+  var minutes=Math.floor((totalSeconds%3600)/60);
+  var seconds=totalSeconds%60;
+  if(hours>0){
+    return hours+":"+String(minutes).padStart(2,'0')+":"+String(seconds).padStart(2,'0');
+  }
+  return minutes+":"+String(seconds).padStart(2,'0');
+}
+
+function startPortalTimeoutCountdown(initialSeconds){
+  var el=$('wm-portal-timeout');
+  var remaining=Math.max(0,Math.floor(initialSeconds||0));
+  if(!el||remaining<=0)return;
+  function render(){
+    if(!el)return;
+    el.textContent='Captive portal timeout: '+formatDurationSeconds(remaining);
+  }
+  render();
+  _wmPortalTimeoutTimer=setInterval(function(){
+    remaining=Math.max(0,remaining-1);
+    render();
+    if(remaining<=0)stopPortalTimeoutCountdown();
+  },1000);
+}
+
 // --- Field render (WiFi / params meta) ---
-function renderMetaField(f){
-  if(!f)return'';
-  if(f.html)return f.html;
+function renderStandardField(f){
   var id=f.id||f.name||'';
   var nm=f.name||f.id||'';
   var domId=(id==='s')?'wm-s':(id==='p')?'wm-p':('wm-f-'+id);
@@ -102,6 +136,13 @@ function renderMetaField(f){
   return h;
 }
 
+function renderMetaField(f){
+  if(!f)return'';
+  if(f.kind==='html')return f.html||'';
+  if(f.kind==='field' || !f.kind)return renderStandardField(f);
+  return '';
+}
+
 function renderFieldList(arr){
   if(!arr||!arr.length)return'';
   var h='',i;
@@ -111,43 +152,78 @@ function renderFieldList(arr){
 
 function navBar(active){
   active=active||'home';
-  var f=boot.features||{};
+  var pages=boot.pages||{};
+  var layout=boot.layout||{};
+  var actions=boot.actions||{};
+  var pinWifi=(layout.paramsLocation||'wifi')==='wifi';
+  var ps=pages.setup||{};
+  var pi=pages.info||{};
+  var pu=pages.update||{};
   var h="<nav class='wm-nav' aria-label='Configuration'>";
   h+="<a class='wm-nav-link"+(active==='home'?' wm-nav-link--active':'')+"' href='#/'>Home</a>";
   h+="<a class='wm-nav-link"+(active==='wifi'?' wm-nav-link--active':'')+"' href='#/wifi'>WiFi</a>";
-  if(!f.paramsInWifi){h+="<a class='wm-nav-link"+(active==='setup'?' wm-nav-link--active':'')+"' href='#/setup'>Setup</a>";}
-  if(f.showInfo!==false){h+="<a class='wm-nav-link"+(active==='info'?' wm-nav-link--active':'')+"' href='#/info'>Info</a>";}
-  if(f.showUpdate){h+="<a class='wm-nav-link"+(active==='update'?' wm-nav-link--active':'')+"' href='#/update'>Update</a>";}
-  if(boot.showBack){h+="<a href='#' class='wm-nav-link' id='wm-nav-back'>Back</a>";}
+  if(!pinWifi && ps.visible!==false){h+="<a class='wm-nav-link"+(active==='setup'?' wm-nav-link--active':'')+"' href='#/setup'>Setup</a>";}
+  if(pi.visible!==false){h+="<a class='wm-nav-link"+(active==='info'?' wm-nav-link--active':'')+"' href='#/info'>Info</a>";}
+  if(pu.visible){h+="<a class='wm-nav-link"+(active==='update'?' wm-nav-link--active':'')+"' href='#/update'>Update</a>";}
+  if(actions.back&&actions.back.visible){h+="<a href='#' class='wm-nav-link' id='wm-nav-back'>Back</a>";}
   h+="</nav>";
   return h;
 }
 
 function deviceActionsHtml(){
-  var f=boot.features||{};
+  var actions=boot.actions||{};
   var h='', ok=false;
-  if(f.showRestart){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-restart-btn'>Restart device</button>";ok=true;}
-  if(f.showExitPortal){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-exit-btn'>Exit portal</button>";ok=true;}
-  if(f.showCloseCaptive){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-close-captive-btn'>Stop captive portal</button>";ok=true;}
+  if(actions.restart&&actions.restart.visible){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-restart-btn'>Restart device</button>";ok=true;}
+  if(actions.exitPortal&&actions.exitPortal.visible){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-exit-btn'>Exit portal</button>";ok=true;}
+  if(actions.closeCaptive&&actions.closeCaptive.visible){h+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-close-captive-btn'>Stop captive portal</button>";ok=true;}
   if(!ok)return'';
   return "<div class='wm-card'><h2 class='wm-card-title'>Device</h2><div class='wm-btn-group'>"+h+"</div></div>";
 }
 
+function renderExtraHomeCards(cards){
+  if(!cards||!cards.length)return'';
+  var out='',i,c,j,k,cls;
+  for(i=0;i<cards.length;i++){
+    c=cards[i];
+    if(!c)continue;
+    out+="<div class='wm-card'>";
+    if(c.title){out+="<h2 class='wm-card-title'>"+esc(c.title)+"</h2>";}
+    if(c.kind==='text'||c.kind==='callout'){
+      cls=c.kind==='callout'?'wm-callout wm-callout--info':'wm-lead';
+      out+="<p class='"+cls+"'>"+esc(c.text||'')+"</p>";
+    }else{
+      out+="<dl class='wm-kv'>";
+      if(c.items){for(j=0;j<c.items.length;j++){k=c.items[j];out+="<dt>"+esc(k.label)+"</dt><dd>"+esc(k.value)+"</dd>";}}
+      out+="</dl>";
+    }
+    out+="</div>";
+  }
+  return out;
+}
+
 function viewHome(){
-  var sub=esc(boot.subtitle||'');
-  var t=esc(boot.title||'WiFiManager');
+  var brand=boot.brand||{};
+  var ctx=boot.context||{};
+  var t=esc(brand.title||'WiFiManager');
+  var ident=ctx.identityText?esc(ctx.identityText):'';
+  var summary=ctx.statusSummary||'';
+  var timeoutSeconds=ctx.portalTimeoutSecondsRemaining||0;
   var html=navBar('home');
-  html+="<header class='wm-hero'><h1 class='wm-hero-title'>"+t+"</h1>";
-  if(sub)html+="<p class='wm-hero-sub'>"+sub+"</p>";
+  html+="<header class='wm-hero'>";
+  if(brand.logoSvg){html+="<div class='wm-brand-logo'>"+brand.logoSvg+"</div>";}
+  html+="<h1 class='wm-hero-title'>"+t+"</h1>";
+  if(ident){html+="<p class='wm-hero-sub'>"+ident+"</p>";}
+  if(brand.homeIntro){html+="<p class='wm-hero-intro'>"+esc(brand.homeIntro)+"</p>";}
   html+="</header>";
   html+="<div class='wm-card'><h2 class='wm-card-title'>Status</h2>";
-  if(boot.initialStatus){
-    html+="<p class='wm-home-summary'>"+esc(boot.initialStatus)+"</p>";
-  }
+  if(summary){html+="<p class='wm-home-summary'>"+esc(summary)+"</p>";}
+  if(timeoutSeconds>0){html+="<p class='wm-status' id='wm-portal-timeout'></p>";}
   html+="<p class='wm-lead'>Use <strong>WiFi</strong> to scan networks and connect. Open <strong>Info</strong> for addresses and firmware actions.</p>";
   html+="</div>";
+  html+=renderExtraHomeCards(boot.extraHomeCards||[]);
   html+=deviceActionsHtml();
   setView(html);
+  if(timeoutSeconds>0)startPortalTimeoutCountdown(timeoutSeconds);
 }
 
 // --- HTTP ---
@@ -159,24 +235,50 @@ function api(path, opt){
 
 // --- WiFi scan view ---
 var _wmWifiScanPollTimer=null;
+var _wmWifiScanPollToken=0;
+
+function getScanResultsBox(){
+  return $('wm-scan-results');
+}
+
+function setScanRefreshEnabled(enabled){
+  var btn=$('wm-refresh-scan');
+  if(btn)btn.disabled=(enabled===false);
+}
 
 function stopWifiScanPolling(){
+  _wmWifiScanPollToken++;
   if(_wmWifiScanPollTimer){
-    clearInterval(_wmWifiScanPollTimer);
+    clearTimeout(_wmWifiScanPollTimer);
     _wmWifiScanPollTimer=null;
   }
+  setScanRefreshEnabled(true);
 }
 
 function startWifiScanPolling(box){
   stopWifiScanPolling();
-  _wmWifiScanPollTimer=setInterval(function(){
+  setScanRefreshEnabled(false);
+  var token=++_wmWifiScanPollToken;
+  function poll(){
     api('/api/wifi/scan-status').then(function(res){
+      if(token!==_wmWifiScanPollToken)return;
       var d={};
       try{d=JSON.parse(res.body);}catch(e){return;}
+      box=getScanResultsBox()||box;
       if(box)box.innerHTML=renderScanList(d);
-      if(!d.scanning)stopWifiScanPolling();
+      if(!d.scanning){
+        stopWifiScanPolling();
+        return;
+      }
+      _wmWifiScanPollTimer=setTimeout(poll,800);
+    }).catch(function(){
+      if(token!==_wmWifiScanPollToken)return;
+      stopWifiScanPolling();
+      box=getScanResultsBox()||box;
+      if(box)box.innerHTML=renderScanError('Portal became unreachable while scanning.');
     });
-  },800);
+  }
+  poll();
 }
 
 function renderScanList(data){
@@ -197,23 +299,42 @@ function renderScanList(data){
     n=data.networks[i];
     pct=(n.quality||0)+'%';
     qi=Math.round((n.quality/100)*3)+1;if(qi<1)qi=1;if(qi>4)qi=4;
-    enc=n.encrypted?'l':'';
     html+="<a class='wm-scan-row' href='#p' data-ssid='"+esc(n.ssid)+"'>";
     html+="<span class='wm-scan-ssid'>"+esc(n.ssid)+"</span>";
-    html+="<span role='img' aria-label='"+pct+"' title='"+pct+"' class='q q-"+qi+" "+enc+"'></span>";
+    html+="<span class='wm-scan-meta'>";
+    if(n.encrypted){html+="<span class='wm-scan-lock q l' aria-hidden='true'></span>";}
+    html+="<span role='img' aria-label='"+pct+"' title='"+pct+"' class='wm-scan-bars q q-"+qi+"'></span>";
     html+="<span class='wm-scan-signal'>"+pct+"</span>";
+    html+="</span>";
     html+="</a>";
   }
   html+="</div>";
   return html;
 }
 
+function renderScanError(msg){
+  return "<div class='wm-scan-list'><p class='wm-lead' style='margin:0;padding:14px 12px'>"+esc(msg||'Failed to reach portal while scanning.')+"</p></div>";
+}
+
 function wifiRefresh(){
-  var box=document.getElementById('wm-scan-results');
+  var box=getScanResultsBox();
   if(!box)return;
+  setScanRefreshEnabled(false);
   box.innerHTML="<div class='wm-scan-list'><p class='wm-lead' style='margin:0;padding:14px 12px'>Starting scan…</p></div>";
-  api('/api/wifi/scan',{method:'POST'}).then(function(){
+  api('/api/wifi/scan',{method:'POST'}).then(function(res){
+    box=getScanResultsBox()||box;
+    if(!res.ok){
+      setScanRefreshEnabled(true);
+      if(box)box.innerHTML=renderScanError('Failed to start WiFi scan.');
+      showToast('Failed to start WiFi scan.',true);
+      return;
+    }
     startWifiScanPolling(box);
+  }).catch(function(){
+    stopWifiScanPolling();
+    box=getScanResultsBox()||box;
+    if(box)box.innerHTML=renderScanError('Failed to reach portal while starting scan.');
+    showToast('Failed to reach portal while starting scan.',true);
   });
 }
 
@@ -273,12 +394,19 @@ function viewWifi(){
     html+="<div id='wm-wifi-msg'></div></div>";
     setView(html);
     bindWifiViewEvents();
+    setScanRefreshEnabled(true);
     api('/api/wifi/scan-status').then(function(r2){
       try{var d=JSON.parse(r2.body);}catch(e){d={};}
-      var box=document.getElementById('wm-scan-results');
+      var box=getScanResultsBox();
       if(box)box.innerHTML=renderScanList(d);
       if(d&&d.scanning){startWifiScanPolling(box);}
+    }).catch(function(){
+      var box=getScanResultsBox();
+      if(box)box.innerHTML=renderScanError('Failed to reach portal while loading scan status.');
+      setScanRefreshEnabled(true);
     });
+  }).catch(function(){
+    setView(navBar('wifi')+"<div class='wm-card'><p class='wm-lead'>Failed to load WiFi options. Reconnect to the portal and try again.</p></div>");
   });
 }
 
@@ -310,6 +438,10 @@ function pollWifiConnectStatus(){
         stopWifiConnectPolling();
         showToast(j.message||'WiFi connect failed',true);
       }
+    }).catch(function(){
+      stopWifiConnectPolling();
+      var msg=$('wm-wifi-msg');
+      if(msg)msg.innerHTML='Portal became unreachable while checking connection status.';
     });
   },700);
 }
@@ -363,6 +495,15 @@ function viewInfo(){
     html+=section('Device',d.device||[]);
     html+=section('WiFi',d.wifi||[]);
     html+=section('About',d.about||[]);
+    if(d.extraSections){
+      var xi,zs,zrows,zi,it;
+      for(xi=0;xi<d.extraSections.length;xi++){
+        zs=d.extraSections[xi];
+        zrows=[];
+        if(zs.items){for(zi=0;zi<zs.items.length;zi++){it=zs.items[zi];zrows.push({label:it.label,value:esc(it.value)});}}
+        html+=section(zs.title,zrows);
+      }
+    }
     var act=d.actions||{};
     html+="<div class='wm-card'><h2 class='wm-card-title'>Actions</h2><div class='wm-btn-group'>";
     if(act.showRestart)html+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-restart-btn'>Restart device</button>";
@@ -426,10 +567,11 @@ window.portalParamSave=function(ev){
 };
 
 function viewUpdate(){
-  var f=boot.features||{};
+  var pages=boot.pages||{};
+  var pupd=pages.update||{};
   var html=navBar('update');
   html+="<div class='wm-page-head'><h1>Firmware update</h1><p class='wm-page-desc'>Flash a new firmware build (.bin). The device reboots when done.</p></div>";
-  if(!f.showUpdate){
+  if(!pupd.visible){
     html+="<div class='wm-card'><p class='wm-lead'>Firmware update is disabled for this configuration.</p></div>";
     setView(html);
     return;
@@ -484,19 +626,29 @@ window.portalOtaSubmit=function(ev){
 function route(){
   var h=location.hash||'#/';
   if(h.indexOf('#/')!==0)h='#/';
-  var f=boot.features||{};
-  if(h==='#/info'&&f.showInfo===false){viewHome();return;}
-  if(h==='#/update'&&f.showUpdate===false){viewHome();return;}
-  if(h==='#/'||h==='#'){viewHome();return;}
-  if(h==='#/wifi'){viewWifi();return;}
-  if(h==='#/info'){viewInfo();return;}
-  if(h==='#/setup'){viewSetup();return;}
-  if(h==='#/update'){viewUpdate();return;}
-  viewHome();
+  var pages=boot.pages||{};
+  var ps=pages.setup||{};
+  var pi=pages.info||{};
+  var pu=pages.update||{};
+  if(h==='#/setup'&&ps.visible===false){viewHome();try{document.dispatchEvent(new CustomEvent('wm:view-changed',{detail:{route:'#/'}}));}catch(e){}return;}
+  if(h==='#/info'&&pi.visible===false){viewHome();try{document.dispatchEvent(new CustomEvent('wm:view-changed',{detail:{route:'#/'}}));}catch(e){}return;}
+  if(h==='#/update'&&pu.visible===false){viewHome();try{document.dispatchEvent(new CustomEvent('wm:view-changed',{detail:{route:'#/'}}));}catch(e){}return;}
+  if(h==='#/'||h==='#'){viewHome();}
+  else if(h==='#/wifi'){viewWifi();}
+  else if(h==='#/info'){viewInfo();}
+  else if(h==='#/setup'){viewSetup();}
+  else if(h==='#/update'){viewUpdate();}
+  else {viewHome();h='#/';}
+  try{document.dispatchEvent(new CustomEvent('wm:view-changed',{detail:{route:h}}));}catch(e){}
+}
+
+function bootPortal(){
+  route();
+  try{document.dispatchEvent(new CustomEvent('wm:ready',{detail:{boot:boot}}));}catch(e){}
 }
 
 window.addEventListener('hashchange',route);
-window.addEventListener('load',route);
+window.addEventListener('load',bootPortal);
 })();
 
 )rawliteral";

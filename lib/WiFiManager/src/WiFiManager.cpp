@@ -62,7 +62,7 @@ bool normalizeHostname(String& hostname) {
  * @param p Pointer to WiFiManagerParameter to add
  * @return true if added successfully, false on error
  */
-bool WiFiManager::addParameter(WiFiManagerParameter *p) {
+bool WiFiManager::portalAddParameter(WiFiManagerParameter *p) {
 
   // check param id is valid, unless null
   if(p->getID()){
@@ -109,6 +109,15 @@ bool WiFiManager::addParameter(WiFiManagerParameter *p) {
   log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("Added Parameter:"),p->getID());
   #endif
   return true;
+}
+
+void WiFiManager::portalClearParameters() {
+  if (_params != NULL) {
+    free(_params);
+    _params = NULL;
+  }
+  _paramsCount = 0;
+  _max_params = WIFI_MANAGER_MAX_PARAMS;
 }
 
 WiFiManagerParameter** WiFiManager::getParameters() {
@@ -1928,29 +1937,6 @@ void WiFiManager::setShowDnsFields(boolean alwaysShow){
 }
 
 /**
- * toggle showing password in wifi password field
- * if not enabled, placeholder will be S_passph
- * @since $dev
- * @access public
- * @param boolean alwaysShow [false]
- */
-void WiFiManager::setShowPassword(boolean show){
-  _showPassword = show;
-}
-
-/**
- * toggle captive portal
- * if enabled, then devices that use captive portal checks will be redirected to root
- * if not you will automatically have to navigate to ip [192.168.4.1]
- * @since $dev
- * @access public
- * @param boolean enabled [true]
- */
-void WiFiManager::setCaptivePortalEnable(boolean enabled){
-  _enableCaptivePortal = enabled;
-}
-
-/**
  * toggle wifi autoreconnect policy
  * if enabled, then wifi will autoreconnect automatically always
  * On esp8266 we force this on when autoconnect is called, see notes
@@ -2076,24 +2062,148 @@ void WiFiManager::setWiFiAPHidden(bool hidden){
 }
 
 
-/**
- * toggle showing erase wifi config button on info page
- * @param boolean enabled
- */
-void WiFiManager::setShowInfoErase(boolean enabled){
-  _showInfoErase = enabled;
+void WiFiManager::portalSetBrandTitle(const String& title) {
+  _portalBrand.title = title;
 }
 
-/**
- * toggle showing update upload web ota button on info page
- * @param boolean enabled
- */
-void WiFiManager::setShowInfoUpdate(boolean enabled){
-  _showInfoUpdate = enabled;
+void WiFiManager::portalSetContextIdentityText(const String& identityText) {
+  _portalBrand.identityTextOverride = identityText;
 }
 
-void WiFiManager::setShowInfo(boolean enabled){
-  _showInfo = enabled;
+void WiFiManager::portalSetBrandHomeIntro(const String& text) {
+  _portalBrand.homeIntro = text;
+}
+
+void WiFiManager::portalSetBrandLogoSvg(const String& svgMarkup) {
+  _portalBrand.logoSvg = svgMarkup;
+}
+
+void WiFiManager::portalSetPageInfoVisible(bool visible) {
+  _portalPages.infoVisible = visible;
+}
+
+void WiFiManager::portalSetPageUpdateVisible(bool visible) {
+  _portalPages.updateVisible = visible;
+}
+
+void WiFiManager::portalSetPageSetupVisible(bool visible) {
+  _portalPages.setupVisible = visible;
+}
+
+void WiFiManager::portalSetActionEraseVisible(bool visible) {
+  _portalActions.eraseVisible = visible;
+}
+
+void WiFiManager::portalSetActionRestartVisible(bool visible) {
+  _portalActions.restartVisible = visible;
+}
+
+void WiFiManager::portalSetActionExitVisible(bool visible) {
+  _portalActions.exitVisible = visible;
+}
+
+void WiFiManager::portalSetActionCloseCaptiveVisible(bool visible) {
+  _portalActions.closeCaptiveVisible = visible;
+}
+
+void WiFiManager::portalSetActionBackVisible(bool visible) {
+  _portalActions.backVisible = visible;
+}
+
+void WiFiManager::portalSetLayoutParamsLocation(PortalParamsLocation location) {
+  _portalLayout.paramsOnWifiPage = (location == PortalParamsLocation::WiFiPage);
+}
+
+void WiFiManager::portalSetBehaviorCaptivePortalEnabled(bool enabled) {
+  _enableCaptivePortal = enabled;
+}
+
+void WiFiManager::portalSetBehaviorConnectOnSave(bool enabled) {
+  setSaveConnect(enabled);
+}
+
+void WiFiManager::portalSetBehaviorExitAllowed(bool allowed) {
+  _allowExit = allowed;
+}
+
+void WiFiManager::portalSetBehaviorConnectTimeoutSeconds(unsigned long seconds) {
+  setConnectTimeout(seconds);
+}
+
+void WiFiManager::portalSetBehaviorPortalTimeoutSeconds(unsigned long seconds) {
+  setConfigPortalTimeout(seconds);
+}
+
+void WiFiManager::portalSetBehaviorAutoReconnect(bool enabled) {
+  setWiFiAutoReconnect(enabled);
+}
+
+void WiFiManager::portalSetBehaviorApClientCheck(bool enabled) {
+  setAPClientCheck(enabled);
+}
+
+void WiFiManager::portalSetBehaviorWebClientCheck(bool enabled) {
+  setWebPortalClientCheck(enabled);
+}
+
+void WiFiManager::portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode mode) {
+  _portalPasswordPlaceholderMode = mode;
+}
+
+void WiFiManager::portalSetFieldStaticIpVisibility(PortalFieldVisibility visibility) {
+  switch (visibility) {
+    case PortalFieldVisibility::Always:
+      setShowStaticFields(true);
+      break;
+    case PortalFieldVisibility::Auto:
+      setShowStaticFields(false);
+      break;
+    case PortalFieldVisibility::Hidden:
+      _staShowStaticFields = -1;
+      break;
+  }
+}
+
+void WiFiManager::portalSetFieldStaticDnsVisibility(PortalFieldVisibility visibility) {
+  switch (visibility) {
+    case PortalFieldVisibility::Always:
+      setShowDnsFields(true);
+      break;
+    case PortalFieldVisibility::Auto:
+      setShowDnsFields(false);
+      break;
+    case PortalFieldVisibility::Hidden:
+      _staShowDns = -1;
+      break;
+  }
+}
+
+void WiFiManager::portalAddInfoSection(const PortalInfoSection& section) {
+  _portalStructured.infoSections.push_back(section);
+}
+
+void WiFiManager::portalClearInfoSections() {
+  _portalStructured.infoSections.clear();
+}
+
+void WiFiManager::portalAddHomeCard(const PortalHomeCard& card) {
+  _portalStructured.homeCards.push_back(card);
+}
+
+void WiFiManager::portalClearHomeCards() {
+  _portalStructured.homeCards.clear();
+}
+
+void WiFiManager::portalAppendCss(const String& css) {
+  _portalAssets.appendedCss += css;
+}
+
+void WiFiManager::portalOverrideCss(const String& css) {
+  _portalAssets.overriddenCss = css;
+}
+
+void WiFiManager::portalAppendJs(const String& js) {
+  _portalAssets.appendedJs += js;
 }
 
 /**
@@ -2172,18 +2282,6 @@ AsyncWebServer* WiFiManager::getServer() {
 
 DNSServer* WiFiManager::getDNSServer() {
   return _serverManager ? _serverManager->getDNSServer() : nullptr;
-}
-
-/**
- * [setTitle description]
- * @param String title, set app title
- */
-void WiFiManager::setTitle(String title){
-  _title = title;
-}
-
-void WiFiManager::setParametersEmbeddedInWifi(boolean embedded) {
-  _paramsInWifi = embedded;
 }
 
 // GETTERS

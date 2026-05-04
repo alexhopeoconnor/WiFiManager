@@ -27,6 +27,18 @@ void test_connection_behavior_options() {
     wm.setEnableConfigPortal(false);
     wm.setDisableConfigPortal(true);
     wm.setDisableConfigPortal(false);
+    wm.portalSetBehaviorConnectOnSave(true);
+    wm.portalSetBehaviorConnectOnSave(false);
+    wm.portalSetBehaviorExitAllowed(true);
+    wm.portalSetBehaviorExitAllowed(false);
+    wm.portalSetBehaviorConnectTimeoutSeconds(15);
+    wm.portalSetBehaviorPortalTimeoutSeconds(20);
+    wm.portalSetBehaviorAutoReconnect(true);
+    wm.portalSetBehaviorAutoReconnect(false);
+    wm.portalSetBehaviorApClientCheck(true);
+    wm.portalSetBehaviorApClientCheck(false);
+    wm.portalSetBehaviorWebClientCheck(true);
+    wm.portalSetBehaviorWebClientCheck(false);
     wm.preloadWiFi("TestSSID", "TestPassword");
     
     // All setters executed without crash
@@ -42,16 +54,27 @@ void test_ui_display_options() {
     WiFiManager wm;
     
     // Test display toggles
-    wm.setShowPassword(true);
-    wm.setShowPassword(false);
+    wm.portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode::Actual);
+    wm.portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode::Masked);
+    wm.portalSetFieldPasswordPlaceholderMode(PortalPasswordPlaceholderMode::Hidden);
     wm.setScanDispPerc(true);
     wm.setScanDispPerc(false);
-    wm.setShowInfoErase(true);
-    wm.setShowInfoErase(false);
-    wm.setShowInfoUpdate(true);
-    wm.setShowInfoUpdate(false);
-    wm.setParametersEmbeddedInWifi(true);
-    wm.setParametersEmbeddedInWifi(false);
+    wm.portalSetActionEraseVisible(true);
+    wm.portalSetActionEraseVisible(false);
+    wm.portalSetActionRestartVisible(true);
+    wm.portalSetActionRestartVisible(false);
+    wm.portalSetActionExitVisible(true);
+    wm.portalSetActionExitVisible(false);
+    wm.portalSetActionCloseCaptiveVisible(true);
+    wm.portalSetActionCloseCaptiveVisible(false);
+    wm.portalSetPageUpdateVisible(true);
+    wm.portalSetPageUpdateVisible(false);
+    wm.portalSetPageSetupVisible(true);
+    wm.portalSetPageSetupVisible(false);
+    wm.portalSetLayoutParamsLocation(PortalParamsLocation::WiFiPage);
+    wm.portalSetLayoutParamsLocation(PortalParamsLocation::SetupPage);
+    wm.portalSetActionBackVisible(true);
+    wm.portalSetActionBackVisible(false);
     
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "UI display options executed without crash");
@@ -66,7 +89,7 @@ void test_ui_customization() {
     WiFiManager wm;
     
     // Minimal customization retained: title
-    wm.setTitle("MyDevice");
+    wm.portalSetBrandTitle("MyDevice");
     
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "UI customization options executed without crash");

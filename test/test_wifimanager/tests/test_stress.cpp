@@ -112,7 +112,7 @@ void test_multiple_parameters_stress() {
         sprintf(id, "param%d", i);
         sprintf(label, "Parameter %d", i);
         params[i] = new WiFiManagerParameter(id, label, "default", 40);
-        wm.addParameter(params[i]);
+        wm.portalAddParameter(params[i]);
     }
     
     TEST_ASSERT_EQUAL(20, wm.getParametersCount());

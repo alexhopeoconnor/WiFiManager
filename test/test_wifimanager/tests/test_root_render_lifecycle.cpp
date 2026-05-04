@@ -19,7 +19,7 @@ size_t dynamicStringLengthGetter(const char* data, void* /*userData*/) {
     return data ? strlen(data) : 0;
 }
 
-void configureDescriptor(DynamicTemplateDescriptor& descriptor, String& value) {
+void configureDescriptor(DynamicDataDescriptor& descriptor, String& value) {
     descriptor.getter = &dynamicStringGetter;
     descriptor.getLength = &dynamicStringLengthGetter;
     descriptor.userData = &value;
@@ -62,18 +62,75 @@ void test_bootstrap_json_portal_feature_flags() {
     WiFiManagerHandlers handlers(&wm);
 
     String idleBootstrap = handlers.buildPortalBootstrapJson();
-    TEST_ASSERT_EQUAL(-1, idleBootstrap.indexOf(F("\"showCloseCaptive\":true")));
+    TEST_ASSERT_EQUAL(-1, idleBootstrap.indexOf(F("\"closeCaptive\":{\"visible\":true")));
 
     wm.wmTestSetPortalActive(true);
-    wm.setCaptivePortalEnable(true);
+    wm.portalSetBehaviorCaptivePortalEnabled(true);
 
     String apBootstrap = handlers.buildPortalBootstrapJson();
-    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"showCloseCaptive\":true")));
-    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"showExitPortal\":true")));
+    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"closeCaptive\":{\"visible\":true")));
+    TEST_ASSERT_NOT_EQUAL(-1, apBootstrap.indexOf(F("\"exitPortal\":{\"visible\":true")));
 
     wm.wmTestSetPortalActive(false);
 
     Serial.println("[TEST]   Bootstrap portal feature flags test completed successfully");
+}
+
+void test_bootstrap_json_contract_v2() {
+    Serial.println("[TEST]   Testing bootstrap JSON v2 contract...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+
+    wm.portalSetBrandTitle("Solar Battery Monitor Setup");
+    wm.portalSetContextIdentityText("Solar Battery Monitor");
+    wm.portalSetBrandHomeIntro("Connect this device to WiFi and finish setup.");
+    wm.portalSetBrandLogoSvg("<svg viewBox='0 0 24 24'></svg>");
+    wm.portalSetPageInfoVisible(true);
+    wm.portalSetPageUpdateVisible(false);
+    wm.portalSetPageSetupVisible(true);
+    wm.portalSetActionEraseVisible(false);
+    wm.portalSetActionBackVisible(true);
+    wm.portalSetLayoutParamsLocation(PortalParamsLocation::SetupPage);
+    wm.setConfigPortalTimeout(90);
+
+    PortalHomeCard card;
+    card.id = "solar";
+    card.title = "Solar summary";
+    card.kind = PortalHomeCardKind::KeyValue;
+    card.items.push_back({"pv", "PV input", "420W"});
+    wm.portalAddHomeCard(card);
+
+    String j = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"contractVersion\":2")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"brand\":{")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"title\":\"Solar Battery Monitor Setup\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"homeIntro\":\"Connect this device to WiFi and finish setup.\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"logoSvg\":\"<svg viewBox='0 0 24 24'></svg>\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"context\":{")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"identityText\":\"Solar Battery Monitor\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"pages\":{")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"setup\":{\"visible\":true}")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"actions\":{")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"erase\":{\"visible\":false}")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"back\":{\"visible\":true}")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"layout\":{\"paramsLocation\":\"setup\"}")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"extraHomeCards\":[")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"id\":\"solar\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"kind\":\"kv\"")));
+
+    wm.startWebPortal();
+    j = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"portalActive\":true")));
+    wm.stopWebPortal();
+
+    wm.wmTestSetPortalActive(true);
+    j = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"portalTimeoutSecondsRemaining\":")));
+    TEST_ASSERT_EQUAL(-1, j.indexOf(F("\"portalTimeoutSecondsRemaining\":0")));
+    wm.wmTestSetPortalActive(false);
+
+    Serial.println("[TEST]   Bootstrap JSON v2 contract test completed successfully");
 }
 
 void test_bootstrap_json_snapshot_consistency() {
@@ -106,32 +163,34 @@ void test_root_render_interleaved_context_isolation() {
 
     registryA.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%PAGE_TITLE%", kTestTitle);
+    registryA.registerProgmemData("%PORTAL_APPEND_JS%", kEmptyTemplateChunk);
 
     registryB.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%PAGE_TITLE%", kTestTitle);
+    registryB.registerProgmemData("%PORTAL_APPEND_JS%", kEmptyTemplateChunk);
 
     String bootstrapA = F("{\"ctx\":\"A\"}");
     String appJsA = F("// shell A");
     String bootstrapB = F("{\"ctx\":\"B\"}");
     String appJsB = F("// shell B");
 
-    DynamicTemplateDescriptor bootstrapDescriptorA{};
-    DynamicTemplateDescriptor appJsDescriptorA{};
-    DynamicTemplateDescriptor bootstrapDescriptorB{};
-    DynamicTemplateDescriptor appJsDescriptorB{};
+    DynamicDataDescriptor bootstrapDescriptorA{};
+    DynamicDataDescriptor appJsDescriptorA{};
+    DynamicDataDescriptor bootstrapDescriptorB{};
+    DynamicDataDescriptor appJsDescriptorB{};
 
     configureDescriptor(bootstrapDescriptorA, bootstrapA);
     configureDescriptor(appJsDescriptorA, appJsA);
     configureDescriptor(bootstrapDescriptorB, bootstrapB);
     configureDescriptor(appJsDescriptorB, appJsB);
 
-    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bootstrapDescriptorA),
+    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicData("%BOOTSTRAP_JSON%", &bootstrapDescriptorA),
                              "Registry A bootstrap placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicTemplate("%PORTAL_APP_JS%", &appJsDescriptorA),
+    TEST_ASSERT_TRUE_MESSAGE(registryA.registerDynamicData("%PORTAL_APP_JS%", &appJsDescriptorA),
                              "Registry A app JS placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%BOOTSTRAP_JSON%", &bootstrapDescriptorB),
+    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicData("%BOOTSTRAP_JSON%", &bootstrapDescriptorB),
                              "Registry B bootstrap placeholder should register");
-    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicTemplate("%PORTAL_APP_JS%", &appJsDescriptorB),
+    TEST_ASSERT_TRUE_MESSAGE(registryB.registerDynamicData("%PORTAL_APP_JS%", &appJsDescriptorB),
                              "Registry B app JS placeholder should register");
 
     TemplateContext contextA;

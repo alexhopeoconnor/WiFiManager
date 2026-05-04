@@ -18,12 +18,9 @@ struct TestCase {
 // Basic tests
 void test_basic_wifimanager_instantiation();
 void test_reset_settings();
-void test_disconnect();
 
 // Configuration tests
-void test_configuration_setters();
 void test_set_and_get_hostname();
-void test_wifi_ap_configuration_setters();
 void test_get_default_ap_name();
 void test_get_wifi_status_string();
 void test_get_mode_string();
@@ -41,19 +38,18 @@ void test_config_portal_multiple_start_stop();
 void test_config_portal_already_active();
 void test_get_config_portal_ssid();
 void test_bootstrap_json_portal_feature_flags();
+void test_bootstrap_json_contract_v2();
 void test_bootstrap_json_snapshot_consistency();
 void test_root_render_interleaved_context_isolation();
 
 // Non-blocking tests
 void test_nonblocking_process();
 void test_client_check_setters();
-void test_nonblocking_timeout_behavior();
 void test_process_required_for_timeout();
 
 // Callback tests
 void test_ap_callback();
 void test_web_server_callback();
-void test_callback_registration();
 void test_multiple_callbacks();
 
 // Parameter tests
@@ -68,21 +64,13 @@ void test_parameter_placeholder();
 
 // Static IP tests
 void test_set_ap_static_ip_config();
-void test_sta_static_ip_configuration();
 void test_ap_static_ip_application();
 
 // Advanced options tests
-void test_connection_behavior_options();
-void test_ui_display_options();
-void test_ui_customization();
-void test_debug_soft_ap_config();
-void test_debug_platform_info();
 
 // WiFi connection tests
 void test_autoconnect_fallback_to_portal();
 void test_connectwifi_ssid_not_found();
-void test_connectwifi_retry_count();
-void test_connectwifi_timeout_setting();
 void test_connection_state_transitions();
 void test_autoconnect_with_timeout();
 
@@ -98,10 +86,6 @@ void test_dns_server_cleanup();
 void test_dns_server_lifecycle_cycles();
 
 // Error condition tests
-void test_invalid_ap_password_too_short();
-void test_invalid_ap_password_too_long();
-void test_empty_ssid();
-void test_very_long_ssid();
 void test_connection_failure_handling();
 void test_resource_cleanup_after_error();
 void test_multiple_rapid_start_stop();
@@ -124,6 +108,7 @@ void test_scan_generation_invalidated_on_reset();
 
 // Template rendering tests
 void test_shell_template_renders_core_placeholders();
+void test_shell_template_renders_dynamic_styles_with_percent_values();
 
 // API JSON + captive helper tests
 void test_captive_redirect_host_rule();

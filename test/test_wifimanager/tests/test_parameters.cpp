@@ -20,7 +20,7 @@ void test_create_parameter() {
 }
 
 void test_add_parameter() {
-    Serial.println("[TEST]   Testing addParameter()...");
+    Serial.println("[TEST]   Testing portalAddParameter()...");
     
     WiFiManager wm;
     
@@ -28,16 +28,18 @@ void test_add_parameter() {
     WiFiManagerParameter param2("param2", "Parameter 2", "value2", 40);
     
     // Add parameters
-    bool result1 = wm.addParameter(&param1);
-    bool result2 = wm.addParameter(&param2);
+    bool result1 = wm.portalAddParameter(&param1);
+    bool result2 = wm.portalAddParameter(&param2);
     
     TEST_ASSERT_TRUE(result1);
     TEST_ASSERT_TRUE(result2);
     
     // Verify parameters are stored
     TEST_ASSERT_EQUAL(2, wm.getParametersCount());
+    wm.portalClearParameters();
+    TEST_ASSERT_EQUAL(0, wm.getParametersCount());
     
-    Serial.println("[TEST]   addParameter() test completed successfully");
+    Serial.println("[TEST]   portalAddParameter() test completed successfully");
 }
 
 void test_get_parameters() {
@@ -49,9 +51,9 @@ void test_get_parameters() {
     WiFiManagerParameter param2("param2", "Parameter 2", "value2", 40);
     WiFiManagerParameter param3("param3", "Parameter 3", "value3", 40);
     
-    wm.addParameter(&param1);
-    wm.addParameter(&param2);
-    wm.addParameter(&param3);
+    wm.portalAddParameter(&param1);
+    wm.portalAddParameter(&param2);
+    wm.portalAddParameter(&param3);
     
     // Get count
     int count = wm.getParametersCount();
@@ -121,9 +123,9 @@ void test_multiple_parameters() {
     WiFiManagerParameter p2("mqtt_port", "MQTT Port", "1883", 6);
     WiFiManagerParameter p3("api_key", "API Key", "default_key", 32);
     
-    wm.addParameter(&p1);
-    wm.addParameter(&p2);
-    wm.addParameter(&p3);
+    wm.portalAddParameter(&p1);
+    wm.portalAddParameter(&p2);
+    wm.portalAddParameter(&p3);
     
     TEST_ASSERT_EQUAL(3, wm.getParametersCount());
     

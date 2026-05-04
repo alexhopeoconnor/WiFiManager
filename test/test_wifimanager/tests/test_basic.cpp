@@ -9,10 +9,7 @@ void test_basic_wifimanager_instantiation() {
     
     // Test default constructor
     WiFiManager wm;
-    
-    // Verify instance created (basic sanity check)
-    TEST_ASSERT_TRUE_MESSAGE(true, "WiFiManager instance created successfully");
-    
+
     // Test that we can call basic methods without crashing
     String defaultName = wm.getDefaultAPName();
     TEST_ASSERT_GREATER_THAN(0, defaultName.length());
@@ -68,9 +65,6 @@ void test_disconnect() {
     
     // Can be called multiple times safely
     (void)wm.disconnect();
-    
-    // Verify no crash (results may be true/false depending on WiFi state)
-    TEST_ASSERT_TRUE_MESSAGE(true, "disconnect() executed without crash");
     
     Serial.println("[TEST]   disconnect() test completed successfully");
 }
