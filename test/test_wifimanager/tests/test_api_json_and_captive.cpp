@@ -36,8 +36,46 @@ void test_api_wifi_meta_json_shape() {
     j = handlers.buildApiWifiMetaJson();
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"kind\":\"field\"")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"kind\":\"html\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"html\":\"<div class='wm-callout wm-callout--info'><p>GPS settings...</p></div>\"}")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"wifiFields\":[{\"id\":\"s\"")));
 
     Serial.println("[TEST]   WiFi meta JSON shape test completed successfully");
+}
+
+void test_api_wifi_meta_password_field_type() {
+    Serial.println("[TEST]   Testing /api/wifi/meta password field type from custom attrs...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    WiFiManagerParameter pwd("mqttpass", "MQTT password", "secret", 24, " type='password' autocorrect='off'");
+    wm.portalAddParameter(&pwd);
+
+    String j = handlers.buildApiWifiMetaJson();
+    const char* p = j.c_str();
+    const char* chunk = strstr(p, "\"id\":\"mqttpass\"");
+    TEST_ASSERT_NOT_NULL_MESSAGE(chunk, "mqttpass param missing from meta JSON");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(chunk, "\"type\":\"password\""),
+                                 "customAttrs type=password must map to JSON type password");
+
+    Serial.println("[TEST]   WiFi meta password field type test completed successfully");
+}
+
+void test_api_wifi_connect_status_success_redirect() {
+    Serial.println("[TEST]   Testing /api/wifi/connect-status success redirect payload...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+#ifdef UNIT_TEST
+    wm.wmTestSetPortalConnectSuccess("WiFi connected. Redirecting to 192.168.1.42", "192.168.1.42");
+#endif
+    String j = handlers.buildApiWifiConnectStatusJson();
+    const char* p = j.c_str();
+
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"state\":\"success\""));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"stationIp\":\"192.168.1.42\""));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"redirectUrl\":\"http://192.168.1.42/\""));
+
+    Serial.println("[TEST]   WiFi connect-status success redirect payload test completed successfully");
 }
 
 void test_api_info_json_shape() {
@@ -67,6 +105,8 @@ void test_api_info_json_shape() {
     TEST_ASSERT_NOT_NULL(strstr(p, "\"title\":\"Battery\""));
     TEST_ASSERT_NOT_NULL(strstr(p, "\"label\":\"State of charge\""));
     TEST_ASSERT_NOT_NULL(strstr(p, "\"showUpdate\":"));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"key\":\"aboutver\",\"label\":\"WiFiManager\",\"value\":\""));
+    TEST_ASSERT_NOT_NULL(strstr(p, "\"},{\"key\":\"aboutarduinover\""));
 
     Serial.println("[TEST]   API info JSON shape test completed successfully");
 }

@@ -32,6 +32,7 @@ This fork currently includes the following architectural improvements:
 - **Capability-driven UI flags** in bootstrap/API payloads so features like info, update, erase, and action visibility can be controlled by backend state.
 - **Portal bootstrap contract v2**: nested `brand`, `context`, `pages`, `actions`, `layout`, `extraHomeCards`; Wi-Fi meta params include `kind` (`field` | `html`) for first-class custom HTML parameters.
 - **SPA-native feedback UX** using in-DOM dialog/toast behavior rather than page-based action flows.
+- **Connect-on-save handoff**: when portal save triggers a station connect, `/api/wifi/connect-status` now reports a brief success state with `stationIp` and `redirectUrl` so the SPA can show the new address and redirect before the AP shuts down.
 - **Request-scoped shell rendering**: the root portal page is built for each `GET /` from `WM_ROOT_SHELL_TEMPLATE` using a fresh placeholder registry. Shell inputs are `%PAGE_TITLE%`, `%STYLES%`, `%BOOTSTRAP_JSON%`, `%PORTAL_APP_JS%`, and `%PORTAL_APPEND_JS%` — filled in `WiFiManagerHandlers` from WiFiManager state and embedded assets (not from a server-wide template registry).
 - **Customization via WiFiManager `portal*` APIs** (`portalSetBrandTitle`, `portalSetPageInfoVisible`, `portalSetLayoutParamsLocation`, `portalAddParameter`, asset hooks, etc.) and JSON under `/api/...`, not by exposing placeholder-registry mutation to consumers.
 - A clearer separation between:
@@ -139,6 +140,29 @@ wm.portalAppendJs(
     "});"
 );
 ```
+
+## WiFi Connect Status API
+
+When `portalSetBehaviorConnectOnSave(true)` is enabled, saving WiFi credentials queues a station join and the SPA polls `GET /api/wifi/connect-status`.
+
+Response shape:
+
+```json
+{
+  "state": "waiting | success | failed",
+  "message": "human readable status",
+  "wifiStatus": "WL_CONNECTED",
+  "stationIp": "192.168.1.42",
+  "redirectUrl": "http://192.168.1.42/"
+}
+```
+
+Notes:
+
+- `stationIp` and `redirectUrl` are present only after a successful station join.
+- If the portal HTTP server is not on port `80`, `redirectUrl` includes the active port.
+- On success, WiFiManager keeps the portal alive briefly so the client can read the success payload and navigate to the new device address before the captive AP is shut down.
+- This improves the handoff on typical home networks, but it is not a universal guarantee: client captive-portal helpers, browser behavior, DHCP timing, and network isolation can still affect whether the redirect completes automatically.
 
 ## Dependencies
 

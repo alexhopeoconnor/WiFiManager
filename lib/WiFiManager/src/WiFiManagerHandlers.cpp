@@ -129,6 +129,15 @@ struct PortalShellRenderBundle {
         appendJsDescriptor{} {}
 };
 
+// Custom HTML attribute strings (e.g. from DeviceFramework generateCustomHTML) may include
+// type='password' — the JSON field descriptor must echo that or the SPA renders type=text.
+bool portalCustomAttrsIndicatePassword(const String& customAttrs) {
+  if (customAttrs.length() == 0) {
+    return false;
+  }
+  return customAttrs.indexOf("type='password'") >= 0 || customAttrs.indexOf("type=\"password\"") >= 0;
+}
+
 }  // namespace
 
 WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {}
@@ -308,31 +317,31 @@ void WiFiManagerHandlers::appendPortalJsonCustomParams(String& json, bool& first
     first = false;
     if (p->getID() != nullptr) {
       String pid = String(p->getID());
+      const String customAttrs = String(p->getCustomHTML());
       json += F("{\"kind\":\"field\",\"name\":\"");
       jsonAppendEscaped(json, pid);
       json += F("\",\"id\":\"");
       jsonAppendEscaped(json, pid);
       json += F("\",\"label\":\"");
       jsonAppendEscaped(json, String(p->getLabel()));
-      json += F("\",\"type\":\"text\",\"maxlength\":");
+      json += F("\",\"type\":\"");
+      json += portalCustomAttrsIndicatePassword(customAttrs) ? F("password") : F("text");
+      json += F("\",\"maxlength\":");
       json += String(p->getValueLength());
       json += F(",\"value\":\"");
       jsonAppendEscaped(json, String(p->getValue()));
       json += F("\",\"labelPlacement\":");
       json += String(p->getLabelPlacement());
-      {
-        String c = p->getCustomHTML();
-        if (c.length() > 0) {
-          json += F(",\"customAttrs\":\"");
-          jsonAppendEscaped(json, c);
-          json += F("\"");
-        }
+      if (customAttrs.length() > 0) {
+        json += F(",\"customAttrs\":\"");
+        jsonAppendEscaped(json, customAttrs);
+        json += F("\"");
       }
       json += F("}");
     } else {
       json += F("{\"kind\":\"html\",\"html\":\"");
       jsonAppendEscaped(json, String(p->getCustomHTML()));
-      json += F("}");
+      json += F("\"}");
     }
   }
 }
@@ -349,7 +358,7 @@ void WiFiManagerHandlers::appendJsonKvItem(String& json, bool& first, const char
   jsonAppendEscaped(json, label);
   json += F("\",\"value\":\"");
   jsonAppendEscaped(json, value);
-  json += F("}");
+  json += F("\"}");
 }
 
 void WiFiManagerHandlers::appendInfoSectionFromIds(String& json, const char* const* ids, size_t count, bool& first) {
@@ -1249,7 +1258,19 @@ String WiFiManagerHandlers::buildApiWifiConnectStatusJson() {
   jsonAppendEscaped(json, _wm->getConfigPortalConnectMessage());
   json += F("\",\"wifiStatus\":\"");
   jsonAppendEscaped(json, _wm->getWLStatusString(_wm->getConfigPortalConnectStatus()));
-  json += F("\"}");
+  json += F("\"");
+  if (_wm->_cpConnectStationIp.length() > 0) {
+    json += F(",\"stationIp\":\"");
+    jsonAppendEscaped(json, _wm->_cpConnectStationIp);
+    json += F("\",\"redirectUrl\":\"http://");
+    jsonAppendEscaped(json, _wm->_cpConnectStationIp);
+    if (_wm->_httpPort != 80) {
+      json += F(":");
+      json += String(_wm->_httpPort);
+    }
+    json += F("/\"");
+  }
+  json += F("}");
   return json;
 }
 

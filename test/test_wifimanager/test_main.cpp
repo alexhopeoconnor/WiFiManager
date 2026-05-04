@@ -11,6 +11,8 @@ TestCase tests[] = {
     // JSON API shape (buildApiInfoJson is large — run with fresh heap, before stress tests)
     TEST_ENTRY(test_captive_redirect_host_rule),
     TEST_ENTRY(test_api_wifi_meta_json_shape),
+    TEST_ENTRY(test_api_wifi_meta_password_field_type),
+    TEST_ENTRY(test_api_wifi_connect_status_success_redirect),
     TEST_ENTRY(test_api_info_json_shape),
     TEST_ENTRY(test_api_params_json_shape),
     TEST_ENTRY(test_api_status_json_shape),

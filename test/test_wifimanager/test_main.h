@@ -113,6 +113,8 @@ void test_shell_template_renders_dynamic_styles_with_percent_values();
 // API JSON + captive helper tests
 void test_captive_redirect_host_rule();
 void test_api_wifi_meta_json_shape();
+void test_api_wifi_meta_password_field_type();
+void test_api_wifi_connect_status_success_redirect();
 void test_api_info_json_shape();
 void test_api_params_json_shape();
 void test_api_status_json_shape();

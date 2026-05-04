@@ -684,7 +684,9 @@ void WiFiManager::queuePortalConnect(const String& ssid, const String& pass) {
   _cpConnectQueuedAt = millis();
   _cpConnectStartedAt = 0;
   _cpConnectDelayUntil = 0;
+  _cpConnectCloseAt = 0;
   _cpConnectTimeoutMs = (_saveTimeout > 0) ? (unsigned long)_saveTimeout : _connectTimeout;
+  _cpConnectStationIp = "";
   _cpConnectState = wm_cp_connect_state_t::queued;
   _cpConnectMessage = ssid.length() ? F("WiFi connect queued") : F("Settings saved");
   emitPortalEvent(WM_EVENT_PORTAL_CONNECT_QUEUED);
@@ -692,9 +694,24 @@ void WiFiManager::queuePortalConnect(const String& ssid, const String& pass) {
 
 void WiFiManager::processPortalConnect() {
   const unsigned long now = millis();
+  const unsigned long successHandoffDelayMs = 2500UL;
+  auto finalizePortalConnectSuccess = [&]() {
+    _cpConnectState = wm_cp_connect_state_t::success;
+    if (_savewificallback != NULL) {
+      #ifndef WM_NO_LOG
+      log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _savewificallback calling"));
+      #endif
+      _savewificallback();
+    }
+    emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
+    if (_disableConfigPortal) {
+      shutdownConfigPortal();
+    }
+  };
   auto failPortalConnect = [&](uint8_t status, const String& message) {
     _cpConnectStatus = status;
     _cpConnectMessage = message;
+    _cpConnectStationIp = "";
     _cpConnectState = wm_cp_connect_state_t::failed;
     updateConxResult(status);
     if (_shouldBreakAfterConfig) {
@@ -711,14 +728,16 @@ void WiFiManager::processPortalConnect() {
 
   switch (_cpConnectState) {
     case wm_cp_connect_state_t::idle:
-    case wm_cp_connect_state_t::success:
     case wm_cp_connect_state_t::failed:
+      return;
+    case wm_cp_connect_state_t::success:
       return;
     case wm_cp_connect_state_t::queued:
       resetAsyncScan(false);
       if (_cpConnectSsid.length() == 0) {
         _cpConnectStatus = WL_IDLE_STATUS;
         _cpConnectMessage = F("Settings saved");
+        _cpConnectStationIp = "";
         _cpConnectState = wm_cp_connect_state_t::success;
         emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
         return;
@@ -746,6 +765,7 @@ void WiFiManager::processPortalConnect() {
         }
         _cpConnectStatus = WL_IDLE_STATUS;
         _cpConnectMessage = F("Settings saved");
+        _cpConnectStationIp = "";
         _cpConnectState = wm_cp_connect_state_t::success;
         if (_savewificallback != NULL) {
           #ifndef WM_NO_LOG
@@ -771,17 +791,15 @@ void WiFiManager::processPortalConnect() {
       _cpConnectStatus = status;
       if (status == WL_CONNECTED) {
         updateConxResult(status);
-        _cpConnectMessage = F("WiFi connected");
-        _cpConnectState = wm_cp_connect_state_t::success;
-        if (_savewificallback != NULL) {
-          #ifndef WM_NO_LOG
-          log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem, F("[CB] _savewificallback calling"));
-          #endif
-          _savewificallback();
-        }
-        emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
-        if (_disableConfigPortal) {
-          shutdownConfigPortal();
+        _cpConnectStationIp = WiFi.localIP().toString();
+        _cpConnectMessage = _cpConnectStationIp.length() > 0
+            ? String(F("WiFi connected. Redirecting to ")) + _cpConnectStationIp
+            : String(F("WiFi connected"));
+        if (_disableConfigPortal && (configPortalActive || webPortalActive)) {
+          _cpConnectCloseAt = now + successHandoffDelayMs;
+          _cpConnectState = wm_cp_connect_state_t::success_waiting_close;
+        } else {
+          finalizePortalConnectSuccess();
         }
         return;
       }
@@ -794,6 +812,11 @@ void WiFiManager::processPortalConnect() {
       }
       return;
     }
+    case wm_cp_connect_state_t::success_waiting_close:
+      if (now >= _cpConnectCloseAt) {
+        finalizePortalConnectSuccess();
+      }
+      return;
   }
 }
 
@@ -2233,6 +2256,7 @@ WiFiManager::wm_configportal_connect_state_t WiFiManager::getConfigPortalConnect
     case wm_cp_connect_state_t::starting:
     case wm_cp_connect_state_t::waiting:
       return WM_CP_CONNECT_WAITING;
+    case wm_cp_connect_state_t::success_waiting_close:
     case wm_cp_connect_state_t::success:
       return WM_CP_CONNECT_SUCCESS;
     case wm_cp_connect_state_t::failed:
@@ -2245,11 +2269,13 @@ WiFiManager::wm_configportal_connect_state_t WiFiManager::getConfigPortalConnect
 
 bool WiFiManager::isConfigPortalConnectPending() const {
   return _cpConnectState == wm_cp_connect_state_t::queued || _cpConnectState == wm_cp_connect_state_t::delaying
-         || _cpConnectState == wm_cp_connect_state_t::starting || _cpConnectState == wm_cp_connect_state_t::waiting;
+         || _cpConnectState == wm_cp_connect_state_t::starting || _cpConnectState == wm_cp_connect_state_t::waiting
+         || _cpConnectState == wm_cp_connect_state_t::success_waiting_close;
 }
 
 bool WiFiManager::didConfigPortalConnectSucceed() const {
-  return _cpConnectState == wm_cp_connect_state_t::success;
+  return _cpConnectState == wm_cp_connect_state_t::success
+         || _cpConnectState == wm_cp_connect_state_t::success_waiting_close;
 }
 
 bool WiFiManager::didConfigPortalConnectFail() const {

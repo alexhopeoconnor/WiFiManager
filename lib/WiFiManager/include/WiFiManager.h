@@ -147,7 +147,7 @@
 #define WM_STRING(x) WM_STRING2(x)
 
 // WiFiManager version
-const char WM_VERSION_STR[] PROGMEM = "v2.0.18";    
+const char WM_VERSION_STR[] PROGMEM = "v2.0.19";    
 
 // #include <esp_idf_version.h>
 #ifdef ESP_IDF_VERSION
@@ -965,7 +965,26 @@ protected:
       _scan.completionPending = true;
       _scan.completionResult = completionResult;
     }
-    void          wmTestSetPortalActive(bool active) { configPortalActive = active; }
+    void          wmTestSetPortalActive(bool active) {
+      configPortalActive = active;
+      // Keep the test helper aligned with real portal startup so timeout-based
+      // assertions are anchored to "now" instead of device boot.
+      if (active) {
+        _configPortalStart = millis();
+      }
+    }
+    void          wmTestSetPortalConnectSuccess(const String& message, const String& stationIp, uint8_t status = WL_CONNECTED) {
+      _cpConnectState = wm_cp_connect_state_t::success;
+      _cpConnectMessage = message;
+      _cpConnectStationIp = stationIp;
+      _cpConnectStatus = status;
+    }
+    void          wmTestSetPortalConnectFailure(const String& message, uint8_t status = WL_CONNECT_FAILED) {
+      _cpConnectState = wm_cp_connect_state_t::failed;
+      _cpConnectMessage = message;
+      _cpConnectStationIp = "";
+      _cpConnectStatus = status;
+    }
     void          wmTestSetConnectPending(bool active);
     void          wmTestSetScanLifecycleBlocked(bool blocked) { _scanLifecycleBlocked = blocked; }
     void          wmTestSetScanGenerations(uint32_t generation, uint32_t runningGeneration, uint32_t completionGeneration) {
@@ -987,6 +1006,7 @@ protected:
       delaying,
       starting,
       waiting,
+      success_waiting_close,
       success,
       failed
     };
@@ -1001,6 +1021,8 @@ protected:
     unsigned long _cpConnectStartedAt = 0;
     unsigned long _cpConnectDelayUntil = 0;
     unsigned long _cpConnectTimeoutMs = 0;
+    unsigned long _cpConnectCloseAt = 0;
+    String        _cpConnectStationIp;
     WiFiManagerEventCallback _eventCallback = nullptr;
 
     //helpers (rendering methods moved to WiFiManagerHandlers)
