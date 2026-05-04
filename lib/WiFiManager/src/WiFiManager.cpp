@@ -2182,13 +2182,8 @@ void WiFiManager::setTitle(String title){
   _title = title;
 }
 
-/**
- * Set params as separate page not in wifi
- * NOT COMPATIBLE WITH setMenu!
- * @param enable If true, params appear on separate page
- */
-void WiFiManager::setParamsPage(bool enable){
-  _paramsInWifi  = !enable;
+void WiFiManager::setParametersEmbeddedInWifi(boolean embedded) {
+  _paramsInWifi = embedded;
 }
 
 // GETTERS

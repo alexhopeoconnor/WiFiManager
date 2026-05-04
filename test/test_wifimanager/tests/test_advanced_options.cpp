@@ -50,8 +50,8 @@ void test_ui_display_options() {
     wm.setShowInfoErase(false);
     wm.setShowInfoUpdate(true);
     wm.setShowInfoUpdate(false);
-    wm.setParamsPage(true);
-    wm.setParamsPage(false);
+    wm.setParametersEmbeddedInWifi(true);
+    wm.setParametersEmbeddedInWifi(false);
     
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "UI display options executed without crash");

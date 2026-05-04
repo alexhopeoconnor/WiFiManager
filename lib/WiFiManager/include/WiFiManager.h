@@ -470,8 +470,15 @@ class WiFiManager
     // set the webapp title, default WiFiManager
     void          setTitle(String title);
 
-    // add params to its own menu page and remove from wifi, NOT TO BE COMBINED WITH setMenu!
-    void          setParamsPage(bool enable);
+    /**
+     * Where custom parameters (`WiFiManagerParameter`) appear in the portal SPA (one placement only).
+     *
+     * - true (default): parameters render on the WiFi route (`#/wifi`) together with SSID/password.
+     * - false: parameters render only on the Setup route (`#/setup`); they are not duplicated on WiFi.
+     *
+     * Bootstrap exposes the same flag as `features.paramsInWifi`.
+     */
+    void          setParametersEmbeddedInWifi(boolean embedded);
 
     // get last connection result, including autoconnect and portal credential-save attempts
     uint8_t       getLastConxResult();
@@ -707,7 +714,7 @@ class WiFiManager
     boolean       _apClientCheck          = false; // keep cp alive if ap have station
     boolean       _webClientCheck         = true;  // keep cp alive if web have client
     boolean       _scanDispOptions        = false; // show percentage in scans not icons
-    boolean       _paramsInWifi           = true;  // show custom parameters on wifi page
+    boolean       _paramsInWifi           = true;  // if false, custom params only on #/setup (see setParametersEmbeddedInWifi)
     boolean       _showInfo               = true;  // show Info in portal SPA
     boolean       _showInfoErase          = true;  // info page erase button
     boolean       _showInfoUpdate         = true;  // info page update button

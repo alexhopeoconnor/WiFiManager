@@ -32,7 +32,7 @@ This fork currently includes the following architectural improvements:
 - **Capability-driven UI flags** in bootstrap/API payloads so features like info, update, erase, and action visibility can be controlled by backend state.
 - **SPA-native feedback UX** using in-DOM dialog/toast behavior rather than page-based action flows.
 - **Request-scoped shell rendering**: the root portal page is built for each `GET /` from `WM_ROOT_SHELL_TEMPLATE` using a fresh placeholder registry. Shell inputs are only `%PAGE_TITLE%`, `%STYLES%`, `%BOOTSTRAP_JSON%`, and `%PORTAL_APP_JS%` — filled in `WiFiManagerHandlers` from WiFiManager state and embedded assets (not from a server-wide template registry).
-- **Customization via WiFiManager APIs** (`setTitle`, `setShowInfo`, `setParamsPage`, bootstrap-facing flags, etc.), not by exposing placeholder-registry mutation to consumers.
+- **Customization via WiFiManager APIs** (`setTitle`, `setShowInfo`, `setParametersEmbeddedInWifi`, bootstrap-facing flags, etc.), not by exposing placeholder-registry mutation to consumers.
 - A clearer separation between:
   - shell rendering (handlers + SPA bootstrap)
   - JSON API responses

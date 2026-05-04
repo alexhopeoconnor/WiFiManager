@@ -21,7 +21,7 @@
 #endif
 
 // Portal UI customization is driven by WiFiManager state and helpers such as setTitle(), setShowInfo(),
-// setParamsPage(), setShowInfoUpdate(), etc., surfaced through bootstrap/API JSON — not by mutating template
+// setParametersEmbeddedInWifi(), setShowInfoUpdate(), etc., surfaced through bootstrap/API JSON — not by mutating template
 // placeholder registries.
 
 // -----------------------------------------------------------------------------------------------

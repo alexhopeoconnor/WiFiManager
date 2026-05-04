@@ -140,12 +140,12 @@ function viewHome(){
   html+="<header class='wm-hero'><h1 class='wm-hero-title'>"+t+"</h1>";
   if(sub)html+="<p class='wm-hero-sub'>"+sub+"</p>";
   html+="</header>";
+  html+="<div class='wm-card'><h2 class='wm-card-title'>Status</h2>";
   if(boot.initialStatus){
-    html+="<div class='wm-callout wm-callout--info'><p class='wm-status'>"+esc(boot.initialStatus)+"</p></div>";
+    html+="<p class='wm-home-summary'>"+esc(boot.initialStatus)+"</p>";
   }
-  html+="<div class='wm-card'><h2 class='wm-card-title'>Get started</h2>";
-  html+="<p class='wm-lead'>Use <strong>WiFi</strong> to scan networks and connect. Open <strong>Info</strong> for addresses and firmware actions";
-  html+=".</p></div>";
+  html+="<p class='wm-lead'>Use <strong>WiFi</strong> to scan networks and connect. Open <strong>Info</strong> for addresses and firmware actions.</p>";
+  html+="</div>";
   html+=deviceActionsHtml();
   setView(html);
 }

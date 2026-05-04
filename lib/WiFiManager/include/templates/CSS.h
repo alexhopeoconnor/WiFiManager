@@ -79,6 +79,7 @@ const char CSS_STYLE[] PROGMEM = "<style>"
 ".wm-card-title{font-size:1rem;margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid var(--wm-border);"
 "color:var(--wm-text)}"
 ".wm-lead{margin:0 0 8px;font-size:.95rem;color:var(--wm-muted);line-height:1.5}"
+".wm-home-summary{margin:0 0 14px;font-size:1rem;font-weight:600;line-height:1.45;color:var(--wm-text)}"
 /* Callout / status */
 ".wm-callout{padding:12px 14px;border-radius:var(--wm-radius-sm);border:1px solid var(--wm-border);"
 "background:rgba(14,165,233,.06);margin-bottom:16px}"
