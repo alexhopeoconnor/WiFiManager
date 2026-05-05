@@ -12,6 +12,7 @@
 #include "templates/RootShell.h"
 #include "templates/PortalAppJS.h"
 #include <TemplateEngine.h>
+#include <TemplateEngineAsyncWeb.h>
 #include <cstring>
 #if defined(ESP8266) || defined(ESP32)
 
@@ -95,9 +96,16 @@ AsyncWebServerResponse* beginTemplateResponse(AsyncWebServerRequest* request,
                                              const char* templateData) {
   bundle->context.setRegistry(&bundle->registry);
   TemplateRenderer::initializeContext(bundle->context, templateData);
-  return request->beginChunkedResponse(String(FPSTR(HTTP_HEAD_CT)),
-    [bundle](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
-      return TemplateRenderer::renderNextChunk(bundle->context, buffer, maxLen);
+  return TemplateEngineAsyncWeb::beginSafeChunkedResponse(
+    request,
+    String(FPSTR(HTTP_HEAD_CT)),
+    bundle,
+    [](BundleT& responseBundle, uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
+      return TemplateEngineAsyncWeb::renderTemplateChunkWithRetries(
+        responseBundle.context, buffer, maxLen, 128);
+    },
+    [](const BundleT& responseBundle) -> bool {
+      return TemplateEngineAsyncWeb::isTemplateTerminal(responseBundle.context);
     }
   );
 }
