@@ -8,6 +8,38 @@ If you are evaluating this fork, assume that core web-portal architecture has ch
 **This repository:** [alexhopeoconnor/WiFiManager](https://github.com/alexhopeoconnor/WiFiManager)  
 **Upstream:** [tzapu/WiFiManager](https://github.com/tzapu/WiFiManager)
 
+## Basic provisioning
+
+For a standalone Arduino project, create one long-lived `WiFiManager` and call
+`autoConnect` during setup. It first tries saved station credentials; when that
+fails it starts the configuration portal with the supplied AP name and password.
+
+```cpp
+#include <Arduino.h>
+#include <WiFiManager.h>
+
+WiFiManager wifi;
+
+void setup() {
+    Serial.begin(115200);
+    wifi.setConfigPortalTimeout(180);  // seconds; 0 leaves it open
+
+    if (!wifi.autoConnect("Device Setup", "change-me")) {
+        ESP.restart();
+    }
+}
+
+void loop() {
+    // Normal application work after WiFi is connected.
+}
+```
+
+The AP password must meet the Wi-Fi password requirements. For applications
+built on DeviceFramework, configure `setConfigDevicePassword(...)` instead:
+DeviceFramework passes the same validated password to WiFiManager, Arduino OTA,
+HTTP Basic authentication, and WebSerial.
+
+
 ## Breaking Changes
 
 This fork intentionally modernizes and restructures the configuration portal.
@@ -168,15 +200,15 @@ Notes:
 
 This fork depends on **DFTE** ([Device Framework Template Engine](https://github.com/alexhopeoconnor/DFTE)) and **ESP32Async/ESPAsyncWebServer**.
 
-For this repo's `platformio.ini` test setup, DFTE is expected as a sibling checkout:
+The published `library.json` resolves DFTE from the maintained, pinned
+`v1.0.2` Git tag. No sibling checkout is required to consume WiFiManager.
+When developing both libraries together, use a local `symlink://` or
+`file://` dependency in your own ignored PlatformIO override.
 
-```ini
-lib_deps =
-    ESP32Async/ESPAsyncWebServer@3.9.1
-    symlink://../DFTE
-```
 
 ## Installation
+
+Use the release tag in an application:
 
 ```ini
 [env:your_environment]
@@ -184,15 +216,38 @@ platform = espressif8266   ; or espressif32
 board = d1_mini            ; your board
 framework = arduino
 lib_deps =
-    https://github.com/alexhopeoconnor/WiFiManager.git
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.2
 ```
 
-Or a local path:
+The text after `#` is a Git ref. PlatformIO clones the repository and checks
+out that tag; it does not download a GitHub Release asset. A tag gives a
+reproducible library input. Use a local checkout only while actively changing
+the library:
 
 ```ini
 lib_deps =
-    file:///path/to/WiFiManager
+    WiFiManager=file:///path/to/WiFiManager
 ```
+
+## Tests and releases
+
+The CI workflow compile-checks the Unity test suite for both supported targets.
+These commands need no connected board:
+
+```bash
+pio test -e esp8266 --without-uploading --without-testing
+pio test -e esp32 --without-uploading --without-testing
+```
+
+Before publishing a version, update `library.json`, `CHANGELOG.md`, and this
+README, run both checks, then create the annotated tag:
+
+```bash
+./scripts/prepare-release.sh vMAJOR.MINOR.PATCH --tag
+```
+
+Push the branch and tag. GitHub Actions validates the PlatformIO package again
+and creates the GitHub Release from that tag.
 
 ## AI Assistance Notice
 
