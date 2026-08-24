@@ -63,6 +63,9 @@ bool normalizeHostname(String& hostname) {
  * @return true if added successfully, false on error
  */
 bool WiFiManager::portalAddParameter(WiFiManagerParameter *p) {
+  if (!p) {
+    return false;
+  }
 
   // check param id is valid, unless null
   if(p->getID()){
@@ -82,18 +85,25 @@ bool WiFiManager::portalAddParameter(WiFiManagerParameter *p) {
     log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("allocating params bytes:"),_max_params * sizeof(WiFiManagerParameter*));        
     #endif
     _params = (WiFiManagerParameter**)malloc(_max_params * sizeof(WiFiManagerParameter*));
+    if (_params == NULL) {
+      #ifndef WM_NO_LOG
+      log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] failed to allocate params"));
+      #endif
+      return false;
+    }
   }
 
-  // resize the params array by increment of WIFI_MANAGER_MAX_PARAMS
+  // Resize only after a successful allocation so _max_params always matches storage.
   if(_paramsCount == _max_params){
-    _max_params += WIFI_MANAGER_MAX_PARAMS;
+    const size_t expandedMaxParams = _max_params + WIFI_MANAGER_MAX_PARAMS;
     #ifndef WM_NO_LOG
-    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("Updated _max_params:"),_max_params);
-    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("re-allocating params bytes:"),_max_params * sizeof(WiFiManagerParameter*));    
+    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("Updated _max_params:"),expandedMaxParams);
+    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("re-allocating params bytes:"),expandedMaxParams * sizeof(WiFiManagerParameter*));
     #endif
-    WiFiManagerParameter** new_params = (WiFiManagerParameter**)realloc(_params, _max_params * sizeof(WiFiManagerParameter*));
+    WiFiManagerParameter** new_params = (WiFiManagerParameter**)realloc(_params, expandedMaxParams * sizeof(WiFiManagerParameter*));
     if (new_params != NULL) {
       _params = new_params;
+      _max_params = expandedMaxParams;
     } else {
       #ifndef WM_NO_LOG
       log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] failed to realloc params, size not increased!"));

@@ -34,7 +34,9 @@ class WiFiManagerParameter {
     WiFiManagerParameter(const char *id, const char *label, const char *defaultValue, int length, const char *custom);
     WiFiManagerParameter(const char *id, const char *label, const char *defaultValue, int length, const char *custom, int labelPlacement);
     virtual ~WiFiManagerParameter();
-    // WiFiManagerParameter& operator=(const WiFiManagerParameter& rhs);
+
+    WiFiManagerParameter(const WiFiManagerParameter&) = delete;
+    WiFiManagerParameter& operator=(const WiFiManagerParameter&) = delete;
 
     const char *getID() const;
     const char *getValue() const;
@@ -48,7 +50,6 @@ class WiFiManagerParameter {
   protected:
     void init(const char *id, const char *label, const char *defaultValue, int length, const char *custom, int labelPlacement);
 
-    WiFiManagerParameter& operator=(const WiFiManagerParameter&);
     const char *_id;
     const char *_label;
     char       *_value;

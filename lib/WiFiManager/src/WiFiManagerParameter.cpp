@@ -8,9 +8,11 @@
 #include "WiFiManagerParameter.h"
 
 #include <cstring>
+#include <new>
 
-WiFiManagerParameter::WiFiManagerParameter() {
-  WiFiManagerParameter("");
+WiFiManagerParameter::WiFiManagerParameter()
+  : WiFiManagerParameter("")
+{
 }
 
 WiFiManagerParameter::WiFiManagerParameter(const char *custom) {
@@ -63,27 +65,24 @@ WiFiManagerParameter::~WiFiManagerParameter() {
 
 // @note debug is not available in wmparameter class
 void WiFiManagerParameter::setValue(const char *defaultValue, int length) {
-  if(!_id){
-    // Serial.println("cannot set value of this parameter");
+  if (!_id || length < 0) {
     return;
   }
 
-  // if(strlen(defaultValue) > length){
-  //   // Serial.println("defaultValue length mismatch");
-  //   // return false; //@todo bail
-  // }
-
-  if(_length != length || _value == nullptr){
-    _length = length;
-    if( _value != nullptr){
-      delete[] _value;
+  if (_length != length || _value == nullptr) {
+    char* replacement = new (std::nothrow) char[static_cast<size_t>(length) + 1];
+    if (!replacement) {
+      return;
     }
-    _value  = new char[_length + 1];
+
+    delete[] _value;
+    _value = replacement;
+    _length = length;
   }
 
-  memset(_value, 0, _length + 1); // explicit null
+  memset(_value, 0, static_cast<size_t>(_length) + 1);
 
-  if (defaultValue != NULL) {
+  if (defaultValue != nullptr) {
     strncpy(_value, defaultValue, _length);
   }
 }

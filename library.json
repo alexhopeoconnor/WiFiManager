@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "2.0.19",
+  "version": "3.0.0",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -13,7 +13,7 @@
     "wemos",
     "arduino"
   ],
-  "description": "WiFi Configuration manager with web configuration portal for ESP boards",
+  "description": "Maintained ESP8266/ESP32 WiFi configuration portal with asynchronous web support.",
   "authors": [
     {
       "name": "tzapu",
@@ -38,13 +38,10 @@
     "espressif8266",
     "espressif32"
   ],
-  "dependencies": [
-    {
-      "name": "ESP32Async/ESPAsyncWebServer",
-      "version": "^3.9.1"
-    },
-    "https://github.com/alexhopeoconnor/DFTE.git"
-  ],
+  "dependencies": {
+    "ESP32Async/ESPAsyncWebServer": "3.9.1",
+    "DeviceFrameworkTemplateEngine": "https://github.com/alexhopeoconnor/DFTE.git#v1.0.1"
+  },
   "build": {
     "includeDir": "lib/WiFiManager/include",
     "srcDir": "lib/WiFiManager/src"
@@ -57,5 +54,7 @@
       "README.md",
       "library.json"
     ]
-  }
+  },
+  "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
+  "homepage": "https://github.com/alexhopeoconnor/WiFiManager"
 }
