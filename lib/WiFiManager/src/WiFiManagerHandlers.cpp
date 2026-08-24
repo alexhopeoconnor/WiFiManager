@@ -739,7 +739,7 @@ void WiFiManagerHandlers::applyWifiAndParamsFromRequest(AsyncWebServerRequest *r
   requestinfo += "\n";
   for (size_t i = 0; i < request->params(); i++) {
     const AsyncWebParameter* p = request->getParam(i);
-    requestinfo += " " + p->name() + ": " + p->value() + "\n";
+    requestinfo += " " + p->name() + ": [redacted, " + String(p->value().length()) + " chars]\n";
   }
 
   _wm->log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, requestinfo);
@@ -823,7 +823,8 @@ void WiFiManagerHandlers::doParamSave(WiFiManager::WiFiManagerRequestArgs reques
 
       _wm->_params[i]->setValue(value.c_str(), value.length());
       #ifndef WM_NO_LOG
-      _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,(String)_wm->_params[i]->getID() + ":",value);
+      _wm->log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,
+          (String)_wm->_params[i]->getID() + F(": [redacted, ") + String(value.length()) + F(" chars]"));
       #endif
     }
     #ifndef WM_NO_LOG

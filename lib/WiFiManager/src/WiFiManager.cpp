@@ -986,7 +986,7 @@ bool WiFiManager::wifiConnectNew(String ssid, String pass,bool connect){
   bool ret = false;
   #ifndef WM_NO_LOG
   log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("Connecting to NEW AP:"),ssid);
-  log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("Using Password:"),pass);
+  log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("WiFi password supplied: [redacted]"));
   #endif
   WiFi_enableSTA(true,storeSTAmode); // storeSTAmode will also toggle STA on in default opmode (persistent) if true (default)
   WiFi.persistent(true);
@@ -1007,7 +1007,7 @@ bool WiFiManager::wifiConnectDefault(){
 
   #ifndef WM_NO_LOG
   log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("Connecting to SAVED AP:"),WiFi_SSID(true));
-  log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,F("Using Password:"),WiFi_psk(true));
+  log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Using saved WiFi credentials"));
   #endif
 
   ret = WiFi_enableSTA(true,storeSTAmode);
@@ -2443,7 +2443,7 @@ void WiFiManager::debugSoftAPConfig(){
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("SoftAP Configuration"));
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("--------------------"));
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("ssid:            "),(char *) config.ssid);
-    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("password:        "),(char *) config.password);
+    log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("password:        [redacted]"));
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("ssid_len:        "),config.ssid_len);
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("channel:         "),config.channel);
     log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("authmode:        "),config.authmode);
@@ -2518,7 +2518,7 @@ boolean WiFiManager::validApPassword(){
     }
     #ifndef WM_NO_LOG
     log(WiFiManagerLogLevel::Debug, kWiFiMgrLogSubsystem,F("AccessPoint set password is VALID"));
-    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem,"ap pass",_apPassword);
+    log(WiFiManagerLogLevel::Trace, kWiFiMgrLogSubsystem, F("Access point password: [redacted]"));
     #endif
   }
   return true;
