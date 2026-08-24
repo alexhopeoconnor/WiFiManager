@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.2
+
+- Update the pinned DFTE dependency to the iterator-lifecycle and configuration-safe 1.0.2 release.
+
 ## 3.0.1
 
 - Redact WiFi, AP, portal-form, and custom-parameter values from diagnostic logs.

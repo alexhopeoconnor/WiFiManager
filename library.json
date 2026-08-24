@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -40,7 +40,7 @@
   ],
   "dependencies": {
     "ESP32Async/ESPAsyncWebServer": "3.9.1",
-    "DeviceFrameworkTemplateEngine": "https://github.com/alexhopeoconnor/DFTE.git#v1.0.1"
+    "DeviceFrameworkTemplateEngine": "https://github.com/alexhopeoconnor/DFTE.git#v1.0.2"
   },
   "build": {
     "includeDir": "lib/WiFiManager/include",
