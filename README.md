@@ -208,15 +208,34 @@ When developing both libraries together, use a local `symlink://` or
 
 ## Installation
 
-Use the release tag in an application:
+Use the release tag and list the asynchronous web/TCP packages at project level.
+PlatformIO installs the manifest dependencies automatically, but its dependency
+finder requires these headers to be direct project dependencies before it adds
+their include paths:
 
 ```ini
-[env:your_environment]
-platform = espressif8266   ; or espressif32
-board = d1_mini            ; your board
+[common]
+lib_deps =
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.3
+    ESP32Async/ESPAsyncWebServer@3.9.1
+
+[env:esp8266]
+extends = common
+platform = espressif8266
+board = d1_mini
 framework = arduino
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.2
+    ${common.lib_deps}
+    ESP32Async/ESPAsyncTCP@2.0.0
+
+[env:esp32]
+extends = common
+lib_deps =
+platform = espressif32
+board = esp32dev
+framework = arduino
+    ${common.lib_deps}
+    ESP32Async/AsyncTCP@3.4.9
 ```
 
 The text after `#` is a Git ref. PlatformIO clones the repository and checks
@@ -231,12 +250,12 @@ lib_deps =
 
 ## Tests and releases
 
-The CI workflow compile-checks the Unity test suite for both supported targets.
-These commands need no connected board:
+The CI workflow compiles a minimal clean consumer project for both supported
+targets. These commands need no connected board:
 
 ```bash
-pio test -e esp8266 --without-uploading --without-testing
-pio test -e esp32 --without-uploading --without-testing
+./scripts/compile-check.sh --platform esp8266
+./scripts/compile-check.sh --platform esp32
 ```
 
 Before publishing a version, update `library.json`, `CHANGELOG.md`, and this
