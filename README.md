@@ -216,7 +216,7 @@ their include paths:
 ```ini
 [common]
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.4
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.5
     ESP32Async/ESPAsyncWebServer@3.9.1
 
 [env:esp8266]

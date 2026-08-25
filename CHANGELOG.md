@@ -1,10 +1,14 @@
 # Changelog
 
-## 3.0.3
+## 3.0.5
+
+- Add a library-owned PlatformIO bridge for the asynchronous web/TCP include paths required when WiFiManager is nested beneath DeviceFramework.
+
 ## 3.0.4
 
 - Set the package's deep PlatformIO dependency-discovery mode so WiFiManager's asynchronous web/TCP children remain available when it is consumed through DeviceFramework.
 
+## 3.0.3
 
 - Declare the ESP8266 and ESP32 async TCP libraries explicitly in the PlatformIO package manifest so clean consumers resolve the headers required by the asynchronous portal.
 

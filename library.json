@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -64,7 +64,7 @@
   "build": {
     "includeDir": "lib/WiFiManager/include",
     "srcDir": "lib/WiFiManager/src",
-    "libLDFMode": "deep+"
+    "extraScript": "tools/platformio/dependencies.py"
   },
   "export": {
     "include": [
@@ -72,7 +72,8 @@
       "lib/WiFiManager/src",
       "LICENSE",
       "README.md",
-      "library.json"
+      "library.json",
+      "tools"
     ]
   },
   "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
