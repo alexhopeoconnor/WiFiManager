@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -63,7 +63,8 @@
   ],
   "build": {
     "includeDir": "lib/WiFiManager/include",
-    "srcDir": "lib/WiFiManager/src"
+    "srcDir": "lib/WiFiManager/src",
+    "libLDFMode": "deep+"
   },
   "export": {
     "include": [
