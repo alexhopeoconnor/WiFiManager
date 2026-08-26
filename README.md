@@ -208,34 +208,25 @@ When developing both libraries together, use a local `symlink://` or
 
 ## Installation
 
-Use the release tag and list the asynchronous web/TCP packages at project level.
-PlatformIO installs the manifest dependencies automatically, but its dependency
-finder requires these headers to be direct project dependencies before it adds
-their include paths:
+Use the release tag. The package manifest resolves DFTE, the asynchronous web
+server, and the platform-specific TCP library automatically:
 
 ```ini
 [common]
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.5
-    ESP32Async/ESPAsyncWebServer@3.9.1
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.0.6
 
 [env:esp8266]
 extends = common
 platform = espressif8266
 board = d1_mini
 framework = arduino
-lib_deps =
-    ${common.lib_deps}
-    ESP32Async/ESPAsyncTCP@2.0.0
 
 [env:esp32]
 extends = common
-lib_deps =
 platform = espressif32
 board = esp32dev
 framework = arduino
-    ${common.lib_deps}
-    ESP32Async/AsyncTCP@3.4.9
 ```
 
 The text after `#` is a Git ref. PlatformIO clones the repository and checks

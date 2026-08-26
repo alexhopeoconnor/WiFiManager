@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -40,18 +40,18 @@
   ],
   "dependencies": [
     {
-      "owner": "ESP32Async",
+      "owner": "esp32async",
       "name": "ESPAsyncWebServer",
       "version": "3.9.1"
     },
     {
-      "owner": "ESP32Async",
+      "owner": "esp32async",
       "name": "ESPAsyncTCP",
       "version": "2.0.0",
       "platforms": "espressif8266"
     },
     {
-      "owner": "ESP32Async",
+      "owner": "esp32async",
       "name": "AsyncTCP",
       "version": "3.4.9",
       "platforms": "espressif32"
@@ -63,8 +63,7 @@
   ],
   "build": {
     "includeDir": "lib/WiFiManager/include",
-    "srcDir": "lib/WiFiManager/src",
-    "extraScript": "tools/platformio/dependencies.py"
+    "srcDir": "lib/WiFiManager/src"
   },
   "export": {
     "include": [

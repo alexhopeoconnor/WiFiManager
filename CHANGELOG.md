@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.6
+
+- Correct async PlatformIO dependency owners to the registry's canonical lowercase identity, so a clean consumer builds WiFiManager and its ESP8266/ESP32 transport dependencies without duplicating them in `lib_deps`. Remove the superseded include-path bridge.
+
 ## 3.0.5
 
 - Add a library-owned PlatformIO bridge for the asynchronous web/TCP include paths required when WiFiManager is nested beneath DeviceFramework.
