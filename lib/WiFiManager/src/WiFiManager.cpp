@@ -27,6 +27,7 @@ uint8_t WiFiManager::_lastconxresulttmp = WL_IDLE_STATUS;
 namespace {
 constexpr size_t kMaxHostnameLength = 32;
 constexpr uint8_t kSoftApStartMaxAttempts = 3;
+constexpr unsigned long kStationProfileSwitchDelayMs = 2000UL;  // ESP WiFi needs time to leave a failed association.
 
 bool isValidHostnameChar(char c) {
   return isAlphaNumeric(c) || c == '-';
@@ -195,6 +196,465 @@ void WiFiManager::_begin(){
 void WiFiManager::_end(){
   _hasBegun = false;
   if(_userpersistent) WiFi.persistent(true); // reenable persistent, there is no getter we rely on _userpersistent
+}
+
+void WiFiManager::setStationProfileStore(WiFiManagerStationProfileStore* store) {
+  _stationProfileStore = store;
+  _stationProfilesLoaded = false;
+  _stationCandidateActive = false;
+  _stationCandidateFromPortal = false;
+  _stationAttemptMask = 0;
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  _stationStatus = wm_station_status_t();
+}
+
+bool WiFiManager::isStationProfileMode() const {
+  return _stationProfileStore != nullptr;
+}
+
+void WiFiManager::setStationRecoveryInterval(unsigned long intervalMs) {
+  if (intervalMs > 0) {
+    _stationRecoveryInterval = intervalMs;
+  }
+}
+
+const WiFiManagerStationProfiles& WiFiManager::getStationProfiles() const {
+  return _stationProfiles;
+}
+
+const WiFiManager::wm_station_status_t& WiFiManager::getStationStatus() const {
+  return _stationStatus;
+}
+
+bool WiFiManager::isStationProfileEnabled(const WiFiManagerStationProfiles& profiles, uint8_t slot) const {
+  return slot < WM_STATION_PROFILE_COUNT && profiles.slots[slot].enabled && profiles.slots[slot].ssid[0] != '\0';
+}
+
+uint8_t WiFiManager::configuredStationProfileCount(const WiFiManagerStationProfiles& profiles) const {
+  uint8_t count = 0;
+  for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+    if (isStationProfileEnabled(profiles, slot)) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+bool WiFiManager::validateStationProfiles(const WiFiManagerStationProfiles& profiles) const {
+  if (profiles.preferredSlot >= WM_STATION_PROFILE_COUNT || !isStationProfileEnabled(profiles, 0)) {
+    return false;
+  }
+
+  for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+    const WiFiManagerStationProfile& profile = profiles.slots[slot];
+    if (!profile.enabled) {
+      continue;
+    }
+    if (memchr(profile.ssid, '\0', sizeof(profile.ssid)) == nullptr ||
+        memchr(profile.password, '\0', sizeof(profile.password)) == nullptr) {
+      return false;
+    }
+  }
+
+  return profiles.lastSuccessfulSlot == WM_NO_STATION_PROFILE ||
+         isStationProfileEnabled(profiles, profiles.lastSuccessfulSlot);
+}
+
+uint8_t WiFiManager::chooseStationProfile(const WiFiManagerStationProfiles& profiles,
+                                          bool preferLastSuccessful) const {
+  if (preferLastSuccessful && isStationProfileEnabled(profiles, profiles.lastSuccessfulSlot)) {
+    return profiles.lastSuccessfulSlot;
+  }
+  if (isStationProfileEnabled(profiles, profiles.preferredSlot)) {
+    return profiles.preferredSlot;
+  }
+  for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+    if (isStationProfileEnabled(profiles, slot)) {
+      return slot;
+    }
+  }
+  return WM_NO_STATION_PROFILE;
+}
+
+const WiFiManagerStationProfiles& WiFiManager::stationProfilesForAttempt() const {
+  return _stationCandidateActive ? _stationCandidate : _stationProfiles;
+}
+
+WiFiManagerStationProfiles& WiFiManager::stationProfilesForAttempt() {
+  return _stationCandidateActive ? _stationCandidate : _stationProfiles;
+}
+
+unsigned long WiFiManager::stationAttemptTimeout() const {
+  // The synchronous legacy connection path allows an unlimited timeout. A
+  // profile controller must stay bounded so it can advance to the fallback.
+  return _connectTimeout > 0 ? _connectTimeout : 15000UL;
+}
+
+bool WiFiManager::hasUsableStationConnection() const {
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
+  }
+  return WiFi.localIP() != IPAddress(0, 0, 0, 0);
+}
+
+bool WiFiManager::startStationConnection(char const *apName, char const *apPassword) {
+  if (!isStationProfileMode()) {
+    return false;
+  }
+
+  _begin();
+  _stationPortalApName = apName ? apName : getDefaultAPName();
+  _stationPortalApPassword = apPassword ? apPassword : "";
+  _stationCandidateActive = false;
+  _stationCandidateFromPortal = false;
+  _stationAttemptMask = 0;
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  _stationStatus = wm_station_status_t();
+  _stationStatus.state = WM_STATION_LOADING;
+  _stationStatus.message = F("Loading WiFi profiles");
+
+  WiFiManagerStationProfiles loaded;
+  if (_stationProfileStore->load(loaded)) {
+    _stationProfiles = loaded;
+  } else {
+    _stationProfiles = WiFiManagerStationProfiles();
+  }
+  _stationProfilesLoaded = true;
+  _stationStatus.configuredProfiles = configuredStationProfileCount(_stationProfiles);
+
+  if (!validateStationProfiles(_stationProfiles)) {
+    _stationStatus.message = _stationStatus.configuredProfiles == 0
+        ? F("No WiFi profiles configured")
+        : F("Stored WiFi profiles are invalid");
+    enterStationPortal();
+    return false;
+  }
+
+  beginStationCycle(true);
+  return true;
+}
+
+bool WiFiManager::startStationCandidate(const WiFiManagerStationProfiles& candidate) {
+  if (!validateStationProfiles(candidate)) {
+    _stationStatus.state = WM_STATION_IDLE;
+    _stationStatus.message = F("WiFi profile candidate is invalid");
+    return false;
+  }
+
+  if (!_stationProfilesLoaded && _stationProfileStore) {
+    WiFiManagerStationProfiles loaded;
+    _stationProfiles = _stationProfileStore->load(loaded)
+        ? loaded
+        : WiFiManagerStationProfiles();
+    _stationProfilesLoaded = true;
+  }
+
+  _begin();
+  _stationCandidate = candidate;
+  _stationCandidateActive = true;
+  _stationCandidateFromPortal = configPortalActive;
+  _stationAttemptMask = 0;
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  _stationStatus = wm_station_status_t();
+  _stationStatus.state = WM_STATION_LOADING;
+  _stationStatus.configuredProfiles = configuredStationProfileCount(candidate);
+  _stationStatus.message = F("WiFi profile candidate queued");
+
+  if (_stationCandidateFromPortal) {
+    _cpConnectStatus = WL_IDLE_STATUS;
+    _cpConnectStationIp = "";
+    _cpConnectState = wm_cp_connect_state_t::queued;
+    _cpConnectMessage = F("WiFi profile candidate queued");
+    emitPortalEvent(WM_EVENT_PORTAL_CONNECT_QUEUED);
+  }
+
+  beginStationCycle(false);
+  return true;
+}
+
+bool WiFiManager::startStationCandidate(const WiFiManagerStationProfiles& candidate,
+                                        char const *apName, char const *apPassword) {
+  _stationPortalApName = apName ? apName : getDefaultAPName();
+  _stationPortalApPassword = apPassword ? apPassword : "";
+  return startStationCandidate(candidate);
+}
+
+bool WiFiManager::saveStationProfiles(const WiFiManagerStationProfiles& profiles) {
+  if (!isStationProfileMode() || !validateStationProfiles(profiles)) {
+    return false;
+  }
+  if (!_stationProfileStore->save(profiles)) {
+    _stationStatus.storageSaveFailed = true;
+    _stationStatus.message = F("WiFi profiles could not be saved");
+    return false;
+  }
+
+  _stationProfiles = profiles;
+  _stationProfilesLoaded = true;
+  _stationStatus.configuredProfiles = configuredStationProfileCount(_stationProfiles);
+  _stationStatus.storageSaveFailed = false;
+  _stationStatus.message = F("WiFi profiles saved");
+  return true;
+}
+
+void WiFiManager::clearStationProfiles() {
+  if (_stationProfileStore && !_stationProfileStore->clear()) {
+    _stationStatus.storageSaveFailed = true;
+    _stationStatus.message = F("WiFi profiles could not be cleared");
+    return;
+  }
+
+  WiFi_Disconnect();
+  WiFi_eraseConfig();
+  _stationProfiles = WiFiManagerStationProfiles();
+  _stationCandidate = WiFiManagerStationProfiles();
+  _stationCandidateActive = false;
+  _stationCandidateFromPortal = false;
+  _stationProfilesLoaded = false;
+  _stationAttemptMask = 0;
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  _stationEverConnected = false;
+  _stationStatus = wm_station_status_t();
+  _stationStatus.message = F("WiFi profiles cleared");
+  emitPortalEvent(WM_EVENT_STATION_PROFILES_CLEARED);
+}
+
+void WiFiManager::beginStationCycle(bool preferLastSuccessful) {
+  _stationAttemptMask = 0;
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  const uint8_t first = chooseStationProfile(stationProfilesForAttempt(), preferLastSuccessful);
+  if (first == WM_NO_STATION_PROFILE) {
+    enterStationPortal();
+    return;
+  }
+  beginStationProfile(first);
+}
+
+bool WiFiManager::beginStationProfile(uint8_t slot) {
+  const WiFiManagerStationProfiles& profiles = stationProfilesForAttempt();
+  if (!isStationProfileEnabled(profiles, slot)) {
+    return false;
+  }
+
+  const WiFiManagerStationProfile& profile = profiles.slots[slot];
+  _stationPendingSlot = WM_NO_STATION_PROFILE;
+  _stationNextAttemptAt = 0;
+  _stationAttemptMask |= static_cast<uint8_t>(1U << slot);
+  _stationAttemptStartedAt = millis();
+  _stationStatus.state = WM_STATION_ATTEMPTING;
+  _stationStatus.attemptedSlot = slot;
+  _stationStatus.wifiStatus = WL_IDLE_STATUS;
+  _stationStatus.message = String(F("Connecting profile ")) + String(slot + 1);
+  emitPortalEvent(WM_EVENT_STATION_PROFILE_ATTEMPT);
+
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(false);
+  WiFi_enableSTA(true, false);
+  setSTAConfig();
+  if (_cleanConnect) {
+    WiFi_Disconnect();
+  }
+
+  WiFi.begin(
+      profile.ssid,
+      profile.hasPassword ? profile.password : nullptr);
+  return true;
+}
+
+void WiFiManager::queueStationProfile(uint8_t slot) {
+  _stationPendingSlot = slot;
+  _stationNextAttemptAt = millis() + kStationProfileSwitchDelayMs;
+  _stationStatus.state = WM_STATION_SWITCHING;
+  _stationStatus.message = String(F("Switching to profile ")) + String(slot + 1);
+  WiFi_Disconnect();
+}
+
+void WiFiManager::completePortalStationAttempt(bool success, uint8_t status, const String& message) {
+  if (!_stationCandidateFromPortal && !configPortalActive) {
+    return;
+  }
+
+  _cpConnectStatus = status;
+  _cpConnectMessage = message;
+  _cpConnectStationIp = success ? WiFi.localIP().toString() : "";
+  _cpConnectState = success ? wm_cp_connect_state_t::success : wm_cp_connect_state_t::failed;
+
+  if (success) {
+    if (_savewificallback != NULL) {
+      _savewificallback();
+    }
+    emitPortalEvent(WM_EVENT_PORTAL_CONNECT_SUCCESS);
+    if (_disableConfigPortal) {
+      shutdownConfigPortal();
+    }
+  } else {
+    updateConxResult(status);
+    emitPortalEvent(WM_EVENT_PORTAL_CONNECT_FAILED);
+  }
+}
+
+void WiFiManager::handleStationConnectionSuccess() {
+  const uint8_t slot = _stationStatus.attemptedSlot;
+  const bool wasCandidate = _stationCandidateActive;
+  const bool wasPortalCandidate = _stationCandidateFromPortal;
+  bool persisted = true;
+
+  if (wasCandidate) {
+    const WiFiManagerStationProfiles previous = _stationProfiles;
+    _stationCandidate.lastSuccessfulSlot = slot;
+    if (_stationProfileStore) {
+      persisted = _stationProfileStore->save(_stationCandidate);
+    }
+    if (persisted) {
+      _stationProfiles = _stationCandidate;
+      _stationProfilesLoaded = true;
+    } else {
+      _stationProfiles = previous;
+    }
+    _stationCandidateActive = false;
+    _stationCandidateFromPortal = false;
+  } else {
+    const bool changed = _stationProfiles.lastSuccessfulSlot != slot;
+    _stationProfiles.lastSuccessfulSlot = slot;
+    if (changed && _stationProfileStore) {
+      persisted = _stationProfileStore->save(_stationProfiles);
+    }
+  }
+
+  _stationEverConnected = true;
+  _stationStatus.state = WM_STATION_CONNECTED;
+  _stationStatus.activeSlot = slot;
+  _stationStatus.wifiStatus = WL_CONNECTED;
+  _stationStatus.lastConnectionWasCandidate = wasCandidate;
+  _stationStatus.storageSaveFailed = !persisted;
+  _stationStatus.message = persisted ? F("WiFi connected") : F("WiFi connected but profiles could not be saved");
+  emitPortalEvent(WM_EVENT_STATION_PROFILE_CONNECTED);
+
+  if (wasPortalCandidate) {
+    completePortalStationAttempt(persisted, persisted ? WL_CONNECTED : WL_CONNECT_FAILED,
+                                 _stationStatus.message);
+  }
+}
+
+void WiFiManager::enterStationPortal() {
+  _stationStatus.state = WM_STATION_PORTAL;
+  if (_stationStatus.message.length() == 0) {
+    _stationStatus.message = F("WiFi configuration required");
+  }
+
+  if (configPortalActive || !_enableConfigPortal) {
+    return;
+  }
+
+  String apName = _stationPortalApName.length() ? _stationPortalApName : getDefaultAPName();
+  startConfigPortal(apName.c_str(), _stationPortalApPassword.length() ? _stationPortalApPassword.c_str() : NULL);
+}
+
+void WiFiManager::handleStationAttemptFailure(uint8_t status, const String& message) {
+  _stationStatus.wifiStatus = status;
+  _stationStatus.message = message;
+  const WiFiManagerStationProfiles& profiles = stationProfilesForAttempt();
+
+  for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+    const uint8_t bit = static_cast<uint8_t>(1U << slot);
+    if (isStationProfileEnabled(profiles, slot) && !(_stationAttemptMask & bit)) {
+      queueStationProfile(slot);
+      return;
+    }
+  }
+
+  const bool wasCandidate = _stationCandidateActive;
+  const bool wasPortalCandidate = _stationCandidateFromPortal;
+  if (wasCandidate) {
+    _stationCandidateActive = false;
+    _stationCandidateFromPortal = false;
+    _stationAttemptMask = 0;
+    _stationPendingSlot = WM_NO_STATION_PROFILE;
+    _stationNextAttemptAt = 0;
+    if (wasPortalCandidate) {
+      _stationStatus.state = WM_STATION_PORTAL;
+      completePortalStationAttempt(false, status, message);
+      emitPortalEvent(WM_EVENT_STATION_PROFILE_FAILED);
+      return;
+    }
+
+    if (validateStationProfiles(_stationProfiles)) {
+      _stationStatus.configuredProfiles = configuredStationProfileCount(_stationProfiles);
+      beginStationCycle(true);
+      return;
+    }
+  }
+
+  emitPortalEvent(WM_EVENT_STATION_PROFILE_FAILED);
+  if (_stationEverConnected) {
+    _stationStatus.state = WM_STATION_BACKOFF;
+    _stationBackoffStartedAt = millis();
+    _stationStatus.message = F("WiFi profiles unavailable; retrying shortly");
+    emitPortalEvent(WM_EVENT_STATION_BACKOFF);
+  } else {
+    enterStationPortal();
+  }
+}
+
+void WiFiManager::processStationController() {
+  if (!isStationProfileMode() && !_stationCandidateActive) {
+    return;
+  }
+
+  switch (_stationStatus.state) {
+    case WM_STATION_ATTEMPTING: {
+      const uint8_t status = WiFi.status();
+      _stationStatus.wifiStatus = status;
+      if (hasUsableStationConnection()) {
+        handleStationConnectionSuccess();
+        return;
+      }
+      if ((millis() - _stationAttemptStartedAt) >= stationAttemptTimeout()) {
+        handleStationAttemptFailure(WL_CONNECT_FAILED, F("WiFi connection timed out"));
+      }
+      return;
+    }
+    case WM_STATION_SWITCHING:
+      if (static_cast<long>(millis() - _stationNextAttemptAt) >= 0) {
+        const uint8_t nextSlot = _stationPendingSlot;
+        _stationPendingSlot = WM_NO_STATION_PROFILE;
+        _stationNextAttemptAt = 0;
+        if (nextSlot == WM_NO_STATION_PROFILE) {
+          handleStationAttemptFailure(WL_CONNECT_FAILED, F("WiFi profile switch lost its target"));
+        } else {
+          beginStationProfile(nextSlot);
+        }
+      }
+      return;
+    case WM_STATION_CONNECTED:
+      if (!hasUsableStationConnection()) {
+        emitPortalEvent(WM_EVENT_STATION_LINK_LOST);
+        _stationAttemptMask = 0;
+        _stationPendingSlot = WM_NO_STATION_PROFILE;
+        _stationNextAttemptAt = 0;
+        const uint8_t active = isStationProfileEnabled(_stationProfiles, _stationStatus.activeSlot)
+            ? _stationStatus.activeSlot
+            : chooseStationProfile(_stationProfiles, true);
+        if (active == WM_NO_STATION_PROFILE) {
+          enterStationPortal();
+        } else {
+          beginStationProfile(active);
+        }
+      }
+      return;
+    case WM_STATION_BACKOFF:
+      if ((millis() - _stationBackoffStartedAt) >= _stationRecoveryInterval) {
+        beginStationCycle(true);
+      }
+      return;
+    default:
+      return;
+  }
 }
 
 boolean WiFiManager::autoConnect() {
@@ -656,7 +1116,10 @@ boolean WiFiManager::process(){
     #endif
     
     processScan();
-    processPortalConnect();
+    processStationController();
+    if (!_stationCandidateFromPortal) {
+      processPortalConnect();
+    }
 
     if(webPortalActive || configPortalActive){
       // if timed out or abort, break
@@ -813,7 +1276,8 @@ void WiFiManager::processPortalConnect() {
         }
         return;
       }
-      if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL || status == WL_CONNECTION_LOST) {
+      if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL ||
+          status == WL_CONNECTION_LOST) {
         failPortalConnect(status, getWLStatusString(status));
         return;
       }

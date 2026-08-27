@@ -19,6 +19,11 @@ if [[ "$manifest_version" != "$version" ]]; then
     exit 1
 fi
 
+grep -q "^## $version$" "$root/CHANGELOG.md" || {
+    echo "CHANGELOG.md has no $version heading" >&2
+    exit 1
+}
+
 if [[ -f "$root/library.properties" ]]; then
     properties_version="$(sed -n 's/^version=//p' "$root/library.properties" | head -n 1)"
     if [[ "$properties_version" != "$version" ]]; then
@@ -27,6 +32,7 @@ if [[ -f "$root/library.properties" ]]; then
     fi
 fi
 
+git -C "$root" diff --check
 package_dir="$(mktemp -d)"
 trap 'rm -rf "$package_dir"' EXIT
 pio pkg pack "$root" --output "$package_dir/package.tar.gz" >/dev/null

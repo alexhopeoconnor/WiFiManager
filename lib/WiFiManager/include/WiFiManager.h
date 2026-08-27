@@ -1,9 +1,9 @@
 /**
  * WiFiManager.h
- * 
+ *
  * WiFiManager, a library for the ESP8266/Arduino platform
  * for configuration of WiFi credentials using a Captive Portal
- * 
+ *
  * @author Creator tzapu
  * @author tablatronix
  * @author alexhopeoconnor
@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <functional>
+#include <string.h>
 
 #include "WiFiManagerParameter.h"
 #include "WiFiManagerLogLevel.h"
@@ -39,13 +40,13 @@
 // #define WM_DFTE_LOGGING    // opt-in: bridge DFTE logging into WiFiManager (see README)
 // #define WM_MDNS            // includes MDNS, also set MDNS with sethostname
 // #define WM_FIXERASECONFIG  // use erase flash fix
-// #define WM_ERASE_NVS       // esp32 erase(true) will erase NVS 
+// #define WM_ERASE_NVS       // esp32 erase(true) will erase NVS
 // #define WM_RTC             // esp32 info page will include reset reasons
 
 // #define WIFI_MANAGER_OVERRIDE_STRINGS // build flag for using own strings include
 
 #ifdef ARDUINO_ESP8266_RELEASE_2_3_0
-#warning "ARDUINO_ESP8266_RELEASE_2_3_0, some WM features disabled" 
+#warning "ARDUINO_ESP8266_RELEASE_2_3_0, some WM features disabled"
 // @todo check failing on platform = espressif8266@1.7.3
 #define WM_NOASYNC         // esp8266 no async scan wifi
 #define WM_NOCOUNTRY       // esp8266 no country
@@ -91,16 +92,16 @@
         #include <ESP8266mDNS.h>
     #endif
 
-    #define WIFI_getChipId() ESP.getChipId() 
+    #define WIFI_getChipId() ESP.getChipId()
     #define WM_WIFIOPEN   ENC_TYPE_NONE
 
 #elif defined(ESP32)
 
     #include <WiFi.h>
-    #include <esp_wifi.h>  
+    #include <esp_wifi.h>
     #include <Update.h>
     #include <AsyncTCP.h>
-    
+
     #define WIFI_getChipId() (uint32_t)ESP.getEfuseMac()
     #define WM_WIFIOPEN   WIFI_AUTH_OPEN
 
@@ -142,12 +143,44 @@
 // Include utility functions
 #include "WiFiManagerUtils.h"
 
+// A station profile is intentionally fixed-size. ESP Wi-Fi accepts one station
+// configuration at a time, so multi-network behaviour belongs to the
+// application/controller rather than the SDK's saved station configuration.
+constexpr uint8_t WM_STATION_PROFILE_COUNT = 2;
+constexpr uint8_t WM_NO_STATION_PROFILE = 0xFF;
+
+struct WiFiManagerStationProfile {
+  bool enabled = false;
+  bool hasPassword = false;
+  char ssid[33] = {};
+  char password[65] = {};
+};
+
+struct WiFiManagerStationProfiles {
+  WiFiManagerStationProfile slots[WM_STATION_PROFILE_COUNT] = {};
+  uint8_t preferredSlot = 0;
+  uint8_t lastSuccessfulSlot = WM_NO_STATION_PROFILE;
+};
+
+/**
+ * Optional durable backing for multi-profile station credentials. The manager
+ * owns profile policy and never owns this store. A consumer that needs durable
+ * profiles supplies one; otherwise the profiles remain in RAM.
+ */
+class WiFiManagerStationProfileStore {
+public:
+  virtual bool load(WiFiManagerStationProfiles& profiles) = 0;
+  virtual bool save(const WiFiManagerStationProfiles& candidate) = 0;
+  virtual bool clear() = 0;
+  virtual ~WiFiManagerStationProfileStore() = default;
+};
+
 // prep string concat vars
 #define WM_STRING2(x) #x
 #define WM_STRING(x) WM_STRING2(x)
 
 // WiFiManager version
-const char WM_VERSION_STR[] PROGMEM = "v2.0.19";    
+const char WM_VERSION_STR[] PROGMEM = "v3.1.0";
 
 // #include <esp_idf_version.h>
 #ifdef ESP_IDF_VERSION
@@ -155,7 +188,7 @@ const char WM_VERSION_STR[] PROGMEM = "v2.0.19";
     // #pragma message "ESP_IDF_VERSION_MINOR = " WM_STRING(ESP_IDF_VERSION_MINOR)
     // #pragma message "ESP_IDF_VERSION_PATCH = " WM_STRING(ESP_IDF_VERSION_PATCH)
     #define VER_IDF_STR WM_STRING(ESP_IDF_VERSION_MAJOR)  "."  WM_STRING(ESP_IDF_VERSION_MINOR)  "."  WM_STRING(ESP_IDF_VERSION_PATCH)
-#else 
+#else
     #define VER_IDF_STR "Unknown"
 #endif
 
@@ -184,7 +217,7 @@ const char WM_VERSION_STR[] PROGMEM = "v2.0.19";
         #define VER_ARDUINO_STR "Unknown"
         #endif
     #endif
-#else 
+#else
 #define VER_ARDUINO_STR "Unknown"
 #endif
 
@@ -327,6 +360,27 @@ class WiFiManager
       WM_CP_CONNECT_FAILED,
     };
 
+    enum wm_station_state_t : uint8_t {
+      WM_STATION_IDLE = 0,
+      WM_STATION_LOADING,
+      WM_STATION_ATTEMPTING,
+      WM_STATION_SWITCHING,
+      WM_STATION_CONNECTED,
+      WM_STATION_BACKOFF,
+      WM_STATION_PORTAL,
+    };
+
+    struct wm_station_status_t {
+      wm_station_state_t state = WM_STATION_IDLE;
+      uint8_t activeSlot = WM_NO_STATION_PROFILE;
+      uint8_t attemptedSlot = WM_NO_STATION_PROFILE;
+      uint8_t configuredProfiles = 0;
+      uint8_t wifiStatus = WL_IDLE_STATUS;
+      bool lastConnectionWasCandidate = false;
+      bool storageSaveFailed = false;
+      String message = "Idle";
+    };
+
     /** Optional notification hook; prefer getters for consumers. */
     enum wm_event_t : uint8_t {
       WM_EVENT_PORTAL_STARTED = 0,
@@ -334,10 +388,16 @@ class WiFiManager
       WM_EVENT_PORTAL_CONNECT_QUEUED,
       WM_EVENT_PORTAL_CONNECT_START,
       WM_EVENT_PORTAL_CONNECT_SUCCESS,
-      WM_EVENT_PORTAL_CONNECT_FAILED
+      WM_EVENT_PORTAL_CONNECT_FAILED,
+      WM_EVENT_STATION_PROFILE_ATTEMPT,
+      WM_EVENT_STATION_PROFILE_CONNECTED,
+      WM_EVENT_STATION_PROFILE_FAILED,
+      WM_EVENT_STATION_LINK_LOST,
+      WM_EVENT_STATION_BACKOFF,
+      WM_EVENT_STATION_PROFILES_CLEARED
     };
     using WiFiManagerEventCallback = std::function<void(wm_event_t)>;
-    
+
     WiFiManager(Print& consolePort);
     WiFiManager();
     ~WiFiManager();
@@ -347,14 +407,28 @@ class WiFiManager
     boolean       autoConnect();
     boolean       autoConnect(char const *apName, char const *apPassword = NULL);
 
+    // Fixed two-profile station mode. When a store is attached, WiFiManager
+    // owns profile selection and explicit connection attempts rather than the
+    // platform's one saved station configuration.
+    void          setStationProfileStore(WiFiManagerStationProfileStore* store);
+    bool          startStationConnection(char const *apName = NULL, char const *apPassword = NULL);
+    bool          startStationCandidate(const WiFiManagerStationProfiles& candidate);
+    bool          startStationCandidate(const WiFiManagerStationProfiles& candidate, char const *apName, char const *apPassword = NULL);
+    bool          saveStationProfiles(const WiFiManagerStationProfiles& profiles);
+    void          clearStationProfiles();
+    bool          isStationProfileMode() const;
+    void          setStationRecoveryInterval(unsigned long intervalMs);
+    const WiFiManagerStationProfiles& getStationProfiles() const;
+    const wm_station_status_t& getStationStatus() const;
+
     //manually start the config portal, autoconnect does this automatically on connect failure
     void          startConfigPortal(); // auto generates apname
     void          startConfigPortal(char const *apName, char const *apPassword = NULL);
 
     //manually stop the config portal - immediately shuts down the portal
     void          stopConfigPortal();
-    
-    //manually start the web portal, autoconnect does this automatically on connect failure    
+
+    //manually start the web portal, autoconnect does this automatically on connect failure
     void          startWebPortal();
 
     //manually stop the web portal if started manually
@@ -438,13 +512,13 @@ class WiFiManager
 
     // sets number of retries for autoconnect, force retry after wait failure exit
     void          setConnectRetries(uint8_t numRetries); // default 1
-    
+
     //sets timeout for which to attempt connecting on saves, useful if there are bugs in esp waitforconnectloop
     void          setSaveConnectTimeout(unsigned long seconds);
-    
+
     // lets you disable automatically connecting after save from webportal
     void          setSaveConnect(bool connect = true);
-    
+
     void          setLogEnabled(boolean enabled);
     void          setLogPrefix(String prefix);
     void          setLogOutput(boolean enabled, WiFiManagerLogLevel maxLevel);
@@ -463,44 +537,44 @@ class WiFiManager
 
     //set min quality percentage to include in scan, defaults to 8% if not specified
     void          setMinimumSignalQuality(int quality = 8);
-    
+
     //sets a custom ip /gateway /subnet configuration
     void          setAPStaticIPConfig(IPAddress ip, IPAddress gw, IPAddress sn);
-    
+
     //sets config for a static IP
     void          setSTAStaticIPConfig(IPAddress ip, IPAddress gw, IPAddress sn);
-    
+
     //sets config for a static IP with DNS
     void          setSTAStaticIPConfig(IPAddress ip, IPAddress gw, IPAddress sn, IPAddress dns);
-    
+
     //if this is set, it will exit after config, even if connection is unsuccessful.
     void          setBreakAfterConfig(boolean shouldBreak);
-    
+
 
     //if this is true, remove duplicated Access Points - defaut true
     void          setRemoveDuplicateAPs(boolean removeDuplicates);
-    
+
     //setter for ESP wifi.persistent so we can remember it and restore user preference, as WIFi._persistent is protected
     void          setRestorePersistent(boolean persistent);
-    
+
     //if true, always show static net inputs, IP, subnet, gateway, else only show if set via setSTAStaticIPConfig
     void          setShowStaticFields(boolean alwaysShow);
-    
+
     //if true, always show static dns, esle only show if set via setSTAStaticIPConfig
     void          setShowDnsFields(boolean alwaysShow);
-    
+
     //if false, timeout captive portal even if a STA client connected to softAP (false), suggest disabling if captiveportal is open
     void          setAPClientCheck(boolean enabled);
-    
-    //if true, reset timeout when webclient connects (true), suggest disabling if captiveportal is open    
+
+    //if true, reset timeout when webclient connects (true), suggest disabling if captiveportal is open
     void          setWebPortalClientCheck(boolean enabled);
-    
+
     // if true, enable autoreconnecting
     void          setWiFiAutoReconnect(boolean enabled);
-    
+
     // if true, wifiscan will show percentage instead of quality icons, until we have better templating
     void          setScanDispPerc(boolean enabled);
-    
+
     // if true (default) then start the config portal from autoConnect if connection failed
     void          setEnableConfigPortal(boolean enable);
 
@@ -513,13 +587,13 @@ class WiFiManager
 
     // set ap channel
     void          setWiFiAPChannel(int32_t channel);
-    
+
     // set ap hidden
     void          setWiFiAPHidden(bool hidden); // default false
-    
+
     // clean connect, always disconnect before connecting
     void          setCleanConnect(bool enable); // default false
-    
+
     // ---- Portal (all customization entry points use the portal* prefix) ----
     void          portalSetBrandTitle(const String& title);
     void          portalSetContextIdentityText(const String& identityText);
@@ -563,10 +637,10 @@ class WiFiManager
 
     // get last connection result, including autoconnect and portal credential-save attempts
     uint8_t       getLastConxResult();
-    
+
     // get a status as string
-    String        getWLStatusString(uint8_t status);    
-    String        getWLStatusString();    
+    String        getWLStatusString(uint8_t status);
+    String        getWLStatusString();
 
     // get wifi mode as string
     String        getModeString(uint8_t mode);
@@ -574,7 +648,7 @@ class WiFiManager
     // check if the module has a saved ap to connect to
     bool          getWiFiIsSaved();
 
-    // helper to get saved password, if persistent get stored, else get current if connected    
+    // helper to get saved password, if persistent get stored, else get current if connected
     String        getWiFiPass(bool persistent = true);
 
     // helper to get saved ssid, if persistent get stored, else get current if connected
@@ -588,17 +662,17 @@ class WiFiManager
 
     // helper for html
     String        htmlEntities(String str, bool whitespace = false);
-    
+
     // set the country code for wifi settings, CN
     void          setCountry(String cc);
-    
+
 
     // get default ap esp uses , esp_chipid etc
     String        getDefaultAPName();
-    
+
     // set the WiFi SSID prefix for default AP name, default platform-specific (ESP/ESP32/WM)
     void          setWiFiSSIDPrefix(String prefix);
-    
+
     // set port of webserver, 80
     void          setHttpPort(uint16_t port);
 
@@ -615,7 +689,7 @@ class WiFiManager
     uint8_t       getConfigPortalConnectStatus() const;
     String        getConfigPortalConnectMessage() const;
     void          setEventCallback(WiFiManagerEventCallback cb);
-    
+
     // check if web portal is active (true)
     bool          getWebPortalActive();
 
@@ -624,10 +698,10 @@ class WiFiManager
 
     // get hostname helper
     String        getWiFiHostname();
-    
+
     // get server instance (for testing)
     AsyncWebServer* getServer();
-    
+
     // get DNS server instance (for testing)
     DNSServer* getDNSServer();
 
@@ -636,7 +710,7 @@ class WiFiManager
   class WiFiManagerRequestArgs {
   public:
       std::unordered_map<std::string, std::string> args;
-      
+
       // Constructor - builds from AsyncWebServerRequest
       WiFiManagerRequestArgs(AsyncWebServerRequest* request) {
           if (request) {
@@ -647,19 +721,19 @@ class WiFiManager
               }
           }
       }
-      
+
       // Default constructor for tests and manually assembled argument sets
       WiFiManagerRequestArgs() {}
-      
+
       // Check if argument exists
       bool hasArg(const char* name) const {
           return args.find(std::string(name)) != args.end();
       }
-      
+
       bool hasArg(const String& name) const {
           return hasArg(name.c_str());
       }
-      
+
       // Get argument value as String
       String getArg(const char* name, const String& defaultValue = "") const {
           auto it = args.find(std::string(name));
@@ -668,29 +742,29 @@ class WiFiManager
           }
           return defaultValue;
       }
-      
+
       String getArg(const String& name, const String& defaultValue = "") const {
           return getArg(name.c_str(), defaultValue);
       }
-      
+
       // Type conversion helpers
       int getArgAsInt(const char* name, int defaultValue = 0) const {
           String value = getArg(name);
           return value.length() > 0 ? value.toInt() : defaultValue;
       }
-      
+
       float getArgAsFloat(const char* name, float defaultValue = 0.0f) const {
           String value = getArg(name);
           return value.length() > 0 ? value.toFloat() : defaultValue;
       }
-      
+
       bool getArgAsBool(const char* name, bool defaultValue = false) const {
           String value = getArg(name);
           if (value.length() == 0) return defaultValue;
-          return value == "1" || value.equalsIgnoreCase("true") || 
+          return value == "1" || value.equalsIgnoreCase("true") ||
                  value.equalsIgnoreCase("on") || value.equalsIgnoreCase("yes");
       }
-      
+
       size_t count() const {
           return args.size();
       }
@@ -723,7 +797,7 @@ class WiFiManager
     WiFiScanRuntimeState _scan;
     std::vector<WiFiScanNetwork> _scanResultsCache;
     bool _scanLifecycleBlocked = false;
-    
+
     // async reboot/abort scheduling
     bool          _rebootScheduled        = false; // flag for scheduled reboot
     unsigned long _rebootTime             = 0; // ms when reboot should occur
@@ -742,13 +816,30 @@ class WiFiManager
     String        _defaultssid            = ""; // preload ssid
     String        _defaultpass            = ""; // preload pass
 
+    WiFiManagerStationProfileStore* _stationProfileStore = nullptr;
+    WiFiManagerStationProfiles _stationProfiles;
+    WiFiManagerStationProfiles _stationCandidate;
+    wm_station_status_t _stationStatus;
+    bool          _stationProfilesLoaded  = false;
+    bool          _stationCandidateActive = false;
+    bool          _stationCandidateFromPortal = false;
+    bool          _stationEverConnected   = false;
+    uint8_t       _stationAttemptMask     = 0;
+    uint8_t       _stationPendingSlot    = WM_NO_STATION_PROFILE;
+    unsigned long _stationNextAttemptAt  = 0;
+    unsigned long _stationAttemptStartedAt = 0;
+    unsigned long _stationBackoffStartedAt = 0;
+    unsigned long _stationRecoveryInterval = 5000UL;
+    String        _stationPortalApName    = "";
+    String        _stationPortalApPassword = "";
+
     // options flags
     unsigned long _configPortalTimeout    = 0; // ms close config portal loop if set (depending on  _cp/webClientCheck options)
     unsigned long _connectTimeout         = 0; // ms stop trying to connect to ap if set
     unsigned long _saveTimeout            = 0; // ms stop trying to connect to ap on saves, in case bugs in esp waitforconnectresult
-    
+
     WiFiMode_t    _usermode               = WIFI_STA; // Default user mode
-    String        _wifissidprefix         = 
+    String        _wifissidprefix         =
 #ifdef ESP8266
         "ESP"
 #elif defined(ESP32)
@@ -808,7 +899,7 @@ class WiFiManager
     PortalStructuredExtrasState _portalStructured;
 
     // internal options
-    
+
     // wifiscan notes
     // currently disabled due to issues with caching, sometimes first scan is empty esp32 wifi not init yet race, or portals hit server nonstop flood
     // The following are background wifi scanning optimizations
@@ -819,22 +910,22 @@ class WiFiManager
     // async enables asyncronous scans, so they do not block anything
     // the refresh button bypasses cache
     // no aps found is problematic as scans are always going to want to run, leading to page load delays
-    // 
+    //
     // These settings really only make sense with _preloadwifiscan true
     // but not limited to, we could run continuous background scans on various page hits, or xhr hits
     // which would be better coupled with asyncscan
     // atm preload is only done on root hit and startcp
-    // 
+    //
     // preload scanning causes AP to delay showing for users, but also caches and lets the cp load faster once its open
     //  my scan takes 7-10 seconds
 public:
     boolean       _preloadwifiscan        = false; // preload wifiscan if true
     unsigned int  _scancachetime          = 30000; // ms cache time for preload scans
-    
+
 protected:
 
     boolean       _autoforcerescan        = false;  // automatically force rescan if scan networks is 0, ignoring cache
-    
+
     boolean       _disableIpFields        = false; // modify function of setShow_X_Fields(false), forces ip fields off instead of default show if set, eg. _staShowStaticFields=-1
 
     String        _wificountry            = "";  // country code, @todo define in strings lang
@@ -848,7 +939,7 @@ protected:
     void          setupConfigPortal();
     bool          shutdownConfigPortal();
     bool          setupHostname(bool restart);
-    
+
 #ifdef NO_EXTRA_4K_HEAP
     boolean       _tryWPS                 = false; // try WPS on save failure, unsupported
     void          startWPS();
@@ -868,6 +959,23 @@ protected:
     bool          setSTAConfig();
     bool          wifiConnectDefault();
     bool          wifiConnectNew(String ssid, String pass,bool connect = true);
+
+    void          processStationController();
+    bool          beginStationProfile(uint8_t slot);
+    void          queueStationProfile(uint8_t slot);
+    void          beginStationCycle(bool preferLastSuccessful);
+    void          handleStationAttemptFailure(uint8_t status, const String& message);
+    void          handleStationConnectionSuccess();
+    void          completePortalStationAttempt(bool success, uint8_t status, const String& message);
+    void          enterStationPortal();
+    bool          hasUsableStationConnection() const;
+    bool          isStationProfileEnabled(const WiFiManagerStationProfiles& profiles, uint8_t slot) const;
+    uint8_t       configuredStationProfileCount(const WiFiManagerStationProfiles& profiles) const;
+    uint8_t       chooseStationProfile(const WiFiManagerStationProfiles& profiles, bool preferLastSuccessful) const;
+    const WiFiManagerStationProfiles& stationProfilesForAttempt() const;
+    WiFiManagerStationProfiles& stationProfilesForAttempt();
+    bool          validateStationProfiles(const WiFiManagerStationProfiles& profiles) const;
+    unsigned long stationAttemptTimeout() const;
 
     uint8_t       waitForConnectResult();
     uint8_t       waitForConnectResult(uint32_t timeout);
@@ -931,12 +1039,12 @@ protected:
             #define WM_DISCONWORKAROUND
         #endif
 
-    #else 
+    #else
         #define WM_NOCOUNTRY
     #endif
 
     #ifdef WM_NOCOUNTRY
-        #warning "ESP32 set country unavailable" 
+        #warning "ESP32 set country unavailable"
     #endif
 
 
@@ -1042,9 +1150,9 @@ protected:
     // if we decide to support this, these checks will need to be replaced with something client aware to check if client origin is ap or web
     // These state checks are critical and used for internal function checks
     boolean       webPortalActive     = false;
-    boolean       storeSTAmode        = true; // option store persistent STA mode in connectwifi 
+    boolean       storeSTAmode        = true; // option store persistent STA mode in connectwifi
     int           timer               = 0;    // timer for debug throttle for numclients, and portal timeout messages
-    
+
     // WiFiManagerParameter
     int         _paramsCount          = 0;
     int         _max_params;

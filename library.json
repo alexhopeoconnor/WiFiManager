@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.0.6",
+  "version": "3.1.0",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -71,8 +71,8 @@
       "lib/WiFiManager/src",
       "LICENSE",
       "README.md",
-      "library.json",
-      "tools"
+      "CHANGELOG.md",
+      "library.json"
     ]
   },
   "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",

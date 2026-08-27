@@ -101,6 +101,7 @@ class WiFiManagerHandlers {
     void appendVisibleScanResultsJson(String& json, const std::vector<const WiFiManager::WiFiScanNetwork*>& networks);
 
     void applyWifiAndParamsFromRequest(AsyncWebServerRequest *request);
+    bool buildStationProfilesFromRequest(AsyncWebServerRequest *request, WiFiManagerStationProfiles& profiles);
     void buildPlainStatusSummary(String& out);
     void appendPortalJsonStaticFields(String& json, bool& first);
     void appendPortalJsonCustomParams(String& json, bool& first);

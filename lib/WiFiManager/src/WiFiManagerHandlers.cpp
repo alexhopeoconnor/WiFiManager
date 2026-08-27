@@ -783,6 +783,62 @@ void WiFiManagerHandlers::applyWifiAndParamsFromRequest(AsyncWebServerRequest *r
   }
 }
 
+bool WiFiManagerHandlers::buildStationProfilesFromRequest(
+    AsyncWebServerRequest *request, WiFiManagerStationProfiles& profiles) {
+  profiles = _wm->_stationProfiles;
+  if (!_wm->validateStationProfiles(profiles)) {
+    profiles = WiFiManagerStationProfiles();
+  }
+  profiles.preferredSlot = 0;
+
+  for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+    WiFiManagerStationProfile& profile = profiles.slots[slot];
+    const String ssidName = String(F("s")) + String(slot);
+    const String passwordName = String(F("p")) + String(slot);
+    const String clearName = String(F("clear")) + String(slot);
+
+    if (request->hasParam(ssidName.c_str(), true)) {
+      const String ssid = request->getParam(ssidName.c_str(), true)->value();
+      if (ssid.length() >= sizeof(profile.ssid)) {
+        return false;
+      }
+      memset(profile.ssid, 0, sizeof(profile.ssid));
+      memcpy(profile.ssid, ssid.c_str(), ssid.length());
+      profile.enabled = ssid.length() > 0;
+      if (!profile.enabled) {
+        profile.hasPassword = false;
+        memset(profile.password, 0, sizeof(profile.password));
+        if (profiles.lastSuccessfulSlot == slot) {
+          profiles.lastSuccessfulSlot = WM_NO_STATION_PROFILE;
+        }
+      }
+    }
+
+    if (request->hasParam(clearName.c_str(), true)) {
+      profile.hasPassword = false;
+      memset(profile.password, 0, sizeof(profile.password));
+    } else if (request->hasParam(passwordName.c_str(), true)) {
+      const String password = request->getParam(passwordName.c_str(), true)->value();
+      if (password.length() >= sizeof(profile.password)) {
+        return false;
+      }
+      // A blank password means "unchanged". Explicit clear is used for an
+      // open network so a browser never erases a stored secret by accident.
+      if (password.length() > 0) {
+        memset(profile.password, 0, sizeof(profile.password));
+        memcpy(profile.password, password.c_str(), password.length());
+        profile.hasPassword = true;
+      }
+    }
+  }
+
+  if (profiles.lastSuccessfulSlot != WM_NO_STATION_PROFILE &&
+      !_wm->isStationProfileEnabled(profiles, profiles.lastSuccessfulSlot)) {
+    profiles.lastSuccessfulSlot = WM_NO_STATION_PROFILE;
+  }
+  return _wm->validateStationProfiles(profiles);
+}
+
 void WiFiManagerHandlers::doParamSave(WiFiManager::WiFiManagerRequestArgs requestArgs){
   if ( _wm->_presaveparamscallback != NULL) {
     _wm->_presaveparamscallback();
@@ -1193,6 +1249,48 @@ void WiFiManagerHandlers::handleApiWifiScan(AsyncWebServerRequest *request) {
 }
 
 String WiFiManagerHandlers::buildApiWifiMetaJson() {
+  if (_wm->isStationProfileMode()) {
+    const WiFiManagerStationProfiles& profiles = _wm->getStationProfiles();
+    const WiFiManager::wm_station_status_t& station = _wm->getStationStatus();
+    String json = F("{\"profiles\":[");
+    for (uint8_t slot = 0; slot < WM_STATION_PROFILE_COUNT; ++slot) {
+      if (slot > 0) json += ',';
+      const WiFiManagerStationProfile& profile = profiles.slots[slot];
+      json += F("{\"slot\":\"");
+      json += slot == 0 ? F("primary") : F("fallback");
+      json += F("\",\"configured\":");
+      json += profile.enabled ? F("true") : F("false");
+      json += F(",\"ssid\":\"");
+      jsonAppendEscaped(json, profile.enabled ? String(profile.ssid) : String());
+      json += F("\",\"passwordSet\":");
+      json += profile.hasPassword ? F("true") : F("false");
+      json += F("}");
+    }
+    json += F("],\"activeSlot\":");
+    if (station.activeSlot == WM_NO_STATION_PROFILE) json += F("null");
+    else json += station.activeSlot == 0 ? F("\"primary\"") : F("\"fallback\"");
+    json += F(",\"state\":");
+    switch (station.state) {
+      case WiFiManager::WM_STATION_ATTEMPTING: json += F("\"connecting\""); break;
+      case WiFiManager::WM_STATION_CONNECTED: json += F("\"connected\""); break;
+      case WiFiManager::WM_STATION_BACKOFF: json += F("\"backoff\""); break;
+      case WiFiManager::WM_STATION_PORTAL: json += F("\"portal\""); break;
+      default: json += F("\"idle\""); break;
+    }
+    json += F(",\"wifiFields\":[],\"staticFields\":[");
+    bool first = true;
+    appendPortalJsonStaticFields(json, first);
+    json += F("],\"params\":[");
+    first = true;
+    if (_wm->_portalLayout.paramsOnWifiPage && _wm->getParametersCount() > 0) {
+      appendPortalJsonCustomParams(json, first);
+    }
+    json += F("],\"actions\":{\"canRefreshScan\":true,\"showBack\":");
+    json += _wm->_portalActions.backVisible ? F("true") : F("false");
+    json += F("}}");
+    return json;
+  }
+
   String ssidPlaceholder = _wm->WiFi_SSID();
   String passwordPlaceholder = "";
   switch (_wm->_portalPasswordPlaceholderMode) {
@@ -1240,6 +1338,30 @@ void WiFiManagerHandlers::handleApiWifiSave(AsyncWebServerRequest *request) {
 #endif
   handleRequest(request);
   applyWifiAndParamsFromRequest(request);
+  if (_wm->isStationProfileMode()) {
+    WiFiManagerStationProfiles candidate;
+    if (!buildStationProfilesFromRequest(request, candidate)) {
+      sendApiJson(request, 400, F("{\"ok\":false,\"message\":\"Primary WiFi is required and SSID/password lengths must be valid\"}"));
+      return;
+    }
+    const bool saveForLater = request->hasParam("stationAction", true) &&
+        request->getParam("stationAction", true)->value() == F("save");
+    if (saveForLater) {
+      if (!_wm->saveStationProfiles(candidate)) {
+        sendApiJson(request, 500, F("{\"ok\":false,\"message\":\"WiFi profiles could not be saved\"}"));
+        return;
+      }
+      sendApiJson(request, 200, F("{\"ok\":true,\"message\":\"WiFi profiles saved for later\"}"));
+      return;
+    }
+    if (!_wm->startStationCandidate(candidate)) {
+      sendApiJson(request, 400, F("{\"ok\":false,\"message\":\"WiFi profile candidate was rejected\"}"));
+      return;
+    }
+    sendApiJson(request, 202,
+        F("{\"ok\":true,\"message\":\"WiFi profiles accepted\",\"next\":{\"poll\":\"/api/wifi/connect-status\"}}"));
+    return;
+  }
   _wm->queuePortalConnect(_wm->_ssid, _wm->_pass);
   sendApiJson(
       request, 202,

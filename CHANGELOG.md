@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.0
+
+- Add an opt-in primary/fallback station-profile controller with bounded failover, reconnection, a durable consumer-supplied store, and profile-aware portal APIs. DeviceFramework uses this to persist verified WiFi profiles transactionally.
+
 ## 3.0.6
 
 - Correct async PlatformIO dependency owners to the registry's canonical lowercase identity, so a clean consumer builds WiFiManager and its ESP8266/ESP32 transport dependencies without duplicating them in `lib_deps`. Remove the superseded include-path bridge.
