@@ -11,6 +11,13 @@ platform="${3:-}"
 [[ "$platform" == "esp8266" || "$platform" == "esp32" ]] || usage
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cached_library="$root/test/compile-project/.pio/libdeps/${platform}/WiFiManager"
+# The fixture intentionally declares only this local package. Remove a prior
+# link so each check resolves the current manifest as a fresh consumer would.
+if [[ -d "$cached_library" || -e "${cached_library}.pio-link" ]]; then
+    pio pkg uninstall -d "$root/test/compile-project" -e "$platform" \
+        -l WiFiManager --no-save --skip-dependencies >/dev/null
+fi
 pio run -d "$root/test/compile-project" -e "$platform"
 
 echo "WiFiManager consumer compile check passed for $platform"

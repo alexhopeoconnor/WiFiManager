@@ -38,9 +38,11 @@ void test_config_portal_multiple_start_stop();
 void test_config_portal_already_active();
 void test_get_config_portal_ssid();
 void test_bootstrap_json_portal_feature_flags();
+void test_portal_default_presentation();
 void test_bootstrap_json_contract_v2();
 void test_bootstrap_json_snapshot_consistency();
 void test_root_render_interleaved_context_isolation();
+void test_portal_presentation_configuration();
 
 // Non-blocking tests
 void test_nonblocking_process();
@@ -108,7 +110,7 @@ void test_scan_generation_invalidated_on_reset();
 
 // Template rendering tests
 void test_shell_template_renders_core_placeholders();
-void test_shell_template_renders_dynamic_styles_with_percent_values();
+void test_shell_template_renders_dynamic_theme_with_percent_values();
 
 // API JSON + captive helper tests
 void test_captive_redirect_host_rule();

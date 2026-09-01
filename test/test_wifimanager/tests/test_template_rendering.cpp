@@ -28,7 +28,7 @@ const char kEmpty[] PROGMEM = "";
 const char kDocTitle[] PROGMEM = "Config ESP";
 const char kBootstrapJson[] PROGMEM = "{\"title\":\"Test\"}";
 const char kPortalAppJs[] PROGMEM = "console.log('portal');";
-const char kPortalAppendJs[] PROGMEM = "";
+const char kPortalTheme[] PROGMEM = "";
 
 const char* dynamicStringGetter(void* userData) {
     const auto* value = static_cast<const String*>(userData);
@@ -55,7 +55,7 @@ void test_shell_template_renders_core_placeholders() {
     registry.registerProgmemData("%PAGE_TITLE%", kDocTitle);
     registry.registerProgmemData("%BOOTSTRAP_JSON%", kBootstrapJson);
     registry.registerProgmemData("%PORTAL_APP_JS%", kPortalAppJs);
-    registry.registerProgmemData("%PORTAL_APPEND_JS%", kPortalAppendJs);
+    registry.registerProgmemData("%PORTAL_THEME%", kPortalTheme);
 
     String output = renderTemplate(WM_ROOT_SHELL_TEMPLATE, registry);
 
@@ -70,35 +70,32 @@ void test_shell_template_renders_core_placeholders() {
     Serial.println("[TEST]   Portal shell template rendering test completed successfully");
 }
 
-void test_shell_template_renders_dynamic_styles_with_percent_values() {
-    Serial.println("[TEST]   Testing portal shell dynamic styles placeholder with percent values...");
+void test_shell_template_renders_dynamic_theme_with_percent_values() {
+    Serial.println("[TEST]   Testing portal shell dynamic theme placeholder with percent values...");
 
     PlaceholderRegistry registry(8);
-    String styles = F("<style>body{width:100%;max-width:92%}</style>");
+    String theme = F("<style>:root{--wm-bg:rgb(20,50,30);--wm-width:100%}</style>");
     String title = F("Config ESP");
     String bootstrap = F("{\"title\":\"Test\"}");
-    String appendJs = F("");
-    DynamicDataDescriptor stylesDescriptor{};
+    DynamicDataDescriptor themeDescriptor{};
     DynamicDataDescriptor titleDescriptor{};
     DynamicDataDescriptor bootstrapDescriptor{};
-    DynamicDataDescriptor appendJsDescriptor{};
 
-    configureDescriptor(stylesDescriptor, styles);
+    configureDescriptor(themeDescriptor, theme);
     configureDescriptor(titleDescriptor, title);
     configureDescriptor(bootstrapDescriptor, bootstrap);
-    configureDescriptor(appendJsDescriptor, appendJs);
 
-    TEST_ASSERT_TRUE(registry.registerDynamicData("%STYLES%", &stylesDescriptor));
+    TEST_ASSERT_TRUE(registry.registerProgmemData("%STYLES%", kEmpty));
+    TEST_ASSERT_TRUE(registry.registerDynamicData("%PORTAL_THEME%", &themeDescriptor));
     TEST_ASSERT_TRUE(registry.registerDynamicData("%PAGE_TITLE%", &titleDescriptor));
     TEST_ASSERT_TRUE(registry.registerDynamicData("%BOOTSTRAP_JSON%", &bootstrapDescriptor));
     TEST_ASSERT_TRUE(registry.registerProgmemData("%PORTAL_APP_JS%", kPortalAppJs));
-    TEST_ASSERT_TRUE(registry.registerDynamicData("%PORTAL_APPEND_JS%", &appendJsDescriptor));
 
     String output = renderTemplate(WM_ROOT_SHELL_TEMPLATE, registry);
 
-    TEST_ASSERT_NOT_EQUAL(-1, output.indexOf("<style>body{width:100%;max-width:92%}</style>"));
+    TEST_ASSERT_NOT_EQUAL(-1, output.indexOf("<style>:root{--wm-bg:rgb(20,50,30);--wm-width:100%}</style>"));
     TEST_ASSERT_NOT_EQUAL(-1, output.indexOf("<title>Config ESP</title>"));
     TEST_ASSERT_NOT_EQUAL(-1, output.indexOf("{\"title\":\"Test\"}"));
 
-    Serial.println("[TEST]   Dynamic styles placeholder percent rendering test completed successfully");
+    Serial.println("[TEST]   Dynamic theme placeholder percent rendering test completed successfully");
 }

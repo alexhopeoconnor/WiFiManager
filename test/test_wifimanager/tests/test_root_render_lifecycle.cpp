@@ -76,16 +76,29 @@ void test_bootstrap_json_portal_feature_flags() {
     Serial.println("[TEST]   Bootstrap portal feature flags test completed successfully");
 }
 
+void test_portal_default_presentation() {
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+
+    const String bootstrap = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"title\":\"WiFiManager\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"homeIntro\":\"\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoSvg\":\"\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"\"")));
+}
+
 void test_bootstrap_json_contract_v2() {
     Serial.println("[TEST]   Testing bootstrap JSON v2 contract...");
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
 
-    wm.portalSetBrandTitle("Solar Battery Monitor Setup");
-    wm.portalSetContextIdentityText("Solar Battery Monitor");
-    wm.portalSetBrandHomeIntro("Connect this device to WiFi and finish setup.");
-    wm.portalSetBrandLogoSvg("<svg viewBox='0 0 24 24'></svg>");
+    WiFiManagerPortalConfig portal;
+    portal.title = WiFiManagerPortalText::ram("Solar Battery Monitor Setup");
+    portal.identityText = WiFiManagerPortalText::ram("Solar Battery Monitor");
+    portal.homeIntro = WiFiManagerPortalText::ram("Connect this device to WiFi and finish setup.");
+    portal.logo = WiFiManagerPortalAsset::svgFromRam("<svg viewBox='0 0 24 24'></svg>");
+    TEST_ASSERT_TRUE(wm.setPortalConfig(portal));
     wm.portalSetPageInfoVisible(true);
     wm.portalSetPageUpdateVisible(false);
     wm.portalSetPageSetupVisible(true);
@@ -163,11 +176,11 @@ void test_root_render_interleaved_context_isolation() {
 
     registryA.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryA.registerProgmemData("%PAGE_TITLE%", kTestTitle);
-    registryA.registerProgmemData("%PORTAL_APPEND_JS%", kEmptyTemplateChunk);
+    registryA.registerProgmemData("%PORTAL_THEME%", kEmptyTemplateChunk);
 
     registryB.registerProgmemData("%STYLES%", kEmptyTemplateChunk);
     registryB.registerProgmemData("%PAGE_TITLE%", kTestTitle);
-    registryB.registerProgmemData("%PORTAL_APPEND_JS%", kEmptyTemplateChunk);
+    registryB.registerProgmemData("%PORTAL_THEME%", kEmptyTemplateChunk);
 
     String bootstrapA = F("{\"ctx\":\"A\"}");
     String appJsA = F("// shell A");
@@ -216,4 +229,52 @@ void test_root_render_interleaved_context_isolation() {
     TEST_ASSERT_EQUAL(-1, outputB.indexOf("// shell A"));
 
     Serial.println("[TEST]   Root render interleaved context isolation test completed successfully");
+}
+
+void test_portal_presentation_configuration() {
+    Serial.println("[TEST]   Testing portal presentation configuration...");
+
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    WiFiManagerPortalConfig config;
+    config.title = WiFiManagerPortalText::ram("Set up Temperature Monitor");
+    config.identityText = WiFiManagerPortalText::ram("Tree");
+    config.homeIntro = WiFiManagerPortalText::ram("Connect this device to WiFi.");
+    config.logo = WiFiManagerPortalAsset::svgFromRam("<svg viewBox='0 0 24 24'></svg>");
+    config.logoAltText = WiFiManagerPortalText::ram("Tree logo");
+    config.theme.pageBackground = WiFiManagerPortalText::ram("#f4f7f3");
+    config.theme.surface = WiFiManagerPortalText::ram("#ffffff");
+    config.theme.text = WiFiManagerPortalText::ram("#1c251e");
+    config.theme.mutedText = WiFiManagerPortalText::ram("#607064");
+    config.theme.border = WiFiManagerPortalText::ram("#d6e0d7");
+    config.theme.accent = WiFiManagerPortalText::ram("#347a45");
+    config.theme.accentHover = WiFiManagerPortalText::ram("#245a32");
+    config.theme.accentText = WiFiManagerPortalText::ram("#ffffff");
+    config.theme.success = WiFiManagerPortalText::ram("#2f855a");
+    config.theme.danger = WiFiManagerPortalText::ram("#c53030");
+    config.theme.dangerHover = WiFiManagerPortalText::ram("#9b2c2c");
+    config.theme.cornerRadiusPx = 10;
+    config.theme.smallCornerRadiusPx = 6;
+
+    TEST_ASSERT_TRUE_MESSAGE(wm.setPortalConfig(config),
+        "A complete setup-time portal configuration should be accepted");
+
+    String bootstrap = handlers.buildPortalBootstrapJson();
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"title\":\"Set up Temperature Monitor\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"identityText\":\"Tree\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"Tree logo\"")));
+
+    WiFiManagerPortalConfig unsafeConfig = config;
+    unsafeConfig.theme.accent = WiFiManagerPortalText::ram("#347a45;body{display:none}");
+    TEST_ASSERT_FALSE_MESSAGE(wm.setPortalConfig(unsafeConfig),
+        "Semantic theme values must reject stylesheet injection characters");
+
+    wm.startWebPortal();
+    TEST_ASSERT_FALSE_MESSAGE(wm.setPortalConfig(config),
+        "Portal presentation must remain immutable while async routes are active");
+    wm.stopWebPortal();
+    TEST_ASSERT_TRUE_MESSAGE(wm.setPortalConfig(config),
+        "Presentation can be applied after the portal stops");
+
+    Serial.println("[TEST]   Portal presentation configuration test completed successfully");
 }

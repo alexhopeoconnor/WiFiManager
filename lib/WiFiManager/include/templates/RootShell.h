@@ -7,7 +7,7 @@
  * Single-page portal shell: only HTML document served for GET /.
  * Dynamic UI is driven by embedded JS + JSON APIs under /api/...
  *
- * Placeholder keys (%PAGE_TITLE%, %STYLES%, %BOOTSTRAP_JSON%, %PORTAL_APP_JS%, %PORTAL_APPEND_JS%) are filled
+ * Placeholder keys (%PAGE_TITLE%, %STYLES%, %PORTAL_THEME%, %BOOTSTRAP_JSON%, %PORTAL_APP_JS%) are filled
  * per request in WiFiManagerHandlers::handleRoot; do not treat placeholders as a customization API.
  */
 
@@ -25,6 +25,7 @@ const char WM_ROOT_SHELL_TEMPLATE[] PROGMEM =
     "<meta name='viewport' content='width=device-width,initial-scale=1,user-scalable=no'/>"
     "<title>%PAGE_TITLE%</title>"
     "%STYLES%"
+    "%PORTAL_THEME%"
     "</head>"
     "<body class='portal'>"
     "<div id='wm-toast' class='wm-toast' aria-live='polite' role='status' style='display:none'></div>"
@@ -40,9 +41,6 @@ const char WM_ROOT_SHELL_TEMPLATE[] PROGMEM =
     "<script id='wm-bootstrap' type='application/json'>%BOOTSTRAP_JSON%</script>"
     "<script>"
     "%PORTAL_APP_JS%"
-    "</script>"
-    "<script>"
-    "%PORTAL_APPEND_JS%"
     "</script>"
     "</body>"
     "</html>";

@@ -7,6 +7,13 @@ lib_deps =
     WiFiManager=symlink:///path/to/WiFiManager
 ```
 
+The ESP32 environments pin the PlatformIO-compatible pioarduino 51.03.05
+platform package, which packages official Arduino-ESP32 3.0.5. This avoids the
+known six-second asynchronous scan failure in the older 2.0.17 framework. Core
+3 also requires the `SOC_WIFI_SUPPORTED`, `Network/src`, and ESP8266-transport
+ignore settings shown in this repository `platformio.ini`; keep those settings
+when adding an ESP32 environment.
+
 Before a release, update `library.json`, `CHANGELOG.md`, and the relevant public documentation, then run:
 
 ```bash

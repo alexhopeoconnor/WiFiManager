@@ -66,8 +66,13 @@ function bindPortalChromeEvents(){
 }
 
 function bindFormSubmitHandlers(){
-  var wf=$('wm-wifi-form'), pf=$('wm-param-form'), of=$('wm-ota-form');
-  if(wf && window.portalWifiSave) wf.addEventListener('submit', window.portalWifiSave);
+  var wf=document.querySelectorAll('.wm-wifi-data-form'), pf=$('wm-param-form'), of=$('wm-ota-form'), wa=document.querySelectorAll('[data-wm-wifi-action]'), i;
+  if(window.portalWifiSave){
+    for(i=0;i<wf.length;i++)wf[i].addEventListener('submit', window.portalWifiSave);
+  }
+  if(window.portalWifiAction){
+    for(i=0;i<wa.length;i++)wa[i].addEventListener('click', window.portalWifiAction);
+  }
   if(pf && window.portalParamSave) pf.addEventListener('submit', window.portalParamSave);
   if(of && window.portalOtaSubmit) of.addEventListener('submit', window.portalOtaSubmit);
 }
@@ -315,7 +320,8 @@ function viewHome(){
   var timeoutSeconds=ctx.portalTimeoutSecondsRemaining||0;
   var html=navBar('home');
   html+="<header class='wm-hero'>";
-  if(brand.logoSvg){html+="<div class='wm-brand-logo'>"+brand.logoSvg+"</div>";}
+  var logoAlt=esc(brand.logoAltText||'');
+  if(brand.logoSvg){html+="<div class='wm-brand-logo'"+(logoAlt?" role='img' aria-label='"+logoAlt+"'":"")+">"+brand.logoSvg+"</div>";}
   html+="<h1 class='wm-hero-title'>"+t+"</h1>";
   if(ident){html+="<p class='wm-hero-sub'>"+ident+"</p>";}
   if(brand.homeIntro){html+="<p class='wm-hero-intro'>"+esc(brand.homeIntro)+"</p>";}
@@ -509,16 +515,16 @@ function renderStationProfileFields(profiles){
     var hint=primary
       ? 'This network is tried first for a new connection.'
       : 'Tried when the primary network is unavailable.';
-    html+="<div class='wm-card wm-station-profile'><h2>"+esc(title)+"</h2><p class='wm-help'>"+esc(hint)+"</p>";
+    html+="<form class='wm-card wm-station-profile wm-wifi-data-form' id='wm-wifi-profile-"+i+"'><h2>"+esc(title)+"</h2><p class='wm-help'>"+esc(hint)+"</p>";
     html+="<label for='wm-s"+i+"'>SSID"+(primary?'':' (leave empty to disable)')+"</label>";
-    html+="<input id='wm-s"+i+"' name='s"+i+"' type='text' maxlength='32' value='"+esc(p.ssid||'')+"'/>";
+    html+="<input id='wm-s"+i+"' name='s"+i+"' type='text' autocomplete='username' maxlength='32' value='"+esc(p.ssid||'')+"'/>";
     html+="<label for='wm-p"+i+"'>Password</label>";
-    html+="<input id='wm-p"+i+"' class='wm-profile-password' name='p"+i+"' type='password' maxlength='64' placeholder='"+(p.passwordSet?'Configured — enter a new password to replace it':'Leave blank for an open network')+"'/>";
+    html+="<input id='wm-p"+i+"' class='wm-profile-password' name='p"+i+"' type='password' autocomplete='current-password' maxlength='64' placeholder='"+(p.passwordSet?'Configured — enter a new password to replace it':'Leave blank for an open network')+"'/>";
     html+="<div class='wm-checkbox-row'><input type='checkbox' id='wm-showpass"+i+"' class='wm-showpass' data-target='wm-p"+i+"'/> <label for='wm-showpass"+i+"'>Show password</label></div>";
     if(p.passwordSet){
       html+="<div class='wm-checkbox-row'><input type='checkbox' id='wm-clear"+i+"' name='clear"+i+"' value='1'/> <label for='wm-clear"+i+"'>Clear password / use an open network</label></div>";
     }
-    html+='</div>';
+    html+='</form>';
   }
   return html;
 }
@@ -533,10 +539,11 @@ function viewWifi(){
     html+="<div id='wm-scan-results'></div>";
     html+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' id='wm-refresh-scan'>"+labelWithIcon('scan','Scan again')+"</button></div>";
     html+="<div class='wm-card'>"+cardTitleHtml('wifi','Network details');
-    html+="<form id='wm-wifi-form'>";
     if(Array.isArray(m.profiles) && m.profiles.length){
       html+=renderStationProfileFields(m.profiles);
+      html+="<form class='wm-wifi-data-form' id='wm-wifi-form'>";
     }else{
+      html+="<form class='wm-wifi-data-form' id='wm-wifi-form'>";
       html+=renderFieldList(m.wifiFields||[]);
       var wf=m.wifiFields||[];
       var hasPass=false;
@@ -548,11 +555,12 @@ function viewWifi(){
     }
     html+=renderFieldList(m.staticFields||[]);
     html+=renderFieldList(m.params||[]);
-    html+="<div class='wm-form-actions'><button type='submit' class='wm-btn wm-btn--primary wm-btn--block' name='stationAction' value='connect'>"+labelWithIcon('connect','Save and connect')+"</button>";
+    html+="</form>";
+    html+="<div class='wm-form-actions'><button type='button' class='wm-btn wm-btn--primary wm-btn--block' data-wm-wifi-action='connect'>"+labelWithIcon('connect','Save and connect')+"</button>";
     if(Array.isArray(m.profiles) && m.profiles.length){
-      html+="<button type='submit' class='wm-btn wm-btn--secondary wm-btn--block' name='stationAction' value='save'>Save for later</button>";
+      html+="<button type='button' class='wm-btn wm-btn--secondary wm-btn--block' data-wm-wifi-action='save'>Save for later</button>";
     }
-    html+="</div></form>";
+    html+="</div>";
     html+="<div id='wm-wifi-msg'></div></div>";
     setView(html);
     bindWifiViewEvents();
@@ -635,12 +643,17 @@ function pollWifiConnectStatus(){
   poll();
 }
 
-window.portalWifiSave=function(ev){
-  ev.preventDefault();
-  var fd=new FormData(document.getElementById('wm-wifi-form'));
-  if(ev.submitter && ev.submitter.name){
-    fd.append(ev.submitter.name,ev.submitter.value||'');
+function collectWifiFormData(){
+  var fd=new FormData(), forms=document.querySelectorAll('.wm-wifi-data-form'), i;
+  for(i=0;i<forms.length;i++){
+    new FormData(forms[i]).forEach(function(value,key){fd.append(key,value);});
   }
+  return fd;
+}
+
+function submitWifi(action){
+  var fd=collectWifiFormData();
+  if(action)fd.append('stationAction',action);
   var msg=$('wm-wifi-msg');
   if(msg)msg.innerHTML='Submitting...';
   api('/api/wifi/save',{method:'POST',body:fd}).then(function(res){
@@ -655,6 +668,16 @@ window.portalWifiSave=function(ev){
     }
   });
   return false;
+}
+
+window.portalWifiSave=function(ev){
+  ev.preventDefault();
+  return submitWifi(ev.submitter&&ev.submitter.value?ev.submitter.value:'connect');
+};
+
+window.portalWifiAction=function(ev){
+  ev.preventDefault();
+  return submitWifi(ev.currentTarget.getAttribute('data-wm-wifi-action'));
 };
 
 // --- Info view ---

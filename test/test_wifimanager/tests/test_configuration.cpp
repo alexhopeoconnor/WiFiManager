@@ -39,8 +39,10 @@ void test_configuration_setters() {
     wm.portalSetBehaviorCaptivePortalEnabled(true);
     wm.portalSetBehaviorCaptivePortalEnabled(false);
     
-    // Test custom title path
-    wm.portalSetBrandTitle("TestTitle");
+    // Test the typed portal presentation path.
+    WiFiManagerPortalConfig portal;
+    portal.title = WiFiManagerPortalText::ram("TestTitle");
+    TEST_ASSERT_TRUE(wm.setPortalConfig(portal));
 
     // Call setters multiple times with different values.
     wm.setConfigPortalTimeout(60);

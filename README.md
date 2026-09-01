@@ -6,7 +6,7 @@ WiFiManager is the maintained ESP8266/ESP32 configuration-portal fork used by De
 
 - **Single-shell portal:** one responsive SPA for WiFi, parameters, information, actions, and firmware update flow.
 - **Data-first APIs:** portal state and actions are exposed under `/api/...`, not scraped from HTML.
-- **Controlled customisation:** supported `portal*` APIs customise branding, parameters, cards, layout, and small style/JS enhancements without exposing portal internals.
+- **Controlled portal UI:** semantic identity/theme values and structured portal APIs without exposing portal internals.
 - **ESP8266 and ESP32:** clean PlatformIO consumers resolve the right asynchronous TCP transport automatically.
 
 ## Try it
@@ -30,11 +30,38 @@ void loop() {}
 
 For a DeviceFramework device, configure the framework’s shared device password instead. DeviceFramework applies it consistently to the provisioning AP, OTA, HTTP Basic authentication, and WebSerial.
 
+### Brand it
+
+```cpp
+const char kTitle[] PROGMEM = "Set up Temperature Monitor";
+const char kBrand[] PROGMEM = "Tree";
+const char kAccent[] PROGMEM = "#347a45";
+
+const WiFiManagerPortalConfig kPortalUI = {
+    WiFiManagerPortalText::progmem(kTitle),
+    WiFiManagerPortalText::progmem(kBrand),
+    {}, {}, {},
+    {
+        {}, {}, {}, {}, {},
+        WiFiManagerPortalText::progmem(kAccent),
+        {}, {}, {}, {}, {},
+        10, 0,
+    },
+};
+
+void setup() {
+    wifi.setPortalConfig(kPortalUI);  // before the portal starts
+    wifi.autoConnect("Device Setup");
+}
+```
+
+The full standalone example, including a static SVG, is [BrandedPortal](examples/BrandedPortal/BrandedPortal.ino).
+
 ## Explore the portal
 
 | Goal | Guide |
 | --- | --- |
-| Brand the portal, add parameters, cards, or small UI enhancements | [Portal customisation](docs/PORTAL_CUSTOMIZATION.md) |
+| Brand the portal or add structured built-in content | [Portal UI](docs/PORTAL_UI.md) |
 | Configure primary/fallback station profiles | [Station profiles](docs/STATION_PROFILES.md) |
 | Understand the JSON APIs and station-connect handoff | [Portal API](docs/PORTAL_API.md) |
 | Build a clean consumer or work on this fork | [Testing](docs/TESTING.md) · [Development](docs/DEVELOPMENT.md) |

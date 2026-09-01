@@ -37,7 +37,24 @@ static void jsonAppendEscaped(String& out, const String& s) {
   }
 }
 
+static void jsonAppendEscaped(String& out, const WiFiManagerPortalText& text) {
+  for (size_t i = 0; i < text.length(); ++i) {
+    const char c = text.at(i);
+    if (c == '"') {
+      out += F("\\\"");
+    } else if (c == '\\') {
+      out += F("\\\\");
+    } else if (c == '\n') {
+      out += F("\\n");
+    } else if (c != '\r') {
+      out += c;
+    }
+  }
+}
+
 namespace {
+
+const char kEmptyPortalPlaceholder[] PROGMEM = "";
 
 inline void reservePage(String& page, size_t extraBytes = WM_PAGE_RESERVE_BYTES) {
   if (extraBytes == 0) return;
@@ -60,23 +77,25 @@ void configureDynamicStringDescriptor(DynamicDataDescriptor& descriptor, String&
   descriptor.userData = &value;
 }
 
-String readProgmemString(const char* p) {
-  return String(FPSTR(p));
+const char* portalTextGetter(void* userData) {
+  const auto* text = static_cast<const WiFiManagerPortalText*>(userData);
+  return text && text->storage == WiFiManagerPortalStorage::Ram && text->data
+    ? text->data
+    : "";
 }
 
-String stripStyleWrapper(const String& styleBlock) {
-  String css = styleBlock;
-  const String openTag = F("<style>");
-  const String closeTag = F("</style>");
-
-  if (css.startsWith(openTag)) {
-    css.remove(0, openTag.length());
-  }
-  if (css.endsWith(closeTag)) {
-    css.remove(css.length() - closeTag.length());
-  }
-  return css;
+size_t portalTextLengthGetter(const char* /*data*/, void* userData) {
+  const auto* text = static_cast<const WiFiManagerPortalText*>(userData);
+  return text ? text->length() : 0;
 }
+
+void configurePortalTextDescriptor(DynamicDataDescriptor& descriptor,
+                                  const WiFiManagerPortalText& text) {
+  descriptor.getter = &portalTextGetter;
+  descriptor.getLength = &portalTextLengthGetter;
+  descriptor.userData = const_cast<WiFiManagerPortalText*>(&text);
+}
+
 
 const char* portalHomeCardKindJson(PortalHomeCardKind k) {
   switch (k) {
@@ -110,31 +129,27 @@ AsyncWebServerResponse* beginTemplateResponse(AsyncWebServerRequest* request,
   );
 }
 
-// Shell contract (must match templates/RootShell.h — customize UI via WiFiManager portal* APIs + bootstrap JSON, not registries):
+// Shell contract (must match templates/RootShell.h):
 //   %PAGE_TITLE%        -> document title (from WiFiManager title state)
-//   %STYLES%            -> portal CSS (embedded default + portalAppendCss / portalOverrideCss)
+//   %STYLES%            -> immutable built-in portal stylesheet in PROGMEM
+//   %PORTAL_THEME%      -> optional validated semantic-token override
 //   %BOOTSTRAP_JSON%    -> initial SPA runtime payload
 //   %PORTAL_APP_JS%     -> embedded SPA source
-//   %PORTAL_APPEND_JS%  -> consumer hook script (portalAppendJs)
 
 struct PortalShellRenderBundle {
   String bootstrapJson;
-  String pageTitleStatic;
-  String stylesStatic;
-  String appendJsStatic;
+  WiFiManagerPortalText pageTitle;
   PlaceholderRegistry registry;
   TemplateContext context;
   DynamicDataDescriptor bootstrapDescriptor;
   DynamicDataDescriptor pageTitleDescriptor;
-  DynamicDataDescriptor stylesDescriptor;
-  DynamicDataDescriptor appendJsDescriptor;
+  DynamicDataDescriptor themeDescriptor;
 
   PortalShellRenderBundle()
       : registry(WM_TEMPLATE_REGISTRY_CAPACITY),
         bootstrapDescriptor{},
         pageTitleDescriptor{},
-        stylesDescriptor{},
-        appendJsDescriptor{} {}
+        themeDescriptor{} {}
 };
 
 // Custom HTML attribute strings (e.g. from DeviceFramework generateCustomHTML) may include
@@ -149,24 +164,6 @@ bool portalCustomAttrsIndicatePassword(const String& customAttrs) {
 }  // namespace
 
 WiFiManagerHandlers::WiFiManagerHandlers(WiFiManager* wm) : _wm(wm) {}
-
-String WiFiManagerHandlers::composePortalStylesheet() const {
-  String css;
-  if (_wm != nullptr && _wm->_portalAssets.overriddenCss.length() > 0) {
-    css = _wm->_portalAssets.overriddenCss;
-  } else {
-    css = stripStyleWrapper(readProgmemString(CSS_STYLE));
-  }
-
-  if (_wm != nullptr && _wm->_portalAssets.appendedCss.length() > 0) {
-    css += _wm->_portalAssets.appendedCss;
-  }
-
-  String out = F("<style>");
-  out += css;
-  out += F("</style>");
-  return out;
-}
 
 void WiFiManagerHandlers::appendPortalExtraInfoSectionsJson(String& json, bool& first) {
   if (_wm == nullptr) {
@@ -199,7 +196,6 @@ void WiFiManagerHandlers::appendPortalExtraInfoSectionsJson(String& json, bool& 
     json += F("]}");
   }
 }
-
 void WiFiManagerHandlers::appendPortalExtraHomeCardsJson(String& json, bool& first) {
   if (_wm == nullptr) {
     return;
@@ -686,25 +682,24 @@ void WiFiManagerHandlers::handleRoot(AsyncWebServerRequest *request) {
   // - WiFiManagerHandlers owns request-time shell assembly; WiFiManagerServer owns HTTP lifecycle only.
   // - Build one request-scoped PortalShellRenderBundle.
   // - Populate one request-scoped PlaceholderRegistry with shell defaults + request payloads.
-  // - Render WM_ROOT_SHELL_TEMPLATE.
+  // - Render WM_ROOT_SHELL_TEMPLATE with static CSS plus an optional small theme block.
   auto bundle = std::make_shared<PortalShellRenderBundle>();
-  const bool hasCustomStyles = _wm != nullptr &&
-      (_wm->_portalAssets.overriddenCss.length() > 0 || _wm->_portalAssets.appendedCss.length() > 0);
-  bundle->pageTitleStatic = _wm ? _wm->_portalBrand.title : String();
+  bundle->pageTitle = _wm ? _wm->_portalBrand.title : WiFiManagerPortalText{};
   bundle->bootstrapJson = buildPortalBootstrapJson();
-  bundle->appendJsStatic = _wm ? _wm->_portalAssets.appendedJs : String();
+  bundle->registry.registerProgmemData("%STYLES%", CSS_STYLE);
   bundle->registry.registerProgmemData("%PORTAL_APP_JS%", PORTAL_APP_JS);
-  if (hasCustomStyles) {
-    bundle->stylesStatic = composePortalStylesheet();
-    configureDynamicStringDescriptor(bundle->stylesDescriptor, bundle->stylesStatic);
-    bundle->registry.registerDynamicData("%STYLES%", &bundle->stylesDescriptor);
+  if (_wm) {
+    configureDynamicStringDescriptor(bundle->themeDescriptor, _wm->_portalThemeStyle);
+    bundle->registry.registerDynamicData("%PORTAL_THEME%", &bundle->themeDescriptor);
   } else {
-    bundle->registry.registerProgmemData("%STYLES%", CSS_STYLE);
+    bundle->registry.registerProgmemData("%PORTAL_THEME%", kEmptyPortalPlaceholder);
   }
-  configureDynamicStringDescriptor(bundle->appendJsDescriptor, bundle->appendJsStatic);
-  bundle->registry.registerDynamicData("%PORTAL_APPEND_JS%", &bundle->appendJsDescriptor);
-  configureDynamicStringDescriptor(bundle->pageTitleDescriptor, bundle->pageTitleStatic);
-  bundle->registry.registerDynamicData("%PAGE_TITLE%", &bundle->pageTitleDescriptor);
+  if (bundle->pageTitle.storage == WiFiManagerPortalStorage::Progmem && bundle->pageTitle.data) {
+    bundle->registry.registerProgmemData("%PAGE_TITLE%", bundle->pageTitle.data);
+  } else {
+    configurePortalTextDescriptor(bundle->pageTitleDescriptor, bundle->pageTitle);
+    bundle->registry.registerDynamicData("%PAGE_TITLE%", &bundle->pageTitleDescriptor);
+  }
   configureDynamicStringDescriptor(bundle->bootstrapDescriptor, bundle->bootstrapJson);
   bundle->registry.registerDynamicData("%BOOTSTRAP_JSON%", &bundle->bootstrapDescriptor);
 
@@ -1076,7 +1071,9 @@ String WiFiManagerHandlers::buildPortalBootstrapJson() {
   json += F("\",\"homeIntro\":\"");
   jsonAppendEscaped(json, _wm->_portalBrand.homeIntro);
   json += F("\",\"logoSvg\":\"");
-  jsonAppendEscaped(json, _wm->_portalBrand.logoSvg);
+  jsonAppendEscaped(json, _wm->_portalBrand.logo.svg);
+  json += F("\",\"logoAltText\":\"");
+  jsonAppendEscaped(json, _wm->_portalBrand.logoAltText);
   json += F("\"}");
   json += F(",\"context\":{");
   json += F("\"portalActive\":");
@@ -1094,15 +1091,12 @@ String WiFiManagerHandlers::buildPortalBootstrapJson() {
     json += String(timeoutRemainingSeconds);
   }
   json += F(",\"identityText\":\"");
-  {
-    String idText;
-    if (_wm->_portalBrand.identityTextOverride.length() > 0) {
-      idText = _wm->_portalBrand.identityTextOverride;
-    } else if (_wm->configPortalActive) {
-      idText = _wm->_apName;
-    } else {
-      idText = _wm->getWiFiHostname() + " - " + WiFi.localIP().toString();
-    }
+  if (!_wm->_portalBrand.identityTextOverride.empty()) {
+    jsonAppendEscaped(json, _wm->_portalBrand.identityTextOverride);
+  } else {
+    const String idText = _wm->configPortalActive
+      ? _wm->_apName
+      : _wm->getWiFiHostname() + " - " + WiFi.localIP().toString();
     jsonAppendEscaped(json, idText);
   }
   json += F("\",\"statusSummary\":\"");

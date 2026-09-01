@@ -56,6 +56,25 @@ bool normalizeHostname(String& hostname) {
 
   return true;
 }
+
+const char kDefaultPortalTitle[] PROGMEM = "WiFiManager";
+
+bool isSafePortalText(const WiFiManagerPortalText& value) {
+  for (size_t i = 0; i < value.length(); ++i) {
+    const char c = value.at(i);
+    if (!(isAlphaNumeric(c) || c == '#' || c == '(' || c == ')' || c == ',' ||
+          c == '.' || c == '%' || c == ' ' || c == '-' || c == '/')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void appendPortalText(String& destination, const WiFiManagerPortalText& value) {
+  for (size_t i = 0; i < value.length(); ++i) {
+    destination += value.at(i);
+  }
+}
 } // namespace
 
 /**
@@ -149,6 +168,7 @@ WiFiManager::WiFiManager() {
 }
 
 void WiFiManager::WiFiManagerInit(){
+  _portalBrand.title = WiFiManagerPortalText::progmem(kDefaultPortalTitle);
   if (_logEnabled && (uint8_t)_runtimeMaxLevel >= (uint8_t)WiFiManagerLogLevel::Trace) {
     debugPlatformInfo();
   }
@@ -846,16 +866,6 @@ bool WiFiManager::startAP(){
   bool ret = true;
   #ifndef WM_NO_LOG
   log(WiFiManagerLogLevel::Info, kWiFiMgrLogSubsystem, F("StartAP with SSID: "),_apName);
-  #endif
-
-  #ifdef ESP8266
-    if(!WiFi.enableAP(true)) {
-      #ifndef WM_NO_LOG
-      log(WiFiManagerLogLevel::Error, kWiFiMgrLogSubsystem,F("[ERROR] enableAP failed!"));
-      #endif
-      return false;
-    }
-    delay(500); // workaround delay
   #endif
 
   // setup optional soft AP static ip config
@@ -2559,20 +2569,78 @@ void WiFiManager::setWiFiAPHidden(bool hidden){
 }
 
 
-void WiFiManager::portalSetBrandTitle(const String& title) {
-  _portalBrand.title = title;
+bool WiFiManager::canChangePortalPresentation() const {
+  return !configPortalActive && !webPortalActive;
 }
 
-void WiFiManager::portalSetContextIdentityText(const String& identityText) {
-  _portalBrand.identityTextOverride = identityText;
+bool WiFiManager::isPortalThemeValid(const WiFiManagerPortalTheme& theme) const {
+  return isSafePortalText(theme.pageBackground) && isSafePortalText(theme.surface) &&
+      isSafePortalText(theme.text) && isSafePortalText(theme.mutedText) &&
+      isSafePortalText(theme.border) && isSafePortalText(theme.accent) &&
+      isSafePortalText(theme.accentHover) && isSafePortalText(theme.accentText) &&
+      isSafePortalText(theme.danger) && isSafePortalText(theme.dangerHover) &&
+      isSafePortalText(theme.success) && theme.cornerRadiusPx <= 64 &&
+      theme.smallCornerRadiusPx <= 64;
 }
 
-void WiFiManager::portalSetBrandHomeIntro(const String& text) {
-  _portalBrand.homeIntro = text;
+void WiFiManager::rebuildPortalThemeStyle() {
+  _portalThemeStyle = "";
+  const bool hasColours = !_portalTheme.pageBackground.empty() || !_portalTheme.surface.empty() ||
+      !_portalTheme.text.empty() || !_portalTheme.mutedText.empty() || !_portalTheme.border.empty() ||
+      !_portalTheme.accent.empty() || !_portalTheme.accentHover.empty() ||
+      !_portalTheme.accentText.empty() || !_portalTheme.danger.empty() ||
+      !_portalTheme.dangerHover.empty() || !_portalTheme.success.empty();
+  if (!hasColours && _portalTheme.cornerRadiusPx == 0 && _portalTheme.smallCornerRadiusPx == 0) {
+    return;
+  }
+
+  const auto appendToken = [this](const char* name, const WiFiManagerPortalText& value) {
+    if (value.empty()) return;
+    _portalThemeStyle += name;
+    _portalThemeStyle += ':';
+    appendPortalText(_portalThemeStyle, value);
+    _portalThemeStyle += ';';
+  };
+
+  _portalThemeStyle = F("<style id='wm-portal-theme'>:root{");
+  appendToken("--wm-bg", _portalTheme.pageBackground);
+  appendToken("--wm-surface", _portalTheme.surface);
+  appendToken("--wm-text", _portalTheme.text);
+  appendToken("--wm-muted", _portalTheme.mutedText);
+  appendToken("--wm-border", _portalTheme.border);
+  appendToken("--wm-brand", _portalTheme.accent);
+  appendToken("--wm-brand-hover", _portalTheme.accentHover);
+  appendToken("--wm-brand-text", _portalTheme.accentText);
+  appendToken("--wm-danger", _portalTheme.danger);
+  appendToken("--wm-danger-hover", _portalTheme.dangerHover);
+  appendToken("--wm-success", _portalTheme.success);
+  if (_portalTheme.cornerRadiusPx > 0) {
+    _portalThemeStyle += F("--wm-radius:");
+    _portalThemeStyle += String(_portalTheme.cornerRadiusPx);
+    _portalThemeStyle += F("px;");
+  }
+  if (_portalTheme.smallCornerRadiusPx > 0) {
+    _portalThemeStyle += F("--wm-radius-sm:");
+    _portalThemeStyle += String(_portalTheme.smallCornerRadiusPx);
+    _portalThemeStyle += F("px;");
+  }
+  _portalThemeStyle += F("}</style>");
 }
 
-void WiFiManager::portalSetBrandLogoSvg(const String& svgMarkup) {
-  _portalBrand.logoSvg = svgMarkup;
+bool WiFiManager::setPortalConfig(const WiFiManagerPortalConfig& config) {
+  if (!canChangePortalPresentation() || !isPortalThemeValid(config.theme)) {
+    return false;
+  }
+  _portalBrand.title = config.title.empty()
+    ? WiFiManagerPortalText::progmem(kDefaultPortalTitle)
+    : config.title;
+  _portalBrand.identityTextOverride = config.identityText;
+  _portalBrand.homeIntro = config.homeIntro;
+  _portalBrand.logo = config.logo;
+  _portalBrand.logoAltText = config.logoAltText;
+  _portalTheme = config.theme;
+  rebuildPortalThemeStyle();
+  return true;
 }
 
 void WiFiManager::portalSetPageInfoVisible(bool visible) {
@@ -2586,6 +2654,7 @@ void WiFiManager::portalSetPageUpdateVisible(bool visible) {
 void WiFiManager::portalSetPageSetupVisible(bool visible) {
   _portalPages.setupVisible = visible;
 }
+
 
 void WiFiManager::portalSetActionEraseVisible(bool visible) {
   _portalActions.eraseVisible = visible;
@@ -2691,17 +2760,6 @@ void WiFiManager::portalClearHomeCards() {
   _portalStructured.homeCards.clear();
 }
 
-void WiFiManager::portalAppendCss(const String& css) {
-  _portalAssets.appendedCss += css;
-}
-
-void WiFiManager::portalOverrideCss(const String& css) {
-  _portalAssets.overriddenCss = css;
-}
-
-void WiFiManager::portalAppendJs(const String& js) {
-  _portalAssets.appendedJs += js;
-}
 
 /**
  * check if the config portal is running

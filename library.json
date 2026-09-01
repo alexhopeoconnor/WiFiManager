@@ -47,18 +47,18 @@
     {
       "owner": "esp32async",
       "name": "ESPAsyncTCP",
-      "version": "2.0.0",
+      "version": "^2.0.0",
       "platforms": "espressif8266"
     },
     {
       "owner": "esp32async",
       "name": "AsyncTCP",
-      "version": "3.4.9",
+      "version": "^3.4.9",
       "platforms": "espressif32"
     },
     {
       "name": "DeviceFrameworkTemplateEngine",
-      "version": "https://github.com/alexhopeoconnor/DFTE.git#v1.0.2"
+      "version": "https://github.com/alexhopeoconnor/DFTE.git#v1.1.0"
     }
   ],
   "build": {

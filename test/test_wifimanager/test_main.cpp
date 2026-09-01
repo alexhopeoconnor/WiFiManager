@@ -36,9 +36,11 @@ TestCase tests[] = {
     TEST_ENTRY(test_config_portal_already_active),
     TEST_ENTRY(test_get_config_portal_ssid),
     TEST_ENTRY(test_bootstrap_json_portal_feature_flags),
+    TEST_ENTRY(test_portal_default_presentation),
     TEST_ENTRY(test_bootstrap_json_contract_v2),
     TEST_ENTRY(test_bootstrap_json_snapshot_consistency),
     TEST_ENTRY(test_root_render_interleaved_context_isolation),
+    TEST_ENTRY(test_portal_presentation_configuration),
     
     // Non-blocking tests
     TEST_ENTRY(test_nonblocking_process),
@@ -104,7 +106,7 @@ TestCase tests[] = {
 
     // Template rendering tests
     TEST_ENTRY(test_shell_template_renders_core_placeholders),
-    TEST_ENTRY(test_shell_template_renders_dynamic_styles_with_percent_values),
+    TEST_ENTRY(test_shell_template_renders_dynamic_theme_with_percent_values),
 
     // State transition tests
     TEST_ENTRY(test_portal_to_connected_transition),

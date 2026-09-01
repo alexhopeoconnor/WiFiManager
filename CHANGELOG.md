@@ -3,6 +3,8 @@
 ## 3.1.0
 
 - Add an opt-in primary/fallback station-profile controller with bounded failover, reconnection, a durable consumer-supplied store, and profile-aware portal APIs. DeviceFramework uses this to persist verified WiFi profiles transactionally.
+- Add portable portal branding and presentation hooks, including theme-aware shell and template rendering, without requiring DeviceFramework.
+- Pin ESP32 tests to the Arduino 3-compatible pioarduino platform release and resolve DFTE 1.1.0.
 
 ## 3.0.6
 

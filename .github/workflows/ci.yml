@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - device-framework
+    tags:
+      - "v*"
   pull_request:
 
 concurrency:

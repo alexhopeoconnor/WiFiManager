@@ -142,6 +142,7 @@
 #include <string>
 // Include utility functions
 #include "WiFiManagerUtils.h"
+#include "WiFiManagerPortalUI.h"
 
 // A station profile is intentionally fixed-size. ESP Wi-Fi accepts one station
 // configuration at a time, so multi-network behaviour belongs to the
@@ -265,10 +266,11 @@ struct PortalHomeCard {
 };
 
 struct PortalBrandState {
-  String title = "WiFiManager";
-  String identityTextOverride;
-  String homeIntro;
-  String logoSvg;
+  WiFiManagerPortalText title;
+  WiFiManagerPortalText identityTextOverride;
+  WiFiManagerPortalText homeIntro;
+  WiFiManagerPortalAsset logo;
+  WiFiManagerPortalText logoAltText;
 };
 
 struct PortalPageState {
@@ -288,12 +290,6 @@ struct PortalActionState {
 struct PortalLayoutState {
   /** When true, custom parameters render on the Wi-Fi page; when false, only on #/setup. */
   bool paramsOnWifiPage = true;
-};
-
-struct PortalAssetState {
-  String appendedCss;
-  String overriddenCss;
-  String appendedJs;
 };
 
 struct PortalStructuredExtrasState {
@@ -594,11 +590,10 @@ class WiFiManager
     // clean connect, always disconnect before connecting
     void          setCleanConnect(bool enable); // default false
 
-    // ---- Portal (all customization entry points use the portal* prefix) ----
-    void          portalSetBrandTitle(const String& title);
-    void          portalSetContextIdentityText(const String& identityText);
-    void          portalSetBrandHomeIntro(const String& text);
-    void          portalSetBrandLogoSvg(const String& svgMarkup);
+    // ---- Portal presentation ----
+    // Apply this before a portal is started. The portal response model is
+    // immutable while active so async responses never observe partial UI state.
+    bool          setPortalConfig(const WiFiManagerPortalConfig& config);
 
     void          portalSetPageInfoVisible(bool visible);
     void          portalSetPageUpdateVisible(bool visible);
@@ -630,10 +625,6 @@ class WiFiManager
     void          portalClearInfoSections();
     void          portalAddHomeCard(const PortalHomeCard& card);
     void          portalClearHomeCards();
-
-    void          portalAppendCss(const String& css);
-    void          portalOverrideCss(const String& css);
-    void          portalAppendJs(const String& js);
 
     // get last connection result, including autoconnect and portal credential-save attempts
     uint8_t       getLastConxResult();
@@ -890,13 +881,18 @@ class WiFiManager
     boolean       _disableConfigPortal    = true;  // FOR autoconnect - stop config portal if cp wifi save
     String        _hostname               = "";    // hostname for esp8266 for dhcp, and or MDNS
 
-    // Grouped portal presentation / customization (see portal* setters; JSON in v2 bootstrap)
+    // Grouped portal presentation / customization (see portal APIs and JSON bootstrap)
     PortalBrandState            _portalBrand;
+    WiFiManagerPortalTheme      _portalTheme;
+    String                      _portalThemeStyle;
     PortalPageState             _portalPages;
     PortalActionState           _portalActions;
     PortalLayoutState           _portalLayout;
-    PortalAssetState            _portalAssets;
     PortalStructuredExtrasState _portalStructured;
+
+    bool canChangePortalPresentation() const;
+    bool isPortalThemeValid(const WiFiManagerPortalTheme& theme) const;
+    void rebuildPortalThemeStyle();
 
     // internal options
 

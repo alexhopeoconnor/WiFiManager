@@ -88,8 +88,10 @@ void test_ui_customization() {
     
     WiFiManager wm;
     
-    // Minimal customization retained: title
-    wm.portalSetBrandTitle("MyDevice");
+    // Minimal customization uses the complete static portal configuration.
+    WiFiManagerPortalConfig portal;
+    portal.title = WiFiManagerPortalText::ram("MyDevice");
+    TEST_ASSERT_TRUE(wm.setPortalConfig(portal));
     
     // All setters executed without crash
     TEST_ASSERT_TRUE_MESSAGE(true, "UI customization options executed without crash");

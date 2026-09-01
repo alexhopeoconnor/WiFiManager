@@ -36,6 +36,6 @@ The package manifest resolves DFTE, ESPAsyncWebServer, and the correct TCP trans
 
 DeviceFramework creates and configures WiFiManager for its normal lifecycle. Use DeviceFramework’s persistent shared device-password API instead of separately configuring an AP, OTA, HTTP, and WebSerial password.
 
-Next: [portal customisation](PORTAL_CUSTOMIZATION.md) or [portal API](PORTAL_API.md).
+Next: [portal UI](PORTAL_UI.md) or [portal API](PORTAL_API.md).
 
 Back to [documentation](README.md) · [project overview](../README.md).

@@ -106,7 +106,6 @@ class WiFiManagerHandlers {
     void appendPortalJsonStaticFields(String& json, bool& first);
     void appendPortalJsonCustomParams(String& json, bool& first);
 
-    String composePortalStylesheet() const;
     void appendPortalExtraInfoSectionsJson(String& json, bool& first);
     void appendPortalExtraHomeCardsJson(String& json, bool& first);
 
