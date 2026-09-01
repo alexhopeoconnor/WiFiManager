@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: bash -n scripts/*.sh
       - run: ./scripts/check-docs.sh
 
   compile-tests:

@@ -14,9 +14,11 @@ known six-second asynchronous scan failure in the older 2.0.17 framework. Core
 ignore settings shown in this repository `platformio.ini`; keep those settings
 when adding an ESP32 environment.
 
-Before a release, update `library.json`, `CHANGELOG.md`, and the relevant public documentation, then run:
+Start a release with `bump-version.sh`. It updates package metadata and canonical installation snippets, then creates the changelog section. Replace its generated TODO with the release summary and update any behavioural documentation before running:
 
 ```bash
+./scripts/bump-version.sh vMAJOR.MINOR.PATCH
+# Replace the generated CHANGELOG TODO with the release summary.
 ./scripts/check-docs.sh
 ./scripts/test.sh compile --platform esp8266
 ./scripts/test.sh compile --platform esp32
