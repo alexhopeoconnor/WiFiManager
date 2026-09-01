@@ -34,7 +34,7 @@ For a DeviceFramework device, configure the framework’s shared device password
 
 ```cpp
 const char kTitle[] PROGMEM = "Set up Temperature Monitor";
-const char kBrand[] PROGMEM = "Tree";
+const char kBrand[] PROGMEM = "Example Devices";
 const char kAccent[] PROGMEM = "#347a45";
 
 const WiFiManagerPortalConfig kPortalUI = {

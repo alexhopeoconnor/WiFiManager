@@ -14,9 +14,9 @@ WiFiManager wifi;
 
 namespace {
 const char kTitle[] PROGMEM = "Set up Temperature Monitor";
-const char kIdentity[] PROGMEM = "Tree";
+const char kIdentity[] PROGMEM = "Example Devices";
 const char kIntro[] PROGMEM = "Connect this device to Wi-Fi.";
-const char kLogoAlt[] PROGMEM = "Tree";
+const char kLogoAlt[] PROGMEM = "Example Devices";
 const char kLogo[] PROGMEM = R"svg(<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="28"/></svg>)svg";
 const char kPage[] PROGMEM = "#f4f7f3";
 const char kSurface[] PROGMEM = "#ffffff";

@@ -238,10 +238,10 @@ void test_portal_presentation_configuration() {
     WiFiManagerHandlers handlers(&wm);
     WiFiManagerPortalConfig config;
     config.title = WiFiManagerPortalText::ram("Set up Temperature Monitor");
-    config.identityText = WiFiManagerPortalText::ram("Tree");
+    config.identityText = WiFiManagerPortalText::ram("Example Devices");
     config.homeIntro = WiFiManagerPortalText::ram("Connect this device to WiFi.");
     config.logo = WiFiManagerPortalAsset::svgFromRam("<svg viewBox='0 0 24 24'></svg>");
-    config.logoAltText = WiFiManagerPortalText::ram("Tree logo");
+    config.logoAltText = WiFiManagerPortalText::ram("Example Devices logo");
     config.theme.pageBackground = WiFiManagerPortalText::ram("#f4f7f3");
     config.theme.surface = WiFiManagerPortalText::ram("#ffffff");
     config.theme.text = WiFiManagerPortalText::ram("#1c251e");
@@ -261,8 +261,8 @@ void test_portal_presentation_configuration() {
 
     String bootstrap = handlers.buildPortalBootstrapJson();
     TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"title\":\"Set up Temperature Monitor\"")));
-    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"identityText\":\"Tree\"")));
-    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"Tree logo\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"identityText\":\"Example Devices\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"Example Devices logo\"")));
 
     WiFiManagerPortalConfig unsafeConfig = config;
     unsafeConfig.theme.accent = WiFiManagerPortalText::ram("#347a45;body{display:none}");
