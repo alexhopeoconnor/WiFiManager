@@ -4,9 +4,10 @@ WiFiManager gives ESP8266 and ESP32 firmware a polished, self-hosted Wi-Fi setup
 
 ## See it on real hardware
 
-| Branded ESP32 portal | ESP8266 portal with an application field |
+| Brand the built-in portal | Combine Wi-Fi and application setup |
 | --- | --- |
 | ![Branded WiFiManager portal overview on an ESP32.](docs/assets/portal-esp32-branded-overview.png) | ![WiFiManager network picker and custom MQTT broker field on an ESP8266.](docs/assets/portal-esp8266-custom-wifi.png) |
+| Give each product its own title, identity, icon, and color theme without copying portal HTML. | Show live nearby networks and collect application values, such as an MQTT broker, in the same setup flow. |
 
 These are unmodified browser captures of [Branded Portal](examples/BrandedPortal/) and [Custom Portal Content](examples/CustomPortalContent/) running on the supported boards. The portal is served by the device itself; no cloud UI or companion app is involved.
 
