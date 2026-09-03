@@ -6,7 +6,7 @@ WiFiManager wifi;
 namespace {
 const char kPortalTitle[] PROGMEM = "Set up Temperature Monitor";
 const char kPortalIdentity[] PROGMEM = "Example Devices";
-const char kPortalIntro[] PROGMEM = "Connect this device to Wi-Fi.";
+const char kPortalTagline[] PROGMEM = "Reliable setup for connected devices.";
 const char kPortalLogoAlt[] PROGMEM = "Example Devices";
 const char kExampleLogo[] PROGMEM = "<svg viewBox='0 0 64 64' aria-hidden='true'><circle cx='32' cy='32' r='28' fill='#347a45'/></svg>";
 const char kPage[] PROGMEM = "#f4f7f3";
@@ -18,7 +18,7 @@ const char kAccentText[] PROGMEM = "#ffffff";
 const WiFiManagerPortalConfig kPortalUI = {
     WiFiManagerPortalText::progmem(kPortalTitle),
     WiFiManagerPortalText::progmem(kPortalIdentity),
-    WiFiManagerPortalText::progmem(kPortalIntro),
+    WiFiManagerPortalText::progmem(kPortalTagline),
     WiFiManagerPortalAsset::svgFromProgmem(kExampleLogo),
     WiFiManagerPortalText::progmem(kPortalLogoAlt),
     {
@@ -42,9 +42,7 @@ void setup() {
         Serial.println("Portal UI configuration was rejected");
     }
     wifi.setConfigPortalTimeout(180);
-    if (!wifi.autoConnect("Temperature Monitor")) {
-        ESP.restart();
-    }
+    wifi.autoConnect("Temperature Monitor");
 }
 
-void loop() {}
+void loop() { wifi.process(); }

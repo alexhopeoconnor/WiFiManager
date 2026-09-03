@@ -1064,12 +1064,12 @@ String WiFiManagerHandlers::buildPortalBootstrapJson() {
   const bool portalRunning = _wm->configPortalActive || _wm->webPortalActive;
   String json;
   reservePage(json, 1200);
-  json += F("{\"contractVersion\":2");
+  json += F("{\"contractVersion\":3");
   json += F(",\"brand\":{");
   json += F("\"title\":\"");
   jsonAppendEscaped(json, _wm->_portalBrand.title);
-  json += F("\",\"homeIntro\":\"");
-  jsonAppendEscaped(json, _wm->_portalBrand.homeIntro);
+  json += F("\",\"tagline\":\"");
+  jsonAppendEscaped(json, _wm->_portalBrand.tagline);
   json += F("\",\"logoSvg\":\"");
   jsonAppendEscaped(json, _wm->_portalBrand.logo.svg);
   json += F("\",\"logoAltText\":\"");
@@ -1402,6 +1402,33 @@ String WiFiManagerHandlers::buildApiWifiConnectStatusJson() {
 void WiFiManagerHandlers::handleApiWifiConnectStatus(AsyncWebServerRequest *request) {
   handleRequest(request);
   sendApiJson(request, 200, buildApiWifiConnectStatusJson());
+}
+
+void WiFiManagerHandlers::handleApiWifiConnectComplete(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  if (!_wm->didConfigPortalConnectSucceed() || _wm->_cpConnectStationIp.length() == 0) {
+    sendApiJson(request, 409, F("{\"ok\":false,\"message\":\"WiFi hand-off is not ready\"}"));
+    return;
+  }
+
+  // The SPA has received the station address and can navigate to it. Keep the
+  // portal alive briefly so the normal device web server can start cleanly.
+  sendApiJson(request, 200, F("{\"ok\":true}"));
+  _wm->acknowledgePortalConnectHandoff();
+}
+
+void WiFiManagerHandlers::handleApiPortalTimeoutReset(AsyncWebServerRequest *request) {
+  handleRequest(request);
+  if (!_wm->configPortalActive || _wm->_configPortalTimeout == 0) {
+    sendApiJson(request, 409, F("{\"ok\":false,\"message\":\"Portal timeout is not active\"}"));
+    return;
+  }
+
+  _wm->_configPortalStart = millis();
+  String json = F("{\"ok\":true,\"timeoutSecondsRemaining\":");
+  json += String((_wm->_configPortalTimeout + 999UL) / 1000UL);
+  json += F("}");
+  sendApiJson(request, 200, json);
 }
 
 String WiFiManagerHandlers::buildApiParamsGetJson() {

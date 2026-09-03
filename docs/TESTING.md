@@ -9,6 +9,6 @@ check, so dependency resolution uses the current manifest rather than a stale
 ./scripts/test.sh compile --platform esp32
 ```
 
-CI runs both checks for pushes to the maintained branch and pull requests. They compile only; hardware portals remain a local integration concern for an application or DeviceFramework’s connected-device suite.
+CI runs both checks for pushes to the maintained branch and pull requests. They compile only; hardware portals remain a local integration concern for the consuming application.
 
 Back to [documentation](README.md) · [project overview](../README.md).

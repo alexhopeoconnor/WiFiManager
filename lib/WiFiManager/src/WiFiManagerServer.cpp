@@ -96,6 +96,12 @@ void WiFiManagerServer::registerRoutes() {
   server->on(WM_G(R_api_wifi_connect_status), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleApiWifiConnectStatus(request);
   });
+  server->on(WM_G(R_api_wifi_connect_complete), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiWifiConnectComplete(request);
+  });
+  server->on(WM_G(R_api_portal_timeout_reset), HTTP_POST, [this](AsyncWebServerRequest *request) {
+    this->_handlers->handleApiPortalTimeoutReset(request);
+  });
   server->on(WM_G(R_api_params), HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->_handlers->handleApiParamsGet(request);
   });

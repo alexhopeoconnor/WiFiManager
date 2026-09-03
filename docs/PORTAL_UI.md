@@ -15,7 +15,7 @@ WiFiManager wifi;
 namespace {
 const char kTitle[] PROGMEM = "Set up Temperature Monitor";
 const char kIdentity[] PROGMEM = "Example Devices";
-const char kIntro[] PROGMEM = "Connect this device to Wi-Fi.";
+const char kTagline[] PROGMEM = "Reliable setup for connected devices.";
 const char kLogoAlt[] PROGMEM = "Example Devices";
 const char kLogo[] PROGMEM = R"svg(<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="28"/></svg>)svg";
 const char kPage[] PROGMEM = "#f4f7f3";
@@ -26,7 +26,7 @@ const char kAccentText[] PROGMEM = "#ffffff";
 const WiFiManagerPortalConfig kPortalUI = {
     WiFiManagerPortalText::progmem(kTitle),
     WiFiManagerPortalText::progmem(kIdentity),
-    WiFiManagerPortalText::progmem(kIntro),
+    WiFiManagerPortalText::progmem(kTagline),
     WiFiManagerPortalAsset::svgFromProgmem(kLogo),
     WiFiManagerPortalText::progmem(kLogoAlt),
     {
@@ -58,9 +58,9 @@ Leave a text or colour value empty, or a radius at `0`, to retain the built-in s
 
 | Field | Used by |
 | --- | --- |
-| `title` | Document title and portal heading |
-| `identityText` | Product/device line below the heading |
-| `homeIntro` | Introductory text on the home view |
+| `title` | Document title and concise setup-page heading |
+| `identityText` | Company or product name in the header above navigation |
+| `tagline` | Short tagline in the header above navigation |
 | `logo.svg`, `logoAltText` | Optional trusted inline SVG and its accessible label |
 | `pageBackground`, `surface`, `text`, `mutedText`, `border` | Portal surfaces and text |
 | `accent`, `accentHover`, `accentText` | Primary links and actions |
@@ -75,6 +75,5 @@ Presentation uses one configuration route: `setPortalConfig()`. Existing structu
 
 There is no arbitrary HTML shell, route replacement, navigation injection, raw stylesheet, or script hook. If a product needs a new portal capability, add a narrow WiFiManager contract and test it on both supported targets.
 
-For a DeviceFramework device, use `DeviceFrameworkUIConfig`; DeviceFramework maps its product-level configuration into this portal API. See [DeviceFramework web UI](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/WEB_UI.md).
 
 Back to the [documentation index](README.md) or [project overview](../README.md).

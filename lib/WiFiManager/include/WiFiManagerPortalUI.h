@@ -84,7 +84,7 @@ struct WiFiManagerPortalTheme {
 struct WiFiManagerPortalConfig {
   WiFiManagerPortalText title;
   WiFiManagerPortalText identityText;
-  WiFiManagerPortalText homeIntro;
+  WiFiManagerPortalText tagline;
   WiFiManagerPortalAsset logo;
   WiFiManagerPortalText logoAltText;
   WiFiManagerPortalTheme theme;

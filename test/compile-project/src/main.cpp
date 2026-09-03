@@ -4,7 +4,7 @@
 namespace {
 const char kTitle[] PROGMEM = "Set up Compile Fixture";
 const char kIdentity[] PROGMEM = "WiFiManager";
-const char kIntro[] PROGMEM = "A branded portal compile check.";
+const char kTagline[] PROGMEM = "A branded portal compile check.";
 const char kLogoAlt[] PROGMEM = "WiFiManager";
 const char kLogo[] PROGMEM = "<svg viewBox='0 0 24 24'></svg>";
 const char kPage[] PROGMEM = "#f4f7f3";
@@ -19,7 +19,7 @@ const char kAccentText[] PROGMEM = "#ffffff";
 const WiFiManagerPortalConfig kPortalConfig = {
     WiFiManagerPortalText::progmem(kTitle),
     WiFiManagerPortalText::progmem(kIdentity),
-    WiFiManagerPortalText::progmem(kIntro),
+    WiFiManagerPortalText::progmem(kTagline),
     WiFiManagerPortalAsset::svgFromProgmem(kLogo),
     WiFiManagerPortalText::progmem(kLogoAlt),
     {

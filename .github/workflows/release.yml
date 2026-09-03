@@ -18,7 +18,9 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install --upgrade platformio==6.1.19
       - run: ./scripts/test.sh compile --platform esp8266
+      - run: ./scripts/test.sh examples --platform esp8266
       - run: ./scripts/test.sh compile --platform esp32
+      - run: ./scripts/test.sh examples --platform esp32
       - run: ./scripts/check-docs.sh
       - run: ./scripts/prepare-release.sh "$GITHUB_REF_NAME"
       - run: ./scripts/release-notes.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"

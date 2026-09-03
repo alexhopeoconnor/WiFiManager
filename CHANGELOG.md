@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.0
+
+- Refine the device-hosted portal with a startup Wi-Fi scan, stable loading overlays, clearer connection progress, and a resettable configuration timeout.
+- Keep a successful portal-to-station hand-off reachable until the browser acknowledges its redirect, with a bounded fallback for captive or headless clients.
+- Rename the presentation field `homeIntro` to `tagline` so portal identity and wording are clearer; update portal bootstrap contract to v3.
+- Add focused Basic Portal, Branded Portal, Custom Portal Content, and Station Profiles examples for ESP8266 and ESP32, with real-hardware README captures.
+- Strengthen release CI with documentation and clean-consumer/example compilation checks for both supported targets.
+
 ## 3.1.0
 
 - Add an opt-in primary/fallback station-profile controller with bounded failover, reconnection, a durable consumer-supplied store, and profile-aware portal APIs. DeviceFramework uses this to persist verified WiFi profiles transactionally.

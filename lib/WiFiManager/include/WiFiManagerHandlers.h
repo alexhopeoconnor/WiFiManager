@@ -55,6 +55,8 @@ class WiFiManagerHandlers {
     void handleApiWifiMeta(AsyncWebServerRequest *request);
     void handleApiWifiSave(AsyncWebServerRequest *request);
     void handleApiWifiConnectStatus(AsyncWebServerRequest *request);
+    void handleApiWifiConnectComplete(AsyncWebServerRequest *request);
+    void handleApiPortalTimeoutReset(AsyncWebServerRequest *request);
     void handleApiParamsGet(AsyncWebServerRequest *request);
     void handleApiParamsSave(AsyncWebServerRequest *request);
     void handleApiInfo(AsyncWebServerRequest *request);

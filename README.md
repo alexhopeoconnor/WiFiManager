@@ -1,15 +1,16 @@
 # WiFiManager
 
-WiFiManager is the maintained ESP8266/ESP32 configuration-portal fork used by DeviceFramework. It is a deliberate breaking fork of upstream [`tzapu/WiFiManager`](https://github.com/tzapu/WiFiManager), with a streamed single-page portal and typed JSON APIs rather than upstream’s legacy page/template model.
+WiFiManager gives ESP8266 and ESP32 firmware a polished, self-hosted Wi-Fi setup experience. It reconnects to saved networks and opens a temporary captive portal when it cannot, so users can configure the device from any phone or browser without a cloud service or companion app.
 
-## Why use it
+## See it on real hardware
 
-- **Single-shell portal:** one responsive SPA for WiFi, parameters, information, actions, and firmware update flow.
-- **Data-first APIs:** portal state and actions are exposed under `/api/...`, not scraped from HTML.
-- **Controlled portal UI:** semantic identity/theme values and structured portal APIs without exposing portal internals.
-- **ESP8266 and ESP32:** clean PlatformIO consumers resolve the right asynchronous TCP transport automatically.
+| Branded ESP32 portal | ESP8266 portal with an application field |
+| --- | --- |
+| ![Branded WiFiManager portal overview on an ESP32.](docs/assets/portal-esp32-branded-overview.png) | ![WiFiManager network picker and custom MQTT broker field on an ESP8266.](docs/assets/portal-esp8266-custom-wifi.png) |
 
-## Try it
+These are unmodified browser captures of [Branded Portal](examples/BrandedPortal/) and [Custom Portal Content](examples/CustomPortalContent/) running on the supported boards. The portal is served by the device itself; no cloud UI or companion app is involved.
+
+## Start with a working portal
 
 ```cpp
 #include <Arduino.h>
@@ -20,17 +21,17 @@ WiFiManager wifi;
 void setup() {
     Serial.begin(115200);
     wifi.setConfigPortalTimeout(180);
-    if (!wifi.autoConnect("Device Setup", "change-me")) {
-        ESP.restart();
-    }
+    wifi.autoConnect("Device Setup", "change-me");
 }
 
-void loop() {}
+void loop() {
+    wifi.process();
+}
 ```
 
-For a DeviceFramework device, configure the framework’s shared device password instead. DeviceFramework applies it consistently to the provisioning AP, OTA, HTTP Basic authentication, and WebSerial.
+When saved Wi-Fi is unavailable, `autoConnect()` starts the portal asynchronously. Call `process()` from every `loop()` iteration while it may be open. Flash [Basic Portal](examples/BasicPortal/) to try this exact flow; its README gives the network name, password, portal address, and expected result after saving Wi-Fi.
 
-### Brand it
+## Make it yours
 
 ```cpp
 const char kTitle[] PROGMEM = "Set up Temperature Monitor";
@@ -53,40 +54,41 @@ void setup() {
     wifi.setPortalConfig(kPortalUI);  // before the portal starts
     wifi.autoConnect("Device Setup");
 }
+
+void loop() {
+    wifi.process();
+}
 ```
 
-The full standalone example, including a static SVG, is [BrandedPortal](examples/BrandedPortal/BrandedPortal.ino).
+The [Branded Portal](examples/BrandedPortal/) example includes a static SVG, accessible identity text, and a small semantic theme. [Custom Portal Content](examples/CustomPortalContent/) shows the supported parameters, information sections, and home cards without replacing the portal shell.
 
-## Explore the portal
+## What it provides
+
+- **Captive Wi-Fi setup:** starts an access point only when saved network credentials cannot connect.
+- **Responsive portal:** one small portal for Wi-Fi, application fields, information, actions, and firmware update flow.
+- **Structured APIs:** JSON endpoints under `/api/...` for applications that need portal state or connection results.
+- **Product presentation:** title, logo, tagline, and semantic colour tokens without copying the portal HTML.
+- **Primary and fallback networks:** an opt-in two-network controller backed by an application-provided store.
+- **ESP8266 and ESP32 support:** the package resolves its asynchronous web dependencies for the selected target.
+
+## Choose a guide
 
 | Goal | Guide |
 | --- | --- |
 | Brand the portal or add structured built-in content | [Portal UI](docs/PORTAL_UI.md) |
 | Configure primary/fallback station profiles | [Station profiles](docs/STATION_PROFILES.md) |
 | Understand the JSON APIs and station-connect handoff | [Portal API](docs/PORTAL_API.md) |
-| Build a clean consumer or work on this fork | [Testing](docs/TESTING.md) · [Development](docs/DEVELOPMENT.md) |
+| Build or flash a complete example | [Examples](examples/README.md) |
+| Contribute to this fork or prepare a release | [Development](docs/DEVELOPMENT.md) |
 
 ## Install
 
 ```ini
 [common]
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.1.0
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.0
 ```
 
-The suffix after `#` is a Git ref. PlatformIO clones the repository and checks out that release tag; GitHub Release assets are unrelated. This repository is supported through PlatformIO. Use a local `symlink://` or `file://` dependency only while actively changing this fork.
+The suffix after `#` is a Git ref. PlatformIO clones the repository and checks out that release tag; GitHub Release assets are unrelated. Arduino IDE users can install this repository as a library checkout.
 
-## Development and releases
-
-```bash
-./scripts/bump-version.sh vMAJOR.MINOR.PATCH
-# Replace the generated CHANGELOG TODO with the release summary.
-./scripts/test.sh compile --platform esp8266
-./scripts/test.sh compile --platform esp32
-./scripts/check-docs.sh
-./scripts/prepare-release.sh vMAJOR.MINOR.PATCH --tag
-```
-
-Tagging repeats the board-free compile checks, validates the package, and creates a GitHub Release from the corresponding changelog section. It does not publish to the PlatformIO Registry or deploy firmware.
-
-See the [documentation index](docs/README.md), [release history](CHANGELOG.md), and [licence](LICENSE).
+See the [documentation index](docs/README.md), [examples](examples/README.md), [release history](CHANGELOG.md), and [licence](LICENSE).

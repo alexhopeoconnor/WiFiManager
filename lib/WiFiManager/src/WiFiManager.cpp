@@ -28,6 +28,10 @@ namespace {
 constexpr size_t kMaxHostnameLength = 32;
 constexpr uint8_t kSoftApStartMaxAttempts = 3;
 constexpr unsigned long kStationProfileSwitchDelayMs = 2000UL;  // ESP WiFi needs time to leave a failed association.
+// A portal client acknowledges the successful station hand-off before the AP
+// is closed. The fallback protects headless/captive clients that disappear.
+constexpr unsigned long kPortalSuccessHandoffFallbackMs = 12000UL;
+constexpr unsigned long kPortalSuccessHandoffAcknowledgedDelayMs = 700UL;
 
 bool isValidHostnameChar(char c) {
   return isAlphaNumeric(c) || c == '-';
@@ -505,6 +509,14 @@ void WiFiManager::completePortalStationAttempt(bool success, uint8_t status, con
   _cpConnectState = success ? wm_cp_connect_state_t::success : wm_cp_connect_state_t::failed;
 
   if (success) {
+    // Profile-backed provisioning reaches this path rather than
+    // processPortalConnect(). Keep the AP available until the SPA has read
+    // the station address and acknowledged its redirect hand-off.
+    if (_disableConfigPortal && (configPortalActive || webPortalActive)) {
+      _cpConnectCloseAt = millis() + kPortalSuccessHandoffFallbackMs;
+      _cpConnectState = wm_cp_connect_state_t::success_waiting_close;
+      return;
+    }
     if (_savewificallback != NULL) {
       _savewificallback();
     }
@@ -517,6 +529,22 @@ void WiFiManager::completePortalStationAttempt(bool success, uint8_t status, con
     emitPortalEvent(WM_EVENT_PORTAL_CONNECT_FAILED);
   }
 }
+
+void WiFiManager::acknowledgePortalConnectHandoff() {
+  if (_cpConnectState != wm_cp_connect_state_t::success_waiting_close) {
+    return;
+  }
+  _cpConnectCloseAt = millis() + kPortalSuccessHandoffAcknowledgedDelayMs;
+}
+
+#ifdef UNIT_TEST
+void WiFiManager::wmTestCompleteProfilePortalConnectionSuccess() {
+  _stationCandidateFromPortal = true;
+  configPortalActive = true;
+  _disableConfigPortal = true;
+  completePortalStationAttempt(true, WL_CONNECTED, F("WiFi connected"));
+}
+#endif
 
 void WiFiManager::handleStationConnectionSuccess() {
   const uint8_t slot = _stationStatus.attemptedSlot;
@@ -1177,7 +1205,6 @@ void WiFiManager::queuePortalConnect(const String& ssid, const String& pass) {
 
 void WiFiManager::processPortalConnect() {
   const unsigned long now = millis();
-  const unsigned long successHandoffDelayMs = 2500UL;
   auto finalizePortalConnectSuccess = [&]() {
     _cpConnectState = wm_cp_connect_state_t::success;
     if (_savewificallback != NULL) {
@@ -1279,7 +1306,7 @@ void WiFiManager::processPortalConnect() {
             ? String(F("WiFi connected. Redirecting to ")) + _cpConnectStationIp
             : String(F("WiFi connected"));
         if (_disableConfigPortal && (configPortalActive || webPortalActive)) {
-          _cpConnectCloseAt = now + successHandoffDelayMs;
+          _cpConnectCloseAt = now + kPortalSuccessHandoffFallbackMs;
           _cpConnectState = wm_cp_connect_state_t::success_waiting_close;
         } else {
           finalizePortalConnectSuccess();
@@ -2635,7 +2662,7 @@ bool WiFiManager::setPortalConfig(const WiFiManagerPortalConfig& config) {
     ? WiFiManagerPortalText::progmem(kDefaultPortalTitle)
     : config.title;
   _portalBrand.identityTextOverride = config.identityText;
-  _portalBrand.homeIntro = config.homeIntro;
+  _portalBrand.tagline = config.tagline;
   _portalBrand.logo = config.logo;
   _portalBrand.logoAltText = config.logoAltText;
   _portalTheme = config.theme;

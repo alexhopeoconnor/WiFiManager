@@ -15,6 +15,8 @@
  *   GET  /api/wifi/meta
  *   POST /api/wifi/save
  *   GET  /api/wifi/connect-status
+ *   POST /api/wifi/connect-complete
+ *   POST /api/portal/timeout-reset
  *   GET  /api/params
  *   POST /api/params/save
  *   GET  /api/info
@@ -55,6 +57,8 @@ const char R_api_wifi_scan[]      PROGMEM = "/api/wifi/scan";
 const char R_api_wifi_meta[]      PROGMEM = "/api/wifi/meta";
 const char R_api_wifi_save[]      PROGMEM = "/api/wifi/save";
 const char R_api_wifi_connect_status[] PROGMEM = "/api/wifi/connect-status";
+const char R_api_wifi_connect_complete[] PROGMEM = "/api/wifi/connect-complete";
+const char R_api_portal_timeout_reset[] PROGMEM = "/api/portal/timeout-reset";
 const char R_api_params[]         PROGMEM = "/api/params";
 const char R_api_params_save[]    PROGMEM = "/api/params/save";
 const char R_api_info[]           PROGMEM = "/api/info";

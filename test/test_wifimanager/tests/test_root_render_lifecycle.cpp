@@ -82,13 +82,13 @@ void test_portal_default_presentation() {
 
     const String bootstrap = handlers.buildPortalBootstrapJson();
     TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"title\":\"WiFiManager\"")));
-    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"homeIntro\":\"\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"tagline\":\"\"")));
     TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoSvg\":\"\"")));
     TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"\"")));
 }
 
-void test_bootstrap_json_contract_v2() {
-    Serial.println("[TEST]   Testing bootstrap JSON v2 contract...");
+void test_bootstrap_json_contract_v3() {
+    Serial.println("[TEST]   Testing bootstrap JSON v3 contract...");
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
@@ -96,7 +96,7 @@ void test_bootstrap_json_contract_v2() {
     WiFiManagerPortalConfig portal;
     portal.title = WiFiManagerPortalText::ram("Solar Battery Monitor Setup");
     portal.identityText = WiFiManagerPortalText::ram("Solar Battery Monitor");
-    portal.homeIntro = WiFiManagerPortalText::ram("Connect this device to WiFi and finish setup.");
+    portal.tagline = WiFiManagerPortalText::ram("Connect this device to WiFi and finish setup.");
     portal.logo = WiFiManagerPortalAsset::svgFromRam("<svg viewBox='0 0 24 24'></svg>");
     TEST_ASSERT_TRUE(wm.setPortalConfig(portal));
     wm.portalSetPageInfoVisible(true);
@@ -115,10 +115,10 @@ void test_bootstrap_json_contract_v2() {
     wm.portalAddHomeCard(card);
 
     String j = handlers.buildPortalBootstrapJson();
-    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"contractVersion\":2")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"contractVersion\":3")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"brand\":{")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"title\":\"Solar Battery Monitor Setup\"")));
-    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"homeIntro\":\"Connect this device to WiFi and finish setup.\"")));
+    TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"tagline\":\"Connect this device to WiFi and finish setup.\"")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"logoSvg\":\"<svg viewBox='0 0 24 24'></svg>\"")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"context\":{")));
     TEST_ASSERT_NOT_EQUAL(-1, j.indexOf(F("\"identityText\":\"Solar Battery Monitor\"")));
@@ -239,7 +239,7 @@ void test_portal_presentation_configuration() {
     WiFiManagerPortalConfig config;
     config.title = WiFiManagerPortalText::ram("Set up Temperature Monitor");
     config.identityText = WiFiManagerPortalText::ram("Example Devices");
-    config.homeIntro = WiFiManagerPortalText::ram("Connect this device to WiFi.");
+    config.tagline = WiFiManagerPortalText::ram("Connect this device to WiFi.");
     config.logo = WiFiManagerPortalAsset::svgFromRam("<svg viewBox='0 0 24 24'></svg>");
     config.logoAltText = WiFiManagerPortalText::ram("Example Devices logo");
     config.theme.pageBackground = WiFiManagerPortalText::ram("#f4f7f3");

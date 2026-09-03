@@ -268,7 +268,7 @@ struct PortalHomeCard {
 struct PortalBrandState {
   WiFiManagerPortalText title;
   WiFiManagerPortalText identityTextOverride;
-  WiFiManagerPortalText homeIntro;
+  WiFiManagerPortalText tagline;
   WiFiManagerPortalAsset logo;
   WiFiManagerPortalText logoAltText;
 };
@@ -915,7 +915,7 @@ class WiFiManager
     // preload scanning causes AP to delay showing for users, but also caches and lets the cp load faster once its open
     //  my scan takes 7-10 seconds
 public:
-    boolean       _preloadwifiscan        = false; // preload wifiscan if true
+    boolean       _preloadwifiscan        = true;  // begin one asynchronous scan as the portal starts
     unsigned int  _scancachetime          = 30000; // ms cache time for preload scans
 
 protected:
@@ -963,6 +963,7 @@ protected:
     void          handleStationAttemptFailure(uint8_t status, const String& message);
     void          handleStationConnectionSuccess();
     void          completePortalStationAttempt(bool success, uint8_t status, const String& message);
+    void          acknowledgePortalConnectHandoff();
     void          enterStationPortal();
     bool          hasUsableStationConnection() const;
     bool          isStationProfileEnabled(const WiFiManagerStationProfiles& profiles, uint8_t slot) const;
@@ -1083,6 +1084,7 @@ protected:
       _cpConnectStationIp = stationIp;
       _cpConnectStatus = status;
     }
+    void          wmTestCompleteProfilePortalConnectionSuccess();
     void          wmTestSetPortalConnectFailure(const String& message, uint8_t status = WL_CONNECT_FAILED) {
       _cpConnectState = wm_cp_connect_state_t::failed;
       _cpConnectMessage = message;

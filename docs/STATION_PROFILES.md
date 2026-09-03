@@ -2,7 +2,7 @@
 
 WiFiManager 3.1.0 adds an opt-in station-profile controller for applications that need a primary Wi-Fi network and one fallback. It is independent of the legacy `autoConnect()` flow: existing WiFiManager consumers do not need to change.
 
-DeviceFramework enables this controller and supplies its CRC-protected storage. A direct WiFiManager consumer supplies its own durable store, or can use the controller only for the current process.
+A WiFiManager application supplies its own durable store. The controller can also be used with an in-memory store for a temporary session, but credentials will not survive a restart.
 
 ## Lifecycle
 
@@ -57,6 +57,6 @@ In profile mode, the existing Wi-Fi page becomes a two-profile form. It remains 
 
 The portal requires a non-empty primary SSID. Its API never returns a password; it only reports whether one is set.
 
-See [Portal API](PORTAL_API.md) for the shared connection-status response and [DeviceFramework configuration](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/CONFIGURATION.md) for the local-profile JSON that supplies these slots.
+See [Portal API](PORTAL_API.md) for the shared connection-status response. The buildable [Station Profiles](../examples/StationProfiles/) example contains a compact EEPROM-backed store for both supported ESP targets.
 
 Back to [documentation](README.md) · [project overview](../README.md).

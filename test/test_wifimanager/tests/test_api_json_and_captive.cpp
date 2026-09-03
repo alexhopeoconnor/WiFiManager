@@ -78,6 +78,24 @@ void test_api_wifi_connect_status_success_redirect() {
     Serial.println("[TEST]   WiFi connect-status success redirect payload test completed successfully");
 }
 
+void test_profile_portal_success_keeps_handoff_alive() {
+    Serial.println("[TEST]   Testing profile portal success hand-off delay...");
+
+    WiFiManager wm;
+#ifdef UNIT_TEST
+    wm.wmTestCompleteProfilePortalConnectionSuccess();
+    TEST_ASSERT_EQUAL(WiFiManager::WM_CP_CONNECT_SUCCESS, wm.getConfigPortalConnectState());
+    TEST_ASSERT_TRUE_MESSAGE(
+        wm.isConfigPortalConnectPending(),
+        "Profile-backed portal success must remain pending while the client reads the redirect response"
+    );
+#else
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Profile portal success hand-off delay test completed successfully");
+}
+
 void test_api_info_json_shape() {
     Serial.println("[TEST]   Testing /api/info JSON shape...");
 

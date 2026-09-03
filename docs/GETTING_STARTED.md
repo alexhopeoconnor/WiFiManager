@@ -27,15 +27,11 @@ void loop() {
 
 ```ini
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.1.0
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.0
 ```
 
-The package manifest resolves DFTE, ESPAsyncWebServer, and the correct TCP transport for ESP8266 or ESP32. A consuming project should not duplicate those dependencies unless it is deliberately testing an unreleased stack change.
+The package includes the asynchronous web and TCP dependencies required by the selected ESP8266 or ESP32 target. Add WiFiManager as the application’s direct dependency; do not copy its internal dependency list into your project.
 
-## DeviceFramework applications
-
-DeviceFramework creates and configures WiFiManager for its normal lifecycle. Use DeviceFramework’s persistent shared device-password API instead of separately configuring an AP, OTA, HTTP, and WebSerial password.
-
-Next: [portal UI](PORTAL_UI.md) or [portal API](PORTAL_API.md).
+Next: build [Basic Portal](../examples/BasicPortal/), then explore [portal UI](PORTAL_UI.md) or [portal API](PORTAL_API.md).
 
 Back to [documentation](README.md) · [project overview](../README.md).
