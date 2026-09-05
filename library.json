@@ -1,6 +1,6 @@
 {
   "name": "WiFiManager",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "keywords": [
     "wifi",
     "wi-fi",
@@ -58,7 +58,7 @@
     },
     {
       "name": "DeviceFrameworkTemplateEngine",
-      "version": "https://github.com/alexhopeoconnor/DFTE.git#v1.1.0"
+      "version": "https://github.com/alexhopeoconnor/DFTE.git#v1.2.0"
     }
   ],
   "build": {

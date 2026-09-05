@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.1
+
+- Ensure externally supplied station profiles remain authoritative on ESP32 by clearing stale SDK-owned credentials before opening the portal for an empty or invalid external profile set.
+- Pin DFTE 1.2.0, the tested template-engine release used by the maintained portal.
+
 ## 3.2.0
 
 - Refine the device-hosted portal with a startup Wi-Fi scan, stable loading overlays, clearer connection progress, and a resettable configuration timeout.

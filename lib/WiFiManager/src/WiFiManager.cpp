@@ -349,6 +349,13 @@ bool WiFiManager::startStationConnection(char const *apName, char const *apPassw
   _stationStatus.configuredProfiles = configuredStationProfileCount(_stationProfiles);
 
   if (!validateStationProfiles(_stationProfiles)) {
+    // In station-profile mode the caller store is the single source of
+    // truth. ESP32 can reconnect from credentials retained in its own NVS
+    // before the portal is started, which would otherwise bypass an empty or
+    // invalid external profile set. Clear only that SDK-owned state here;
+    // the external store remains untouched and is what the portal will save.
+    WiFi_Disconnect();
+    WiFi_eraseConfig();
     _stationStatus.message = _stationStatus.configuredProfiles == 0
         ? F("No WiFi profiles configured")
         : F("Stored WiFi profiles are invalid");
