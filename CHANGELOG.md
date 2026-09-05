@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.2
+
+- Align the direct ESP8266 and ESP32 test environments with the packaged DFTE 1.2.0 dependency.
+
 ## 3.2.1
 
 - Ensure externally supplied station profiles remain authoritative on ESP32 by clearing stale SDK-owned credentials before opening the portal for an empty or invalid external profile set.

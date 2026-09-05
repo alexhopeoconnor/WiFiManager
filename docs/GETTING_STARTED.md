@@ -26,7 +26,7 @@ void loop() {
 
 ```ini
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.1
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.2
 ```
 
 The package includes the asynchronous web and TCP dependencies required by the selected ESP8266 or ESP32 target. Add WiFiManager as the application’s direct dependency; do not copy its internal dependency list into your project.
