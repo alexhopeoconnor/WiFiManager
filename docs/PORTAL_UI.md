@@ -23,31 +23,30 @@ const char kSurface[] PROGMEM = "#ffffff";
 const char kAccent[] PROGMEM = "#347a45";
 const char kAccentText[] PROGMEM = "#ffffff";
 
-const WiFiManagerPortalConfig kPortalUI = {
-    WiFiManagerPortalText::progmem(kTitle),
-    WiFiManagerPortalText::progmem(kIdentity),
-    WiFiManagerPortalText::progmem(kTagline),
-    WiFiManagerPortalAsset::svgFromProgmem(kLogo),
-    WiFiManagerPortalText::progmem(kLogoAlt),
-    {
-        WiFiManagerPortalText::progmem(kPage),
-        WiFiManagerPortalText::progmem(kSurface),
-        {}, {}, {},
-        WiFiManagerPortalText::progmem(kAccent),
-        {},
-        WiFiManagerPortalText::progmem(kAccentText),
-        {}, {}, {},
-        10, 6,
-    },
-};
+WiFiManagerPortalConfig kPortalUI;
 }
 
 void setup() {
-    wifi.setPortalConfig(kPortalUI);
+    // Set only the identity values this product needs.
+    kPortalUI.title = WiFiManagerPortalText::progmem(kTitle);
+    kPortalUI.identityText = WiFiManagerPortalText::progmem(kIdentity);
+    kPortalUI.tagline = WiFiManagerPortalText::progmem(kTagline);
+    kPortalUI.logo = WiFiManagerPortalAsset::svgFromProgmem(kLogo);
+    kPortalUI.logoAltText = WiFiManagerPortalText::progmem(kLogoAlt);
+
+    // Unset theme values retain the built-in style.
+    kPortalUI.theme.pageBackground = WiFiManagerPortalText::progmem(kPage);
+    kPortalUI.theme.surface = WiFiManagerPortalText::progmem(kSurface);
+    kPortalUI.theme.accent = WiFiManagerPortalText::progmem(kAccent);
+    kPortalUI.theme.accentText = WiFiManagerPortalText::progmem(kAccentText);
+    kPortalUI.theme.cornerRadiusPx = 10;
+    kPortalUI.theme.smallCornerRadiusPx = 6;
+
+    wifi.setPortalConfig(kPortalUI);  // Configure before the portal starts.
     wifi.autoConnect("Temperature Monitor");
 }
 
-void loop() {}
+void loop() { wifi.process(); }
 ```
 
 The complete buildable example is [BrandedPortal](../examples/BrandedPortal/BrandedPortal.ino). The compile fixture exercises this API on ESP8266 and ESP32.

@@ -9,8 +9,6 @@ WiFiManager gives ESP8266 and ESP32 firmware a polished, self-hosted Wi-Fi setup
 | ![Branded WiFiManager portal overview on an ESP32.](docs/assets/portal-esp32-branded-overview.png) | ![WiFiManager network picker and custom MQTT broker field on an ESP8266.](docs/assets/portal-esp8266-custom-wifi.png) |
 | Give each product its own title, identity, icon, and color theme without copying portal HTML. | Show live nearby networks and collect application values, such as an MQTT broker, in the same setup flow. |
 
-These are unmodified browser captures of [Branded Portal](examples/BrandedPortal/) and [Custom Portal Content](examples/CustomPortalContent/) running on the supported boards. The portal is served by the device itself; no cloud UI or companion app is involved.
-
 ## Start with a working portal
 
 ```cpp
@@ -39,20 +37,18 @@ const char kTitle[] PROGMEM = "Set up Temperature Monitor";
 const char kBrand[] PROGMEM = "Example Devices";
 const char kAccent[] PROGMEM = "#347a45";
 
-const WiFiManagerPortalConfig kPortalUI = {
-    WiFiManagerPortalText::progmem(kTitle),
-    WiFiManagerPortalText::progmem(kBrand),
-    {}, {}, {},
-    {
-        {}, {}, {}, {}, {},
-        WiFiManagerPortalText::progmem(kAccent),
-        {}, {}, {}, {}, {},
-        10, 0,
-    },
-};
-
 void setup() {
-    wifi.setPortalConfig(kPortalUI);  // before the portal starts
+    WiFiManagerPortalConfig portalUI;
+
+    // Leave fields unset to keep WiFiManager's built-in portal values.
+    portalUI.title = WiFiManagerPortalText::progmem(kTitle);
+    portalUI.identityText = WiFiManagerPortalText::progmem(kBrand);
+
+    // Theme values customise the built-in styles; they do not replace the portal.
+    portalUI.theme.accent = WiFiManagerPortalText::progmem(kAccent);
+    portalUI.theme.cornerRadiusPx = 10;
+
+    wifi.setPortalConfig(portalUI);  // Apply before the portal starts.
     wifi.autoConnect("Device Setup");
 }
 

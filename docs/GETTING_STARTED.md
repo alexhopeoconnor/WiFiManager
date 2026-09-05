@@ -11,17 +11,16 @@ WiFiManager wifi;
 void setup() {
     Serial.begin(115200);
     wifi.setConfigPortalTimeout(180);
-    if (!wifi.autoConnect("Example Setup", "change-me")) {
-        ESP.restart();
-    }
+    wifi.autoConnect("Example Setup", "change-me");
 }
 
 void loop() {
+    wifi.process();  // Keeps the portal responsive when setup is needed.
     // Normal work begins after autoConnect succeeds.
 }
 ```
 
-`autoConnect()` first tries stored station credentials. If that cannot connect, it starts the AP and portal with the supplied name and password. Use a Wi-Fi-valid AP password.
+`autoConnect()` first tries stored station credentials. If that cannot connect, it starts the AP and portal with the supplied name and password, then returns `false`; call `process()` from `loop()` so that portal can run. Use a Wi-Fi-valid AP password.
 
 ## PlatformIO dependency
 

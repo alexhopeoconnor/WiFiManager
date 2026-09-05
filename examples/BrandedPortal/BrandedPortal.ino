@@ -15,28 +15,27 @@ const char kText[] PROGMEM = "#1c251e";
 const char kAccent[] PROGMEM = "#347a45";
 const char kAccentText[] PROGMEM = "#ffffff";
 
-const WiFiManagerPortalConfig kPortalUI = {
-    WiFiManagerPortalText::progmem(kPortalTitle),
-    WiFiManagerPortalText::progmem(kPortalIdentity),
-    WiFiManagerPortalText::progmem(kPortalTagline),
-    WiFiManagerPortalAsset::svgFromProgmem(kExampleLogo),
-    WiFiManagerPortalText::progmem(kPortalLogoAlt),
-    {
-        WiFiManagerPortalText::progmem(kPage),
-        WiFiManagerPortalText::progmem(kSurface),
-        WiFiManagerPortalText::progmem(kText),
-        {}, {},
-        WiFiManagerPortalText::progmem(kAccent),
-        {},
-        WiFiManagerPortalText::progmem(kAccentText),
-        {}, {}, {},
-        10, 6,
-    },
-};
+WiFiManagerPortalConfig kPortalUI;
 }
 
 void setup() {
     Serial.begin(115200);
+
+    // Brand the built-in portal; unassigned fields retain their default values.
+    kPortalUI.title = WiFiManagerPortalText::progmem(kPortalTitle);
+    kPortalUI.identityText = WiFiManagerPortalText::progmem(kPortalIdentity);
+    kPortalUI.tagline = WiFiManagerPortalText::progmem(kPortalTagline);
+    kPortalUI.logo = WiFiManagerPortalAsset::svgFromProgmem(kExampleLogo);
+    kPortalUI.logoAltText = WiFiManagerPortalText::progmem(kPortalLogoAlt);
+
+    // Override only the theme tokens that define this product's appearance.
+    kPortalUI.theme.pageBackground = WiFiManagerPortalText::progmem(kPage);
+    kPortalUI.theme.surface = WiFiManagerPortalText::progmem(kSurface);
+    kPortalUI.theme.text = WiFiManagerPortalText::progmem(kText);
+    kPortalUI.theme.accent = WiFiManagerPortalText::progmem(kAccent);
+    kPortalUI.theme.accentText = WiFiManagerPortalText::progmem(kAccentText);
+    kPortalUI.theme.cornerRadiusPx = 10;
+    kPortalUI.theme.smallCornerRadiusPx = 6;
 
     if (!wifi.setPortalConfig(kPortalUI)) {
         Serial.println("Portal UI configuration was rejected");
