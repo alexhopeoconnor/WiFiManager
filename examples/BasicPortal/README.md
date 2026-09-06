@@ -9,4 +9,4 @@ This is the smallest useful WiFiManager application. It first tries the credenti
 
 The access-point password is only an example. Choose a unique, Wi-Fi-valid password for a real product.
 
-See the shared [example guide](../README.md) and [getting started](../../docs/GETTING_STARTED.md).
+See the shared [example guide](../README.md), [getting started](../../docs/GETTING_STARTED.md), and [provisioning lifecycle](../../docs/PROVISIONING_LIFECYCLE.md).

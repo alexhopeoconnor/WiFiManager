@@ -8,7 +8,7 @@ link_pattern='\]\(([^ )]+)'
 while IFS= read -r file; do
     in_fence=false
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^[[:space:]]*\`\`\` ]]; then
+        if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
             [[ "$in_fence" == true ]] && in_fence=false || in_fence=true
             continue
         fi

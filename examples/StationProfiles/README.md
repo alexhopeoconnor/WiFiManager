@@ -6,4 +6,4 @@ On a blank board, connect to **WiFiManager Profiles** with password **example-pa
 
 `StoredProfiles` is intentionally simple so the ownership boundary is visible. A production application should add its own record versioning and integrity protection around the application’s complete configuration; WiFiManager only owns network-selection policy.
 
-See [Station profiles](../../docs/STATION_PROFILES.md) and the shared [example guide](../README.md).
+See [Station profiles](../../docs/STATION_PROFILES.md), [primary and fallback Wi-Fi](../../docs/recipes/PRIMARY_AND_FALLBACK_WIFI.md), and the shared [example guide](../README.md).

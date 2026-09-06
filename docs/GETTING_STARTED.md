@@ -31,6 +31,8 @@ lib_deps =
 
 The package includes the asynchronous web and TCP dependencies required by the selected ESP8266 or ESP32 target. Add WiFiManager as the application’s direct dependency; do not copy its internal dependency list into your project.
 
-Next: build [Basic Portal](../examples/BasicPortal/), then explore [portal UI](PORTAL_UI.md) or [portal API](PORTAL_API.md).
+Next: build [Basic Portal](../examples/BasicPortal/), then read [Provisioning lifecycle](PROVISIONING_LIFECYCLE.md) for return-state, timeout, and recovery rules.
+
+For product presentation and settings, continue with [Portal UI and configuration](PORTAL_UI.md) and [Portal content](PORTAL_CONTENT.md).
 
 Back to [documentation](README.md) · [project overview](../README.md).

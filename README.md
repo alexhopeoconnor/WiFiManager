@@ -63,7 +63,7 @@ The [Branded Portal](examples/BrandedPortal/) example includes a static SVG, acc
 
 - **Captive Wi-Fi setup:** starts an access point only when saved network credentials cannot connect.
 - **Responsive portal:** one small portal for Wi-Fi, application fields, information, actions, and firmware update flow.
-- **Structured APIs:** JSON endpoints under `/api/...` for applications that need portal state or connection results.
+- **Structured APIs:** C++ configuration and a local JSON protocol for the built-in portal.
 - **Product presentation:** title, logo, tagline, and semantic colour tokens without copying the portal HTML.
 - **Primary and fallback networks:** an opt-in two-network controller backed by an application-provided store.
 - **ESP8266 and ESP32 support:** the package resolves its asynchronous web dependencies for the selected target.
@@ -72,10 +72,16 @@ The [Branded Portal](examples/BrandedPortal/) example includes a static SVG, acc
 
 | Goal | Guide |
 | --- | --- |
-| Brand the built-in portal | [Portal UI](docs/PORTAL_UI.md) |
-| Add application settings, status, or home cards | [Structured portal content](docs/PORTAL_UI.md#structured-portal-content) |
+| Understand library/application ownership and supported boundaries | [Architecture](docs/ARCHITECTURE.md) |
+| Get a device online or recover from missing Wi-Fi | [Provisioning lifecycle](docs/PROVISIONING_LIFECYCLE.md) |
+| Brand or constrain the built-in portal | [Portal UI and configuration](docs/PORTAL_UI.md) |
+| Add and persist application settings, status, or home cards | [Portal content](docs/PORTAL_CONTENT.md) |
 | Configure primary/fallback station profiles | [Station profiles](docs/STATION_PROFILES.md) |
-| Understand the JSON APIs and station-connect handoff | [Portal API](docs/PORTAL_API.md) |
+| Surface setup, offline, and connection state in firmware | [Observability](docs/OBSERVABILITY.md) |
+| Configure AP, station, scan, or reconnect behaviour | [Network configuration](docs/NETWORK_CONFIGURATION.md) |
+| Look up a supported C++ method and its timing | [API reference](docs/API_REFERENCE.md) |
+| Understand the built-in portal's local JSON protocol | [Portal API](docs/PORTAL_API.md) |
+| Follow deployment-oriented integration patterns | [Recipes](docs/recipes/README.md) |
 | Build or flash a complete example | [Examples](examples/README.md) |
 | Run documentation and board-free compile checks | [Testing](docs/TESTING.md) |
 | Contribute to this fork or prepare a release | [Development](docs/DEVELOPMENT.md) |

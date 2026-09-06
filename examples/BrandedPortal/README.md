@@ -6,4 +6,4 @@ Flash the `esp8266` or `esp32` environment, join **Temperature Monitor**, and op
 
 Use only trusted compiled SVG data. Keep the backing strings static for the lifetime of the firmware, then call `setPortalConfig()` before opening a portal.
 
-See [Portal UI](../../docs/PORTAL_UI.md) and the shared [example guide](../README.md).
+See [Portal UI and configuration](../../docs/PORTAL_UI.md), [architecture boundaries](../../docs/ARCHITECTURE.md), and the shared [example guide](../README.md).

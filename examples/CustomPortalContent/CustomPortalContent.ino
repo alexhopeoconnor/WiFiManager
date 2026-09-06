@@ -28,6 +28,7 @@ void setup() {
     portal.portalAddHomeCard(hint);
 
     portal.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs) {
+        // A product validates and persists this value here; this demo only prints it.
         Serial.print("MQTT broker selected: ");
         Serial.println(brokerHost.getValue());
     });
