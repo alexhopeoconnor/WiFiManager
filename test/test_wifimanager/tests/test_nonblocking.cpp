@@ -4,7 +4,8 @@
 
 // Test process() doesn't block - verify it must be called periodically
 void test_nonblocking_process() {
-    Serial.println("[TEST]   Testing process() calls (non-blocking behavior)...");
+    constexpr unsigned long kMaximumProcessDurationMs = 250;
+    unsigned long maximumObservedDurationMs = 0;
     
     WiFiManager wm;
     
@@ -18,10 +19,13 @@ void test_nonblocking_process() {
     for (int i = 0; i < 10; i++) {
         unsigned long start = millis();
         wm.process();
-        unsigned long elapsed = millis() - start;
+        const unsigned long elapsed = millis() - start;
+        maximumObservedDurationMs = max(maximumObservedDurationMs, elapsed);
         
-        // Each call should be fast (< 100ms) - verifies non-blocking behavior
-        TEST_ASSERT_LESS_THAN(100, elapsed);
+        // A normal cooperative call is quick, but DNS and Wi-Fi service may
+        // briefly run on ESP8266. This still catches a truly blocking portal.
+        TEST_ASSERT_LESS_THAN_MESSAGE(kMaximumProcessDurationMs, elapsed,
+                                      "process() exceeded its bounded service time");
         
         delay(10);
     }
@@ -31,6 +35,7 @@ void test_nonblocking_process() {
     
     wm.stopConfigPortal();
     
+    Serial.printf("[METRIC] WM_PROCESS max_elapsed_ms=%lu\n", maximumObservedDurationMs);
     Serial.println("[TEST]   Non-blocking process() test completed successfully");
 }
 

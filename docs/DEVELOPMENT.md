@@ -25,6 +25,13 @@ Start a release with `bump-version.sh`. It updates package metadata and canonica
 ./scripts/prepare-release.sh vMAJOR.MINOR.PATCH --tag
 ```
 
+When a physical ESP8266 and ESP32 are available, include their local lifecycle tests in the release gate. These tests remain opt-in because they flash the selected board and use its actual radio:
+
+~~~bash
+./scripts/test.sh hardware --platform esp8266 --port /dev/serial/by-id/usb-...
+./scripts/test.sh hardware --platform esp32 --port /dev/serial/by-id/usb-...
+~~~
+
 Push the branch and annotated tag. GitHub Actions repeats the board-free compile checks, validates the package, and creates a GitHub Release using that version’s changelog section. The workflow does not publish to the PlatformIO Registry.
 
 Back to [documentation](README.md) · [project overview](../README.md).

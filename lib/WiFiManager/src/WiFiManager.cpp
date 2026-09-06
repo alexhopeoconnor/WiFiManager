@@ -1373,6 +1373,7 @@ bool WiFiManager::shutdownConfigPortal(){
   }
 
   resetAsyncScan(true);
+  releaseScanResultStorage();
 
   if(!configPortalActive) return false;
 
@@ -1954,6 +1955,15 @@ void WiFiManager::resetAsyncScan(bool clearResults) {
     _scan.visibleNetworkCount = _numNetworks;
   }
 }
+void WiFiManager::releaseScanResultStorage() {
+  // clear() releases String payloads but deliberately retains the vector's
+  // backing allocation. At portal shutdown that cache has no remaining value,
+  // so release it with the server/DNS objects rather than carrying it into the
+  // normal connected runtime. Keep this out of the refresh path to avoid
+  // needless allocation churn while a user is looking at nearby networks.
+  std::vector<WiFiScanNetwork>().swap(_scanResultsCache);
+}
+
 
 void WiFiManager::invalidateScanResults() {
   _scan.resultsValid = false;

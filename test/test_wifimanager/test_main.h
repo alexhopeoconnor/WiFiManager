@@ -107,6 +107,7 @@ void test_scan_completion_wait();
 void test_scan_cancels_when_connect_pending();
 void test_scan_cancels_when_lifecycle_blocked();
 void test_scan_generation_invalidated_on_reset();
+void test_real_async_scan_completes();
 
 // Template rendering tests
 void test_shell_template_renders_core_placeholders();
@@ -141,6 +142,8 @@ void test_long_running_portal();
 void test_rapid_portal_start_stop();
 void test_multiple_parameters_stress();
 void test_portal_with_timeout_stress();
+void test_portal_resource_recovery();
+void test_scan_result_storage_released_when_portal_closes();
 
 #endif // TEST_MAIN_H
 

@@ -16,10 +16,6 @@
 #include <cstring>
 #if defined(ESP8266) || defined(ESP32)
 
-#ifndef WM_PAGE_RESERVE_BYTES
-#define WM_PAGE_RESERVE_BYTES 8192
-#endif
-
 static void jsonAppendEscaped(String& out, const String& s) {
   for (size_t i = 0; i < s.length(); i++) {
     const char c = s[i];
@@ -56,7 +52,7 @@ namespace {
 
 const char kEmptyPortalPlaceholder[] PROGMEM = "";
 
-inline void reservePage(String& page, size_t extraBytes = WM_PAGE_RESERVE_BYTES) {
+inline void reservePage(String& page, size_t extraBytes) {
   if (extraBytes == 0) return;
   const size_t targetLen = page.length() + extraBytes;
   (void)page.reserve(targetLen);
@@ -259,21 +255,23 @@ void WiFiManagerHandlers::collectVisibleScanResults(std::vector<const WiFiManage
   }
 
   if (_wm->_removeDuplicateAPs) {
-    std::vector<const WiFiManager::WiFiScanNetwork*> deduped;
-    deduped.reserve(networks.size());
+    // Reuse the pointer storage that was already reserved above. Building a
+    // second vector briefly doubles this request's scan-list allocation on
+    // constrained ESP8266 heaps.
+    size_t kept = 0;
     for (const auto* network : networks) {
       bool duplicate = false;
-      for (const auto* existing : deduped) {
-        if (existing->ssid == network->ssid) {
+      for (size_t i = 0; i < kept; ++i) {
+        if (networks[i]->ssid == network->ssid) {
           duplicate = true;
           break;
         }
       }
       if (!duplicate) {
-        deduped.push_back(network);
+        networks[kept++] = network;
       }
     }
-    networks.swap(deduped);
+    networks.resize(kept);
   }
 }
 

@@ -105,6 +105,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_scan_cancels_when_lifecycle_blocked),
     TEST_ENTRY(test_scan_generation_invalidated_on_reset),
 
+    TEST_ENTRY(test_real_async_scan_completes),
     // Template rendering tests
     TEST_ENTRY(test_shell_template_renders_core_placeholders),
     TEST_ENTRY(test_shell_template_renders_dynamic_theme_with_percent_values),
@@ -128,6 +129,8 @@ TestCase tests[] = {
     TEST_ENTRY(test_rapid_portal_start_stop),
     TEST_ENTRY(test_multiple_parameters_stress),
     TEST_ENTRY(test_portal_with_timeout_stress),
+    TEST_ENTRY(test_portal_resource_recovery),
+    TEST_ENTRY(test_scan_result_storage_released_when_portal_closes),
 };
 
 const size_t TEST_COUNT = sizeof(tests) / sizeof(TestCase);

@@ -1012,6 +1012,10 @@ protected:
     void          failAsyncScan(wm_scan_state_t state, int scanResult = WIFI_SCAN_FAILED);
     void          resetAsyncScan(bool clearResults);
     void          invalidateScanResults();
+    // Release cached scan-result vector capacity after a portal fully closes.
+    // Do not use this during normal refreshes: the cache is intentionally kept
+    // while the portal is active so the UI can render nearby networks.
+    void          releaseScanResultStorage();
     bool          hasFreshScanResults(unsigned int cachetime) const;
     bool          canRunAsyncScan() const;
     void          cacheScanResults(int networksFound);
