@@ -7,10 +7,18 @@ async function json(response) {
 async function waitForScan(request) {
   let result;
   await expect.poll(async () => {
-    const response = await request.get('/api/wifi/scan-status');
-    expect(response.ok()).toBeTruthy();
-    result = await json(response);
-    return result.scanning;
+    try {
+      const response = await request.get('/api/wifi/scan-status');
+      if (!response.ok()) return true;
+      result = await json(response);
+      return result.scanning;
+    } catch {
+      // ESP8266 AP+STA scans briefly leave the AP channel. A client can lose
+      // its association while the radio scans, then reconnect before the
+      // asynchronous scan completes. Keep polling; the assertions below still
+      // require a reachable portal with a complete, valid result.
+      return true;
+    }
   }, { timeout: 45_000, intervals: [500, 800, 1_000] }).toBe(false);
   return result;
 }

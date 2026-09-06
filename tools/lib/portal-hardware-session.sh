@@ -122,27 +122,56 @@ wm_state_file() {
     printf '%s/session.env\n' "$(wm_portal_state_root)"
 }
 
+wm_require_no_active_session() {
+    local file
+    file="$(wm_state_file)"
+    [[ ! -e "$file" ]] || {
+        echo "An existing WiFiManager portal session is recorded; run ./tools/portal-hardware down first." >&2
+        return 1
+    }
+}
+
 wm_write_state() {
     local interface="$1" platform="$2" uuid="$3" name="$4" root file
     root="$(wm_portal_state_root)"
     file="$(wm_state_file)"
     install -d -m 700 "$root"
-    umask 077
-    printf 'WM_PORTAL_INTERFACE=%q\nWM_PORTAL_PLATFORM=%q\nWM_PORTAL_CONNECTION_UUID=%q\nWM_PORTAL_CONNECTION_NAME=%q\n' \
-        "$interface" "$platform" "$uuid" "$name" >"$file"
+    (
+        umask 077
+        printf 'WM_PORTAL_INTERFACE=%s\nWM_PORTAL_PLATFORM=%s\nWM_PORTAL_CONNECTION_UUID=%s\nWM_PORTAL_CONNECTION_NAME=%s\n' \
+            "$interface" "$platform" "$uuid" "$name" >"$file"
+    )
     chmod 600 "$file"
 }
 
 wm_load_state() {
-    local file
+    local file key value
     file="$(wm_state_file)"
     [[ -f "$file" ]] || {
         echo "No active WiFiManager portal session was found." >&2
         return 1
     }
-    # The state file is created above using shell-escaped values and mode 0600.
-    # shellcheck disable=SC1090
-    source "$file"
+    WM_PORTAL_INTERFACE=""
+    WM_PORTAL_PLATFORM=""
+    WM_PORTAL_CONNECTION_UUID=""
+    WM_PORTAL_CONNECTION_NAME=""
+    while IFS='=' read -r key value; do
+        case "$key" in
+            WM_PORTAL_INTERFACE|WM_PORTAL_PLATFORM|WM_PORTAL_CONNECTION_UUID|WM_PORTAL_CONNECTION_NAME)
+                printf -v "$key" '%s' "$value"
+                ;;
+            '') ;;
+            *)
+                echo "Invalid WiFiManager portal session state." >&2
+                return 1
+                ;;
+        esac
+    done <"$file"
+    [[ -n "$WM_PORTAL_INTERFACE" && -n "$WM_PORTAL_PLATFORM" && -n "$WM_PORTAL_CONNECTION_UUID" && -n "$WM_PORTAL_CONNECTION_NAME" ]] || {
+        echo "Incomplete WiFiManager portal session state." >&2
+        return 1
+    }
+    export WM_PORTAL_INTERFACE WM_PORTAL_PLATFORM WM_PORTAL_CONNECTION_UUID WM_PORTAL_CONNECTION_NAME
 }
 
 wm_clear_state() {

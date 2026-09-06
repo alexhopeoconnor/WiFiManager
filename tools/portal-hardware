@@ -13,7 +13,7 @@ Usage:
       --client-interface IFACE [--take-over-client-adapter] [--output DIRECTORY]
   ./tools/portal-hardware run --platform esp8266|esp32 --port /dev/serial/by-id/... \
       --client-interface IFACE [--take-over-client-adapter] [--keep] \
-      [--browser auto|require|skip] [--station-env PATH] [--output DIRECTORY]
+      [--browser auto|skip] [--station-env PATH] [--output DIRECTORY]
   ./tools/portal-hardware down
 
 Only the named client interface may be disconnected or reconfigured. The tool
@@ -72,7 +72,7 @@ validate_run_arguments() {
         echo "Serial port not found: $port" >&2
         exit 1
     }
-    [[ "$browser" == "auto" || "$browser" == "require" || "$browser" == "skip" ]] || usage
+    [[ "$browser" == "auto" || "$browser" == "skip" ]] || usage
     [[ -z "$station_env" || -r "$station_env" ]] || {
         echo "Station environment file is not readable: $station_env" >&2
         exit 1
@@ -84,6 +84,7 @@ start_portal_session() {
     validate_run_arguments
     require_common
     wm_acquire_hardware_lock
+    wm_require_no_active_session
     wm_require_client_adapter "$client_interface" "$takeover"
     prepare_output_dir
     ssid="$(wm_portal_ssid "$platform")"
@@ -143,6 +144,9 @@ case "$command_name" in
             export PORTAL_STATION_ENV_HOST="$(cd "$(dirname "$station_env")" && pwd)/$(basename "$station_env")"
             compose_files+=(-f "$root/tests/portal-contract/compose.station.yaml")
         fi
+        # The contract source is copied into the image; rebuild with Docker cache so
+        # this invocation always tests the checked-out files, not a stale image.
+        docker compose "${compose_files[@]}" build portal-contract
         docker compose "${compose_files[@]}" run --rm portal-contract
         printf 'Portal contract passed. Artifacts: %s\n' "$output_dir"
         if [[ "$keep" == "yes" ]]; then

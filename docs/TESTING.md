@@ -74,6 +74,11 @@ scan, a missing-route response, and desktop/mobile portal rendering with no
 browser page errors. Screenshots, traces on failure, JSON results, and the HTML
 report are saved under the printed XDG state-directory artifact path.
 
+On ESP8266, an AP+STA scan can briefly move the radio off the AP channel. The
+client may reconnect during that interval; the contract deliberately retries
+that transport interruption and still requires a reachable portal with a
+complete, valid scan result.
+
 For interactive diagnosis, leave the temporary client connection up and remove
 only that managed connection when finished:
 
@@ -87,6 +92,10 @@ An optional station handoff test is deliberately separate because it connects
 the fixture to a real LAN. Copy the ignored template below, add local
 credentials, and pass it explicitly; it is mounted read-only into the test
 container and is never logged by the runner.
+
+A retained session is deliberately never overwritten. If a previous `up` or an
+interrupted `run` left one behind, run `./tools/portal-hardware down` first;
+that removes only the named temporary connection recorded by the tool.
 
 ```bash
 cp test/portal-station.env.example test/portal-station.env
