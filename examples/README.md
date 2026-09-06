@@ -17,6 +17,13 @@ Choose `esp32` for an ESP32 development board. The examples use the checked-out 
 | [Branded Portal](BrandedPortal/) | change the portal’s identity, logo, and semantic visual theme |
 | [Station Profiles](StationProfiles/) | remember a primary Wi-Fi network and one fallback in application-owned EEPROM storage |
 
-The portal examples intentionally begin with no station credentials. On first boot, connect to the access point printed on serial and open `http://192.168.4.1/`.
+The portal examples intentionally begin with no station credentials. On first boot, connect to the matching setup network and open `http://192.168.4.1/`.
+
+| Example | Setup network | Password |
+| --- | --- | --- |
+| Basic Portal | WiFiManager Basic | example-pass |
+| Custom Portal Content | WiFiManager Content | example-pass |
+| Branded Portal | Temperature Monitor | none |
+| Station Profiles | WiFiManager Profiles | example-pass |
 
 Back to the [project overview](../README.md).

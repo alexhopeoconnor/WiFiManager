@@ -72,10 +72,12 @@ The [Branded Portal](examples/BrandedPortal/) example includes a static SVG, acc
 
 | Goal | Guide |
 | --- | --- |
-| Brand the portal or add structured built-in content | [Portal UI](docs/PORTAL_UI.md) |
+| Brand the built-in portal | [Portal UI](docs/PORTAL_UI.md) |
+| Add application settings, status, or home cards | [Structured portal content](docs/PORTAL_UI.md#structured-portal-content) |
 | Configure primary/fallback station profiles | [Station profiles](docs/STATION_PROFILES.md) |
 | Understand the JSON APIs and station-connect handoff | [Portal API](docs/PORTAL_API.md) |
 | Build or flash a complete example | [Examples](examples/README.md) |
+| Run documentation and board-free compile checks | [Testing](docs/TESTING.md) |
 | Contribute to this fork or prepare a release | [Development](docs/DEVELOPMENT.md) |
 
 ## Install

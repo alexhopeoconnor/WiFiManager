@@ -68,6 +68,14 @@ Leave a text or colour value empty, or a radius at `0`, to retain the built-in s
 
 Theme values accept only simple semantic CSS value syntax and are emitted once into a small `#wm-portal-theme` block. This is deliberately not a raw CSS or JavaScript injection API. An SVG is a trusted compiled firmware asset, never form, MQTT, or network input.
 
+## Structured portal content
+
+`portalAddParameter()` adds an editable application value. `portalAddInfoSection()` renders labelled read-only values, and `portalAddHomeCard()` adds a text, callout, or key/value card to the overview.
+
+Register content before opening the portal. A `WiFiManagerParameter` remains application-owned and must outlive the portal; info sections and home cards are copied when registered. Handle a saved value in `setSaveParamsCallback()`, then validate and persist it in your application.
+
+The buildable [Custom Portal Content](../examples/CustomPortalContent/) example uses all three without replacing the built-in portal shell.
+
 ## Built-in portal capabilities
 
 Presentation uses one configuration route: `setPortalConfig()`. Existing structured portal capabilities remain separate: `portalAddParameter()`, `portalAddInfoSection()`, `portalAddHomeCard()`, page visibility, and portal behavior configure documented built-in functionality rather than private markup. See [Portal API](PORTAL_API.md) and [Station profiles](STATION_PROFILES.md).

@@ -10,4 +10,4 @@ It opens **WiFiManager Content** with password **example-pass** until it has wor
 
 The parameter object is global because WiFiManager reads it for the lifetime of the portal. In a real application, copy the value into that application’s own validated persistent configuration inside the save callback.
 
-See [Portal UI](../../docs/PORTAL_UI.md) and the shared [example guide](../README.md).
+See [structured portal content](../../docs/PORTAL_UI.md#structured-portal-content) and the shared [example guide](../README.md).

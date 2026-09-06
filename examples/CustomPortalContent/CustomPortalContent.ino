@@ -8,14 +8,24 @@ void setup() {
     Serial.begin(115200);
 
     portal.portalAddParameter(&brokerHost);
-    portal.portalAddInfoSection({
-        "device", "Example device",
-        {{"firmware", "Firmware", "1.0.0"}, {"sensor", "Sensor", "Ready"}},
-    });
-    portal.portalAddHomeCard({
-        "hint", "What this example adds", PortalHomeCardKind::Callout,
-        "A normal text setting, a status section, and a home-page callout.", {},
-    });
+
+    // WiFiManager copies this read-only status section when it is registered.
+    PortalInfoSection deviceInfo;
+    deviceInfo.id = "device";
+    deviceInfo.title = "Example device";
+    deviceInfo.items = {
+        {"firmware", "Firmware", "1.0.0"},
+        {"sensor", "Sensor", "Ready"},
+    };
+    portal.portalAddInfoSection(deviceInfo);
+
+    // This callout appears on the built-in portal overview.
+    PortalHomeCard hint;
+    hint.id = "hint";
+    hint.title = "What this example adds";
+    hint.kind = PortalHomeCardKind::Callout;
+    hint.text = "A normal text setting, a status section, and a home-page callout.";
+    portal.portalAddHomeCard(hint);
 
     portal.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs) {
         Serial.print("MQTT broker selected: ");

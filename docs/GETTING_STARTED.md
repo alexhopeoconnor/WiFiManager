@@ -10,7 +10,7 @@ WiFiManager wifi;
 
 void setup() {
     Serial.begin(115200);
-    wifi.setConfigPortalTimeout(180);
+    wifi.setConfigPortalTimeout(180);  // Stop the portal after three minutes.
     wifi.autoConnect("Example Setup", "change-me");
 }
 
@@ -20,7 +20,7 @@ void loop() {
 }
 ```
 
-`autoConnect()` first tries stored station credentials. If that cannot connect, it starts the AP and portal with the supplied name and password, then returns `false`; call `process()` from `loop()` so that portal can run. Use a Wi-Fi-valid AP password.
+`autoConnect()` first tries stored station credentials. If that cannot connect, it starts the AP and portal with the supplied name and password, then returns `false`; call `process()` from `loop()` so that portal can run. `setConfigPortalTimeout(180)` limits that portal to three minutes; pass `0` (the default) to leave it open. Use a Wi-Fi-valid AP password.
 
 ## PlatformIO dependency
 
