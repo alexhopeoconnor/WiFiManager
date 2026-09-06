@@ -96,7 +96,8 @@ See [Network configuration](NETWORK_CONFIGURATION.md) for deployment constraints
 | --- | --- |
 | requestAsyncScan(forceRefresh) | Requests a non-blocking scan. |
 | getScanSnapshot(), getScanRuntimeState(), getScanState() | Returns scan lifecycle state. |
-| isScanRunning(), hasValidScanResults(), getScanResults() | Reads scan progress and cached visible results. |
+| isScanRunning(), hasValidScanResults() | Reads scan progress and cached-result validity. |
+| getScanResults() | Returns WiFiManager-owned cached visible results; do not retain references after a new scan or portal shutdown. |
 | getRSSIasQuality(rssi) | Converts RSSI to WiFiManager quality. |
 | getLastConxResult(), getWLStatusString(), getModeString() | Formats connection and mode diagnostics. |
 | hasEnteredConfigPortal(), getConfigPortalConnectState() | Reads portal-session history and last submission state. |

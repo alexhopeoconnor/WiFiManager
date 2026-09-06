@@ -5,7 +5,7 @@ A field-installed controller or sensor often needs more time for setup than a de
 ## Flow
 
 1. Boot with the product's normal configuration.
-2. Try the configured station flow.
+2. Try the stored primary/fallback profile set.
 3. If Wi-Fi is unavailable, start the local setup AP and portal.
 4. Keep the portal available for the installation window.
 5. On a successful connection, let the application start services or reboot according to its own policy.
@@ -13,9 +13,12 @@ A field-installed controller or sensor often needs more time for setup than a de
 
 ~~~cpp
 constexpr unsigned long kInstallerWindowSeconds = 15 * 60;
+MyProfileStore profileStore;
 
 void setup() {
     configureProductPortal();
+    wifi.setStationProfileStore(&profileStore);
+    wifi.setStationRecoveryInterval(30000);
     wifi.setConfigPortalTimeout(kInstallerWindowSeconds);
 
     wifi.setAPCallback([](WiFiManager*) {
@@ -28,12 +31,12 @@ void setup() {
         recordSetupTimeout();
     });
 
-    wifi.autoConnect(deviceSetupName(), deviceSetupPassword());
+    wifi.startStationConnection(deviceSetupName(), deviceSetupPassword());
 }
 
 void loop() {
     wifi.process();
-    runApplicationWork();
+    // Do not start or recreate an application server while the portal owns its port.
 }
 ~~~
 
@@ -53,6 +56,8 @@ Use getConfigPortalActive(), didConfigPortalConnectSucceed(), and getConfigPorta
 
 ## Product boundary
 
-WiFiManager supplies the local portal and timer. The product decides what happens after timeout: keep retrying profiles, sleep, wait for a physical action, or operate in an offline mode. Do not treat autoConnect() returning false as a reason to reboot immediately; the portal may be the intended next state.
+WiFiManager supplies the local portal and timer. The product decides what happens after timeout: keep retrying profiles, sleep, wait for a physical action, or operate in an offline mode. If startStationConnection() returns false because no usable stored profile exists, the portal may be the intended next state rather than a reason to reboot immediately.
+
+For a product that deliberately uses one platform-saved network rather than primary/fallback profiles, the smaller legacy equivalent is wifi.autoConnect(deviceSetupName(), deviceSetupPassword()). It has the same local portal fallback, but no application-owned profile store, candidate verification, or fallback network.
 
 Continue with [Provisioning lifecycle](../PROVISIONING_LIFECYCLE.md) or [Provisioning state feedback](PROVISIONING_STATE_FEEDBACK.md).

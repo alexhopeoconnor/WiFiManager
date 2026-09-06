@@ -12,8 +12,12 @@ A connected device often needs more than an SSID and password: a device name, br
 6. Separately observe a successful Wi-Fi configuration/save if product services need a connected station first.
 
 ~~~cpp
+constexpr int kBrokerHostLength = 64;
+WiFiManagerParameter brokerHost(
+    "broker_host", "MQTT broker", "", kBrokerHostLength);
+
 void configurePortalFromSettings() {
-    brokerHost.setValue(settings.mqttHost.c_str(), 64);
+    brokerHost.setValue(settings.mqttHost.c_str(), kBrokerHostLength);
     wifi.portalAddParameter(&brokerHost);
 
     wifi.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs) {

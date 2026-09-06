@@ -2,6 +2,8 @@
 
 These APIs configure WiFiManager's AP, station, scan, and reconnection behavior. Set them during boot, before starting a connection or portal flow, so an installer sees one consistent configuration.
 
+The current ESP8266 and ESP32 implementations apply AP static addressing through WiFi.softAPConfig() and station static addressing through WiFi.config(). Station static configuration is used by legacy connections, portal save-and-connect attempts, and the station-profile controller.
+
 This page is an advanced deployment reference. Use these settings only when the local network and the product's operating policy require them; WiFiManager's defaults are appropriate for many devices.
 
 ## Access-point setup network
@@ -17,6 +19,21 @@ This page is an advanced deployment reference. Use these settings only when the 
 | getConfigPortalSSID() / getDefaultAPName() | Reports the actual/current setup AP name. |
 
 A hidden AP can make field setup harder because an installer must enter the SSID manually. Treat it as a deployment decision, not a general security control. If setHttpPort() changes the default, publish the full portal address in the product's installation procedure.
+
+## A fixed setup-portal address
+
+Give the setup AP a fixed address when an installer procedure needs a stable local portal address:
+
+~~~cpp
+wifi.setAPStaticIPConfig(
+    IPAddress(192, 168, 8, 1),
+    IPAddress(192, 168, 8, 1),
+    IPAddress(255, 255, 255, 0));
+wifi.setWiFiAPChannel(6);
+wifi.setWiFiAPHidden(false);
+~~~
+
+This is applied before WiFiManager starts its SoftAP. The usual portal address becomes http://192.168.8.1/. If setHttpPort() selects a non-default port, include that port in the installer instructions and expect the station handoff URL to include it too.
 
 ## Station address and credential behavior
 
@@ -75,7 +92,7 @@ if (wifi.hasValidScanResults()) {
 | setScanDispPerc(enabled) | Uses percentage rather than quality icons in the portal. |
 | getRSSIasQuality(rssi) | Converts RSSI for display. |
 
-Read scan results as a snapshot. Do not retain references across a new scan or portal shutdown.
+WiFiManager owns the scan cache. It keeps the cache and its allocation while a portal is active so nearby networks can be rendered without repeated allocation churn; it clears and releases that storage when the portal fully closes. Treat getScanResults() as a snapshot and do not retain references, iterators, or pointers across a new scan or portal shutdown.
 
 ## Connection and timeout policy
 

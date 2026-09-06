@@ -9,14 +9,18 @@ This matches the product-firmware pattern used by real consumers: load configura
 ~~~cpp
 #include <WiFiManager.h>
 
+constexpr int kBrokerHostLength = 64;
+
 WiFiManager wifi;
 WiFiManagerParameter brokerHost(
-    "broker_host", "MQTT broker", settings.mqttHost.c_str(), 64);
+    "broker_host", "MQTT broker", "", kBrokerHostLength);
 
 void setupPortal() {
+    // The application has already loaded settings before this point.
+    brokerHost.setValue(settings.mqttHost.c_str(), kBrokerHostLength);
     wifi.portalAddParameter(&brokerHost);
 
-    wifi.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs args) {
+    wifi.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs) {
         const String candidate = brokerHost.getValue();
 
         if (!isValidHostname(candidate)) {

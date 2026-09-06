@@ -7,17 +7,22 @@ A real consuming framework does this from the AP callback: it shuts down its nor
 ## Automatic recovery handoff
 
 ~~~cpp
+MyProfileStore profileStore;
+
 void setup() {
+    wifi.setStationProfileStore(&profileStore);
+    wifi.setStationRecoveryInterval(30000);
+
     wifi.setAPCallback([](WiFiManager*) {
         stopApplicationWebServer();  // Releases port 80 for WiFiManager.
         setIndicator(IndicatorState::Setup);
     });
 
-    wifi.autoConnect("Device Setup", "setup-password");
+    wifi.startStationConnection("Device Setup", "setup-password");
 }
 ~~~
 
-The AP callback runs after AP mode begins and before the portal routes are registered. It is the appropriate hook for automatic portal fallback. If the application explicitly starts setup itself, release its server before calling startConfigPortal().
+The AP callback runs after AP mode begins and before the portal routes are registered. It is the appropriate hook for automatic portal fallback. This profile-controller form matches the consuming firmware's recovery flow. If a product deliberately uses one platform-saved network instead, replace startStationConnection(...) with wifi.autoConnect(...); the same AP callback ordering applies. If the application explicitly starts setup itself, release its server before calling startConfigPortal().
 
 ## After a successful connection
 
