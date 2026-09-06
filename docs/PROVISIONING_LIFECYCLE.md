@@ -1,6 +1,6 @@
 # Provisioning lifecycle
 
-Choose a connection flow that matches the device's operating policy, then call process() regularly for as long as WiFiManager is active. The consuming firmware owns its product-service lifecycle and restart decision.
+Choose a connection flow that matches the device's operating policy, then call process() regularly for as long as WiFiManager is active. It is a cooperative service call, not a hard real-time guarantee: target Wi-Fi or DNS work can occasionally take longer than a typical loop iteration. The consuming firmware owns its product-service lifecycle and restart decision.
 
 ## Choose a flow
 

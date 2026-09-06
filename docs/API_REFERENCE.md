@@ -12,7 +12,7 @@ For complete end-to-end patterns, use [Provisioning lifecycle](PROVISIONING_LIFE
 | startConfigPortal([apName, apPassword]) | Immediately starts a configuration AP and captive portal. |
 | stopConfigPortal() | Immediately stops the configuration portal. |
 | startWebPortal() / stopWebPortal() | Starts/stops the portal web server without the configuration-AP flow. |
-| process() | Services active portal, scan, station-profile, and connection state. Call from loop(). |
+| process() | Cooperatively services active portal, scan, station-profile, and connection state. Call from loop(); do not treat it as a hard real-time operation or rely on a fixed maximum duration. |
 | getConfigPortalSSID() | Returns the current configuration AP name. |
 | getConfigPortalActive() / getWebPortalActive() | Reports active configuration or web portal state. |
 | setHttpPort(port) | Chooses the portal server port before starting it. |
