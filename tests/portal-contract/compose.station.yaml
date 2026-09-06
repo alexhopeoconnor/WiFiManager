@@ -1,0 +1,6 @@
+services:
+  portal-contract:
+    environment:
+      PORTAL_STATION_ENV: /run/secrets/portal-station.env
+    volumes:
+      - ${PORTAL_STATION_ENV_HOST:?station environment path is required}:/run/secrets/portal-station.env:ro

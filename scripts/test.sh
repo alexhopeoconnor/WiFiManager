@@ -2,12 +2,12 @@
 set -euo pipefail
 
 usage() {
-    cat <<'EOF' >&2
+    cat <<'USAGE' >&2
 Usage:
   ./scripts/test.sh compile  --platform esp8266|esp32
   ./scripts/test.sh examples --platform esp8266|esp32
   ./scripts/test.sh hardware --platform esp8266|esp32 --port /dev/serial/by-id/...
-EOF
+USAGE
     exit 2
 }
 
@@ -30,6 +30,13 @@ done
 [[ "$mode" != "hardware" || -e "$port" ]] || { echo "Serial port not found: $port" >&2; exit 1; }
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "$mode" == "hardware" ]]; then
+    # Keep serial flashing and portal-adapter work mutually exclusive.
+    # shellcheck source=tools/lib/portal-hardware-session.sh
+    source "$root/tools/lib/portal-hardware-session.sh"
+    wm_acquire_hardware_lock
+fi
+
 if [[ "$mode" == "examples" ]]; then
     mapfile -t examples < <(find "$root/examples" -mindepth 2 -maxdepth 2 -type f -name platformio.ini -printf '%h\n' | sort)
     if (( ${#examples[@]} == 0 )); then

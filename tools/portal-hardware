@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=tools/lib/portal-hardware-session.sh
+source "$root/tools/lib/portal-hardware-session.sh"
+
+usage() {
+    cat <<'USAGE' >&2
+Usage:
+  ./tools/portal-hardware doctor --client-interface IFACE [--take-over-client-adapter]
+  ./tools/portal-hardware up --platform esp8266|esp32 --port /dev/serial/by-id/... \
+      --client-interface IFACE [--take-over-client-adapter] [--output DIRECTORY]
+  ./tools/portal-hardware run --platform esp8266|esp32 --port /dev/serial/by-id/... \
+      --client-interface IFACE [--take-over-client-adapter] [--keep] \
+      [--browser auto|require|skip] [--station-env PATH] [--output DIRECTORY]
+  ./tools/portal-hardware down
+
+Only the named client interface may be disconnected or reconfigured. The tool
+refuses the host default-route interface and preserves the created connection
+in a 0600 state file until `down` or normal `run` cleanup.
+USAGE
+    exit 2
+}
+
+command_name="${1:-}"
+[[ -n "$command_name" ]] || usage
+shift || true
+
+platform=""
+port=""
+client_interface=""
+takeover="no"
+keep="no"
+browser="auto"
+station_env=""
+output_dir=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform) [[ $# -ge 2 ]] || usage; platform="$2"; shift 2 ;;
+        --port) [[ $# -ge 2 ]] || usage; port="$2"; shift 2 ;;
+        --client-interface) [[ $# -ge 2 ]] || usage; client_interface="$2"; shift 2 ;;
+        --take-over-client-adapter) takeover="yes"; shift ;;
+        --keep) keep="yes"; shift ;;
+        --browser) [[ $# -ge 2 ]] || usage; browser="$2"; shift 2 ;;
+        --station-env) [[ $# -ge 2 ]] || usage; station_env="$2"; shift 2 ;;
+        --output) [[ $# -ge 2 ]] || usage; output_dir="$2"; shift 2 ;;
+        *) usage ;;
+    esac
+done
+
+require_common() {
+    wm_require ip
+    wm_require nmcli
+    wm_require pio
+    wm_require docker
+    docker compose version >/dev/null
+}
+
+prepare_output_dir() {
+    if [[ -z "$output_dir" ]]; then
+        output_dir="$(wm_portal_state_root)/runs/$(date -u +%Y%m%dT%H%M%SZ)-$platform"
+    fi
+    install -d -m 700 "$output_dir"
+    output_dir="$(cd "$output_dir" && pwd)"
+}
+
+validate_run_arguments() {
+    [[ "$platform" == "esp8266" || "$platform" == "esp32" ]] || usage
+    [[ -n "$client_interface" ]] || usage
+    [[ -n "$port" && -e "$port" ]] || {
+        echo "Serial port not found: $port" >&2
+        exit 1
+    }
+    [[ "$browser" == "auto" || "$browser" == "require" || "$browser" == "skip" ]] || usage
+    [[ -z "$station_env" || -r "$station_env" ]] || {
+        echo "Station environment file is not readable: $station_env" >&2
+        exit 1
+    }
+}
+
+start_portal_session() {
+    local ssid
+    validate_run_arguments
+    require_common
+    wm_acquire_hardware_lock
+    wm_require_client_adapter "$client_interface" "$takeover"
+    prepare_output_dir
+    ssid="$(wm_portal_ssid "$platform")"
+
+    pio run -d "$root/test/portal-harness" -e "$platform" -t upload --upload-port "$port"
+    if ! wm_create_portal_connection "$client_interface" "$ssid" "default1"; then
+        return 1
+    fi
+    if ! wm_verify_portal_route "$client_interface"; then
+        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+        return 1
+    fi
+    if ! wm_write_state "$client_interface" "$platform" "$WM_PORTAL_CONNECTION_UUID" "$WM_PORTAL_CONNECTION_NAME"; then
+        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+        return 1
+    fi
+    printf 'Portal connected on %s. Artifacts: %s\n' "$client_interface" "$output_dir"
+}
+
+finish_portal_session() {
+    wm_load_state
+    wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+    wm_clear_state
+}
+
+case "$command_name" in
+    doctor)
+        [[ -n "$client_interface" ]] || usage
+        require_common
+        wm_acquire_hardware_lock
+        wm_require_client_adapter "$client_interface" "$takeover"
+        printf 'Portal hardware prerequisites are ready. Main route is untouched; client adapter: %s\n' "$client_interface"
+        ;;
+    up)
+        start_portal_session
+        ;;
+    down)
+        [[ -z "$platform$port$client_interface$station_env$output_dir" ]] || usage
+        wm_acquire_hardware_lock
+        finish_portal_session
+        echo 'Portal client connection removed.'
+        ;;
+    run)
+        start_portal_session
+        cleanup() {
+            if [[ "$keep" != "yes" ]]; then
+                finish_portal_session || true
+            fi
+        }
+        trap cleanup EXIT INT TERM
+        export PORTAL_ARTIFACT_DIR="$output_dir"
+        export LOCAL_UID="$(id -u)"
+        export LOCAL_GID="$(id -g)"
+        export PORTAL_BROWSER_MODE="$browser"
+        compose_files=(-f "$root/tests/portal-contract/compose.yaml")
+        if [[ -n "$station_env" ]]; then
+            export PORTAL_STATION_ENV_HOST="$(cd "$(dirname "$station_env")" && pwd)/$(basename "$station_env")"
+            compose_files+=(-f "$root/tests/portal-contract/compose.station.yaml")
+        fi
+        docker compose "${compose_files[@]}" run --rm portal-contract
+        printf 'Portal contract passed. Artifacts: %s\n' "$output_dir"
+        if [[ "$keep" == "yes" ]]; then
+            printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
+        fi
+        ;;
+    *) usage ;;
+esac

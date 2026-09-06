@@ -1,0 +1,18 @@
+services:
+  portal-contract:
+    build:
+      context: ../..
+      dockerfile: tests/portal-contract/Dockerfile
+      args:
+        PLAYWRIGHT_VERSION: "1.63.0"
+    network_mode: host
+    ipc: host
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      HOME: /tmp
+      PORTAL_URL: http://192.168.4.1
+      PORTAL_BROWSER_MODE: ${PORTAL_BROWSER_MODE:-auto}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ${PORTAL_ARTIFACT_DIR:?portal artifact directory is required}:/artifacts

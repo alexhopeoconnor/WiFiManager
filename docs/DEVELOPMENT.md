@@ -32,6 +32,20 @@ When a physical ESP8266 and ESP32 are available, include their local lifecycle t
 ./scripts/test.sh hardware --platform esp32 --port /dev/serial/by-id/usb-...
 ~~~
 
+When a physical ESP8266 or ESP32 and a spare USB Wi-Fi adapter are available,
+run the Docker portal contract as an additional release-gate check. It is
+opt-in because it flashes the selected board and temporarily joins its AP, but
+it refuses the host default-route adapter and leaves Docker responsible only
+for browser/API testing:
+
+```bash
+./tools/portal-hardware run --platform esp8266 --port /dev/serial/by-id/usb-... \
+  --client-interface wlx74da385d4165
+```
+
+See [Testing](TESTING.md#docker-portal-contract) for cleanup, artifacts, and
+optional station handoff credentials.
+
 Push the branch and annotated tag. GitHub Actions repeats the board-free compile checks, validates the package, and creates a GitHub Release using that version’s changelog section. The workflow does not publish to the PlatformIO Registry.
 
 Back to [documentation](README.md) · [project overview](../README.md).
