@@ -25,9 +25,9 @@ or Docker.
 
 ## Local hardware lifecycle tests
 
-The Unity suite runs on a board without Wi-Fi credentials, MQTT, DeviceFramework,
-or a local profile. It verifies portal start/stop recovery, scan-cache release,
-and a real asynchronous Wi-Fi scan.
+The Unity suite runs portal-only firmware with no Wi-Fi credentials, MQTT,
+product application framework, or local profile. It verifies portal start/stop
+recovery, scan-cache release, and a real asynchronous Wi-Fi scan.
 
 Use a stable serial-by-id path rather than a changing `/dev/ttyUSB` number:
 

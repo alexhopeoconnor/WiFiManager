@@ -1,6 +1,9 @@
-# Portal API
+# Built-in portal browser protocol
 
-This is the device-local protocol used by WiFiManager's built-in portal shell. It is useful for maintaining the built-in UI and for portal-focused tests, but it is not a cloud API, remote-management interface, or supported companion-app integration surface.
+This device-local protocol is used by WiFiManager's built-in portal shell. It
+is useful when maintaining that UI or writing portal-focused tests. It is not a
+cloud API, remote-management interface, or supported companion-app integration
+surface.
 
 The portal is unauthenticated local setup infrastructure. Do not expose it as a product's general application API, and do not infer a security boundary from hiding an action in the UI.
 
@@ -100,8 +103,12 @@ POST /api/params/save sends registered application parameter fields and returns 
 | POST /api/portal/exit | 200, exit scheduled | 403 when exit is not allowed. |
 | POST /u | 200, firmware update/restart scheduled | 500 with update failure detail. |
 
-## Compatibility boundary
+## Using this protocol safely
 
-Use this document to understand and test WiFiManager's own portal behavior. Applications that need a product web API should host and secure that API themselves after WiFiManager has completed its provisioning role. Do not scrape the portal shell, depend on undocumented JSON fields, or add routes through WiFiManager's testing server accessor.
+Use this document to understand and test WiFiManager's own portal behavior.
+Applications that need a product web API should host and secure that API after
+WiFiManager has completed its provisioning role. Do not scrape the portal shell,
+depend on undocumented JSON fields, or add routes through WiFiManager's testing
+server accessor.
 
 Back to [documentation](README.md) · [project overview](../README.md).

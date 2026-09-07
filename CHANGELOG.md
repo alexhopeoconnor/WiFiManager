@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.3
+
+- Clarify the public integration boundary, built-in browser protocol, and
+  portal presentation documentation without coupling the standalone library to
+  DeviceFramework.
+- Refresh the standalone test guidance and pin the packaged DFTE dependency to
+  the validated 1.2.1 release.
+
 ## 3.2.2
 
 - Align the direct ESP8266 and ESP32 test environments with the packaged DFTE 1.2.0 dependency.
@@ -52,4 +60,3 @@
 - Establish `device-framework` as the independently maintained canonical branch.
 - Add safe default parameter construction and allocation-failure handling.
 - Pin the DFTE dependency used by PlatformIO builds.
-

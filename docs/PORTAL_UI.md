@@ -68,11 +68,15 @@ Leave a text or colour value empty, or a radius at 0, to retain the built-in sty
 | success, danger, dangerHover | Status and destructive actions |
 | cornerRadiusPx, smallCornerRadiusPx | Card and compact-control corners, limited to 64 px |
 
-Theme values accept only simple semantic CSS value syntax and are emitted once into a small portal theme block. This is deliberately not a raw CSS or JavaScript injection API. An SVG is a trusted compiled firmware asset, never form, MQTT, or network input.
+Theme values accept simple named CSS values and are emitted once into a small
+portal theme block. Raw CSS and JavaScript are not supported. An SVG is a
+trusted compiled firmware asset, never form, MQTT, or network input.
 
 ## Portal policy
 
-Use the portal-prefixed methods to constrain a product's use of built-in pages and actions. Configure them during boot, before the portal starts, so a session begins with the intended policy.
+Use the portal-prefixed methods to choose which built-in pages and actions a
+product presents. Configure them during boot, before the portal starts, so a
+session begins with the intended behavior.
 
 ~~~cpp
 // An installer portal that does not expose destructive reset or OTA actions.
@@ -94,8 +98,8 @@ wifi.portalSetFieldStaticDnsVisibility(PortalFieldVisibility::Hidden);
 | Pages | portalSetPageInfoVisible(), portalSetPageUpdateVisible(), portalSetPageSetupVisible() | Show only product-appropriate built-in pages. |
 | Actions | portalSetActionEraseVisible(), portalSetActionRestartVisible(), portalSetActionExitVisible(), portalSetActionCloseCaptiveVisible(), portalSetActionBackVisible() | Control existing action affordances; hiding an action is not a security boundary. |
 | Layout | portalSetLayoutParamsLocation() | Put registered parameters on the Wi-Fi page or separate Setup page. |
-| Connection/portal behavior | portalSetBehaviorCaptivePortalEnabled(), portalSetBehaviorConnectOnSave(), portalSetBehaviorExitAllowed(), portalSetBehaviorConnectTimeoutSeconds(), portalSetBehaviorPortalTimeoutSeconds(), portalSetBehaviorAutoReconnect(), portalSetBehaviorApClientCheck(), portalSetBehaviorWebClientCheck() | Set portal behavior through the structured configuration vocabulary. |
-| Field policy | portalSetFieldPasswordPlaceholderMode(), portalSetFieldStaticIpVisibility(), portalSetFieldStaticDnsVisibility() | Limit password disclosure and network-field visibility. |
+| Connection/portal behavior | portalSetBehaviorCaptivePortalEnabled(), portalSetBehaviorConnectOnSave(), portalSetBehaviorExitAllowed(), portalSetBehaviorConnectTimeoutSeconds(), portalSetBehaviorPortalTimeoutSeconds(), portalSetBehaviorAutoReconnect(), portalSetBehaviorApClientCheck(), portalSetBehaviorWebClientCheck() | Set built-in portal behavior. |
+| Fields | portalSetFieldPasswordPlaceholderMode(), portalSetFieldStaticIpVisibility(), portalSetFieldStaticDnsVisibility() | Limit password disclosure and network-field visibility. |
 
 The older setConfigPortalTimeout(), setSaveConnect(), setShowStaticFields(), and related methods remain available. Prefer a single vocabulary within a product; the portal-prefixed methods make the policy visible in the portal's structured model.
 
@@ -105,8 +109,16 @@ Use portalAddParameter() for editable product settings, portalAddInfoSection() f
 
 See [Portal content](PORTAL_CONTENT.md) for the full persistence, validation, callback, and lifetime rules. The buildable [Custom Portal Content](../examples/CustomPortalContent/) example shows all three content types.
 
-## Supported boundary
+## What stays built in
 
-There is no arbitrary HTML shell, route replacement, navigation injection, raw stylesheet, or script hook. Product branding and policy configure documented built-in functionality rather than private markup. If a product needs a new portal capability, add a narrow WiFiManager contract and test it on both supported targets.
+Branding, policy, and structured content configure the supplied portal. The
+portal's HTML shell, routes, navigation, stylesheet, and scripts stay owned by
+WiFiManager. There is no custom shell, route replacement, navigation injection,
+raw stylesheet, or script hook.
+
+For a product-specific web application, start that application's own server
+after WiFiManager has completed provisioning. If the supplied portal needs a
+reusable capability, add one focused public WiFiManager C++ API and test it on
+ESP8266 and ESP32.
 
 Back to the [documentation index](README.md) or [project overview](../README.md).

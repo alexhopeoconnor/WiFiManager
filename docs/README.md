@@ -2,7 +2,7 @@
 
 | I want to… | Read |
 | --- | --- |
-| Understand what WiFiManager owns and what the application owns | [Architecture](ARCHITECTURE.md) |
+| See what WiFiManager handles and what the firmware handles | [Integrating WiFiManager](ARCHITECTURE.md) |
 | Start a basic portal or install a released dependency | [Getting started](GETTING_STARTED.md) |
 | Choose and operate a provisioning flow | [Provisioning lifecycle](PROVISIONING_LIFECYCLE.md) |
 | Brand or constrain the built-in portal | [Portal UI and configuration](PORTAL_UI.md) |
@@ -11,7 +11,7 @@
 | Configure AP, station, scan, and reconnect settings | [Network configuration](NETWORK_CONFIGURATION.md) |
 | Surface portal and station state in product firmware | [Observability](OBSERVABILITY.md) |
 | Look up a supported C++ method and lifecycle rule | [API reference](API_REFERENCE.md) |
-| Understand the built-in portal's local JSON protocol | [Portal API](PORTAL_API.md) |
+| Maintain or test the built-in portal's browser protocol | [Portal browser protocol](PORTAL_API.md) |
 | Apply an existing device-integration pattern | [Recipes](recipes/README.md) |
 | Run documentation and board-free compile checks | [Testing](TESTING.md) |
 | Build or flash a complete example | [Examples](../examples/README.md) |

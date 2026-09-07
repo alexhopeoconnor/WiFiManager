@@ -1,17 +1,21 @@
-# Architecture and boundaries
+# Integrating WiFiManager
 
-WiFiManager is a device-local provisioning component. It tries station Wi-Fi, temporarily hosts an access point and portal when the device cannot connect, and then returns control to the firmware. It is not a cloud service, a remote-management system, or a companion-app framework.
+WiFiManager runs device-local Wi-Fi setup. It tries station Wi-Fi, temporarily
+hosts an access point and portal when the device cannot connect, and then lets
+the firmware continue its normal work. It is not a cloud service,
+remote-management system, or companion-app framework.
 
-## Ownership
+## What WiFiManager handles
 
-| WiFiManager owns | The application owns |
+| WiFiManager handles | Your firmware handles |
 | --- | --- |
 | Temporary AP, captive DNS, portal routes, Wi-Fi connection attempts, portal session state | Durable application settings, schema migration, product services, LEDs/display, reboot policy, telemetry, and access-control decisions |
 | Wi-Fi credentials in the legacy flow, or profile-selection policy in station-profile mode | The durable station-profile store when profile mode is enabled |
 | Structured portal presentation and built-in Wi-Fi/settings forms | Product-specific validation and the persistence of product settings |
 | The local portal JSON protocol | Any separate product HTTP API or local web server |
 
-This separation is intentional: an application can decide how a device should be configured without having to duplicate the portal.
+This lets a firmware decide what configuration it needs without copying the
+portal, captive-network behavior, or Wi-Fi connection flow.
 
 ## Typical boot sequence
 
@@ -29,22 +33,36 @@ Firmware boot
 
 Register portal configuration before calling autoConnect(), startConfigPortal(), startWebPortal(), or a station-profile start method. The active portal uses an immutable response model so that asynchronous requests cannot see a partially changed UI.
 
-## Structured configuration, not a replacement web app
+## Customise the built-in portal
 
-WiFiManager supports product identity, semantic theme values, page/action visibility, field policy, parameters, information sections, and home cards. It deliberately does not provide:
+WiFiManager can set product identity, named theme values, page/action
+visibility, parameters, information sections, and home cards. Use its public
+C++ configuration and content APIs for those tasks:
+
+~~~cpp
+WiFiManagerPortalConfig portal;
+portal.title = WiFiManagerPortalText::progmem(PSTR("Set up sensor"));
+wifi.setPortalConfig(portal);
+~~~
+
+The built-in portal still owns its HTML shell, routes, forms, navigation, and
+captive behavior. It does not provide:
 
 - arbitrary portal HTML-shell replacement;
 - raw CSS or JavaScript injection;
 - route replacement or navigation injection;
-- a cloud API or a supported mobile-companion integration surface.
+- a cloud API or supported mobile-companion integration surface.
 
-Use the portal APIs where their existing semantics fit. If a product needs a new portal capability, add a narrow, documented WiFiManager contract and test it on both supported targets instead of reaching into portal internals.
+The `/api/*` routes are the built-in portal's browser protocol. They are useful
+for portal maintenance and tests, but are not a product firmware or
+companion-app integration API. If a product needs a reusable portal capability,
+add one focused public WiFiManager C++ API and test it on ESP8266 and ESP32.
 
 ## Application-service handoff
 
 WiFiManager's portal server uses its configured HTTP port, 80 by default. A product already using that port must explicitly release it before WiFiManager starts a portal. Conversely, the application decides when its normal web service is safe to start after a successful connection.
 
-This is a real integration boundary, not a WiFiManager callback side effect:
+Release an application-owned server before starting the portal:
 
 ~~~cpp
 void beginRecovery() {
