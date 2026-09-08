@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.4
+
+- Correct profile-backed Wi-Fi hand-off from the embedded web portal: the
+  station controller now owns attempts started through either portal surface,
+  preventing the legacy empty-SSID path from reporting success before a
+  station address is available.
+
 ## 3.2.3
 
 - Clarify the public integration boundary, built-in browser protocol, and
