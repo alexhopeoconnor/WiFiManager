@@ -14,6 +14,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_api_wifi_meta_password_field_type),
     TEST_ENTRY(test_api_wifi_connect_status_success_redirect),
     TEST_ENTRY(test_profile_portal_success_keeps_handoff_alive),
+    TEST_ENTRY(test_profile_portal_candidate_does_not_take_legacy_empty_ssid_path),
     TEST_ENTRY(test_api_info_json_shape),
     TEST_ENTRY(test_api_params_json_shape),
     TEST_ENTRY(test_api_status_json_shape),
@@ -183,4 +184,3 @@ void loop() {
         begun = false; // avoid repeating
     }
 }
-

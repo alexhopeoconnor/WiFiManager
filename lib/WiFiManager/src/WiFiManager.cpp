@@ -385,7 +385,10 @@ bool WiFiManager::startStationCandidate(const WiFiManagerStationProfiles& candid
   _begin();
   _stationCandidate = candidate;
   _stationCandidateActive = true;
-  _stationCandidateFromPortal = configPortalActive;
+  // A profile submitted from either portal surface is owned by the station
+  // controller.  Do not let the legacy empty-SSID portal state machine mark
+  // it successful before the controller has a usable station address.
+  _stationCandidateFromPortal = configPortalActive || webPortalActive;
   _stationAttemptMask = 0;
   _stationPendingSlot = WM_NO_STATION_PROFILE;
   _stationNextAttemptAt = 0;
@@ -506,7 +509,7 @@ void WiFiManager::queueStationProfile(uint8_t slot) {
 }
 
 void WiFiManager::completePortalStationAttempt(bool success, uint8_t status, const String& message) {
-  if (!_stationCandidateFromPortal && !configPortalActive) {
+  if (!_stationCandidateFromPortal && !configPortalActive && !webPortalActive) {
     return;
   }
 

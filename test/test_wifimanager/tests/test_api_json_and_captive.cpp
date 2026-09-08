@@ -96,6 +96,29 @@ void test_profile_portal_success_keeps_handoff_alive() {
     Serial.println("[TEST]   Profile portal success hand-off delay test completed successfully");
 }
 
+void test_profile_portal_candidate_does_not_take_legacy_empty_ssid_path() {
+    Serial.println("[TEST]   Testing profile portal candidate state ownership...");
+
+    WiFiManager wm;
+#ifdef UNIT_TEST
+    WiFiManagerStationProfiles candidate;
+    candidate.slots[0].enabled = true;
+    snprintf(candidate.slots[0].ssid, sizeof(candidate.slots[0].ssid), "%s", "candidate-network");
+    wm.wmTestSetWebPortalActive(true);
+    TEST_ASSERT_TRUE(wm.startStationCandidate(candidate));
+    wm.process();
+    TEST_ASSERT_EQUAL_MESSAGE(
+        WiFiManager::WM_CP_CONNECT_WAITING,
+        wm.getConfigPortalConnectState(),
+        "A web-portal profile candidate must not be treated as the legacy empty-SSID save path"
+    );
+#else
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Profile portal candidate state ownership test completed successfully");
+}
+
 void test_api_info_json_shape() {
     Serial.println("[TEST]   Testing /api/info JSON shape...");
 

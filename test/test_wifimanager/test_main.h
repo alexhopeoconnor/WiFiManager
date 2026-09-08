@@ -119,6 +119,7 @@ void test_api_wifi_meta_json_shape();
 void test_api_wifi_meta_password_field_type();
 void test_api_wifi_connect_status_success_redirect();
 void test_profile_portal_success_keeps_handoff_alive();
+void test_profile_portal_candidate_does_not_take_legacy_empty_ssid_path();
 void test_api_info_json_shape();
 void test_api_params_json_shape();
 void test_api_status_json_shape();
@@ -146,4 +147,3 @@ void test_portal_resource_recovery();
 void test_scan_result_storage_released_when_portal_closes();
 
 #endif // TEST_MAIN_H
-

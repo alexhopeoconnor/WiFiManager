@@ -1082,6 +1082,12 @@ protected:
         _configPortalStart = millis();
       }
     }
+    void          wmTestSetWebPortalActive(bool active) {
+      webPortalActive = active;
+      if (active) {
+        _configPortalStart = millis();
+      }
+    }
     void          wmTestSetPortalConnectSuccess(const String& message, const String& stationIp, uint8_t status = WL_CONNECTED) {
       _cpConnectState = wm_cp_connect_state_t::success;
       _cpConnectMessage = message;
