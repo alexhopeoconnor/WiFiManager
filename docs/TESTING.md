@@ -67,17 +67,35 @@ replaced:
 ./tools/portal-hardware run ... --take-over-client-adapter
 ```
 
-The fixture opens a 15-minute portal session, includes one harmless custom
-parameter, and verifies root/bootstrap/info/status API responses, concurrent
-low-priority requests, parameter persistence, timeout reset, an actual async
-scan, a missing-route response, and desktop/mobile portal rendering with no
-browser page errors. Screenshots, traces on failure, JSON results, and the HTML
-report are saved under the printed XDG state-directory artifact path.
+The fixture opens a 15-minute portal session and includes thirteen harmless
+custom parameters. It verifies root/bootstrap/info/status API responses,
+concurrent low-priority requests, every custom field and value across repeated
+API fetches, timeout reset, an actual async scan, a missing-route response, and
+desktop/mobile portal rendering with no browser page errors. It also round-trips
+a value containing apostrophes, quotes, backslashes, angle brackets, and an
+ampersand through the rendered form and parameter-save API. Screenshots, traces
+on failure, JSON results, and the HTML report are saved under the printed XDG
+state-directory artifact path.
 
 On ESP8266, an AP+STA scan can briefly move the radio off the AP channel. The
 client may reconnect during that interval; the contract deliberately retries
 that transport interruption and still requires a reachable portal with a
 complete, valid scan result.
+
+The normal browser contract catches the common regression case. When changing
+parameter rendering, run the opt-in ESP8266 soak as well. It performs twelve
+full browser renders and API fetches while the AP is active, asserting all
+thirteen fields and their exact values on every pass. This targets the
+memory-sensitive rendering failure reported upstream in issue #1787 without
+making every ordinary hardware run unnecessarily long:
+
+```bash
+./tools/portal-hardware run \
+  --platform esp8266 \
+  --port /dev/serial/by-id/usb-... \
+  --client-interface wlx74da385d4165 \
+  --custom-parameter-stress
+```
 
 For interactive diagnosis, leave the temporary client connection up and remove
 only that managed connection when finished:

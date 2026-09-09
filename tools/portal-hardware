@@ -14,7 +14,7 @@ Usage:
   ./tools/portal-hardware run --platform esp8266|esp32 --port /dev/serial/by-id/... \
       --client-interface IFACE [--take-over-client-adapter] [--keep] \
       [--browser auto|skip] [--station-env PATH] [--output DIRECTORY] \
-      [--capture-readme-media]
+      [--capture-readme-media] [--custom-parameter-stress]
   ./tools/portal-hardware down
 
 Only the named client interface may be disconnected or reconfigured. The tool
@@ -37,6 +37,7 @@ browser="auto"
 station_env=""
 output_dir=""
 capture_readme_media="no"
+custom_parameter_stress="no"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform) [[ $# -ge 2 ]] || usage; platform="$2"; shift 2 ;;
@@ -48,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         --station-env) [[ $# -ge 2 ]] || usage; station_env="$2"; shift 2 ;;
         --output) [[ $# -ge 2 ]] || usage; output_dir="$2"; shift 2 ;;
         --capture-readme-media) capture_readme_media="yes"; shift ;;
+        --custom-parameter-stress) custom_parameter_stress="yes"; shift ;;
         *) usage ;;
     esac
 done
@@ -92,6 +94,16 @@ validate_run_arguments() {
         }
         [[ "$browser" == "auto" ]] || {
             echo "--capture-readme-media requires --browser auto" >&2
+            exit 2
+        }
+    fi
+    if [[ "$custom_parameter_stress" == "yes" ]]; then
+        [[ "$command_name" == "run" && "$platform" == "esp8266" ]] || {
+            echo "--custom-parameter-stress is supported only by run --platform esp8266" >&2
+            exit 2
+        }
+        [[ "$browser" == "auto" ]] || {
+            echo "--custom-parameter-stress requires --browser auto" >&2
             exit 2
         }
     fi
@@ -196,6 +208,11 @@ case "$command_name" in
         export LOCAL_UID="$(id -u)"
         export LOCAL_GID="$(id -g)"
         export PORTAL_BROWSER_MODE="$browser"
+        export PORTAL_CUSTOM_PARAMETER_STRESS=0
+        if [[ "$custom_parameter_stress" == "yes" ]]; then
+            export PORTAL_CUSTOM_PARAMETER_STRESS=1
+        fi
+        export PORTAL_PLATFORM="$platform"
         if [[ "$capture_readme_media" == "yes" ]]; then
             export PORTAL_CAPTURE_README_MEDIA=1
             export PORTAL_CONTRACT_DOCKER_TARGET=media

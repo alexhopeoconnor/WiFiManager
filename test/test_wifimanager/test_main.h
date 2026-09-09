@@ -123,6 +123,7 @@ void test_profile_portal_success_keeps_handoff_alive();
 void test_profile_portal_candidate_does_not_take_legacy_empty_ssid_path();
 void test_api_info_json_shape();
 void test_api_params_json_shape();
+void test_api_params_json_escapes_custom_parameter_value();
 void test_api_status_json_shape();
 
 // State transition tests

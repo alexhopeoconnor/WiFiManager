@@ -167,6 +167,24 @@ void test_api_params_json_shape() {
     Serial.println("[TEST]   API params JSON shape test completed successfully");
 }
 
+void test_api_params_json_escapes_custom_parameter_value() {
+    Serial.println("[TEST]   Testing escaped custom parameter JSON value...");
+
+    constexpr char value[] = "7(f+4]2y3fsYTQt'Uhxc\"d\\<>&";
+    WiFiManager wm;
+    WiFiManagerHandlers handlers(&wm);
+    WiFiManagerParameter field("escaped_value", "Escaped value", value,
+                               static_cast<int>(sizeof(value) - 1));
+    wm.portalAddParameter(&field);
+
+    const String json = handlers.buildApiParamsGetJson();
+    // JSON must retain apostrophes, angle brackets and ampersands as data,
+    // while escaping the quote and backslash that delimit a JSON string.
+    TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "7(f+4]2y3fsYTQt'Uhxc\\\"d\\\\<>&"));
+
+    Serial.println("[TEST]   Escaped custom parameter JSON value test completed successfully");
+}
+
 void test_api_status_json_shape() {
     Serial.println("[TEST]   Testing /api/status JSON shape...");
 

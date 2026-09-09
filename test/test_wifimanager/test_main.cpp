@@ -17,6 +17,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_profile_portal_candidate_does_not_take_legacy_empty_ssid_path),
     TEST_ENTRY(test_api_info_json_shape),
     TEST_ENTRY(test_api_params_json_shape),
+    TEST_ENTRY(test_api_params_json_escapes_custom_parameter_value),
     TEST_ENTRY(test_api_status_json_shape),
     
     // Configuration tests

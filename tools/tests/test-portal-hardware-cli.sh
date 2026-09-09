@@ -51,6 +51,16 @@ if "$root/tools/portal-hardware" run --platform esp8266 --port /dev/null \
     echo 'ESP8266 README media capture was accepted' >&2
     exit 1
 fi
+if "$root/tools/portal-hardware" run --platform esp32 --port /dev/null \
+    --client-interface wlan-client --custom-parameter-stress >/dev/null 2>&1; then
+    echo 'ESP32 custom-parameter stress was accepted' >&2
+    exit 1
+fi
+if "$root/tools/portal-hardware" run --platform esp8266 --port /dev/null \
+    --client-interface wlan-client --browser skip --custom-parameter-stress >/dev/null 2>&1; then
+    echo 'browser-skipped custom-parameter stress was accepted' >&2
+    exit 1
+fi
 
 # A failed association must delete the only connection it just created.
 source "$root/tools/lib/portal-hardware-session.sh"
@@ -91,6 +101,7 @@ run_line="$(grep -n " run --rm portal-contract$" "$CALL_LOG" | tail -1 | cut -d:
 }
 grep -Fq 'wait_for_portal_ready' "$root/tools/portal-hardware"
 grep -Fq 'api/wifi/scan-status' "$root/tools/portal-hardware"
+grep -Fq 'PORTAL_CUSTOM_PARAMETER_STRESS' "$root/tools/portal-hardware"
 grep -Fq 'README media GIF exceeds its 2 MiB documentation budget' \
     "$root/tests/portal-contract/render-readme-media.sh"
 
