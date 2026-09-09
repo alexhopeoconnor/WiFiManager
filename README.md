@@ -32,6 +32,14 @@ void loop() {
 
 When saved Wi-Fi is unavailable, `autoConnect()` starts the portal asynchronously. Call `process()` from every `loop()` iteration while it may be open. Flash [Basic Portal](examples/BasicPortal/) to try this exact flow; its README gives the network name, password, portal address, and expected result after saving Wi-Fi.
 
+## Building a Home Assistant device?
+
+WiFiManager remains a standalone provisioning library. If a device also needs
+persistent configuration, MQTT, Home Assistant discovery, OTA, mDNS, and an
+optional local web UI, see
+[DeviceFramework](https://github.com/alexhopeoconnor/DeviceFramework), which
+integrates this portal as part of that larger device lifecycle.
+
 ## Make it yours
 
 ```cpp
