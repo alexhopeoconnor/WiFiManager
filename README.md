@@ -21,11 +21,16 @@ WiFiManager wifi;
 
 void setup() {
     Serial.begin(115200);
+
+    // Leave the temporary setup portal available for three minutes.
     wifi.setConfigPortalTimeout(180);
+
+    // Reconnect to saved Wi-Fi, or open the setup portal when none works.
     wifi.autoConnect("Device Setup", "change-me");
 }
 
 void loop() {
+    // Service portal requests and connection state without blocking firmware work.
     wifi.process();
 }
 ```
@@ -38,9 +43,7 @@ WiFiManager remains a standalone provisioning library. If a device also needs
 persistent configuration, MQTT, Home Assistant discovery, OTA, mDNS, and an
 optional local web UI, see
 [DeviceFramework](https://github.com/alexhopeoconnor/DeviceFramework), which
-integrates this portal as part of that larger device lifecycle. A
-DeviceFramework sketch includes DeviceFramework and calls its `setup()` and
-`loop()` APIs; do not create a second `WiFiManager` instance alongside it.
+integrates this portal as part of that larger device lifecycle.
 
 ## Make it yours
 
