@@ -42,6 +42,35 @@ for required in README.md CHANGELOG.md docs/README.md docs/GETTING_STARTED.md do
     fi
 done
 
+check_readme_media() {
+    local asset="$1"
+    local expected_type="$2"
+    local max_bytes="$3"
+    local path="$root/docs/assets/readme/$asset"
+    if [[ ! -s "$path" ]]; then
+        printf 'Missing README media asset: %s\n' "docs/assets/readme/$asset" >&2
+        failed=1
+        return
+    fi
+    if [[ "$(file --brief --mime-type "$path")" != "$expected_type" ]]; then
+        printf 'Unexpected README media type: %s\n' "docs/assets/readme/$asset" >&2
+        failed=1
+    fi
+    if (( $(wc -c < "$path") > max_bytes )); then
+        printf 'README media exceeds its size limit: %s\n' "docs/assets/readme/$asset" >&2
+        failed=1
+    fi
+}
+
+check_readme_media portal-tour.gif image/gif $((2 * 1024 * 1024))
+check_readme_media portal-overview.png image/png $((1024 * 1024))
+check_readme_media portal-wifi-settings.png image/png $((1024 * 1024))
+
+if [[ -n "$(git -C "$root" ls-files -- 'artifacts/readme-media/**')" ]]; then
+    printf 'Ignored README media artifacts must not be tracked.\n' >&2
+    failed=1
+fi
+
 while IFS= read -r example; do
     for required in README.md platformio.ini; do
         if [[ ! -f "$example/$required" ]]; then

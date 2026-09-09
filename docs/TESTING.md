@@ -102,4 +102,39 @@ cp test/portal-station.env.example test/portal-station.env
 ./tools/portal-hardware run ... --station-env test/portal-station.env
 ```
 
+## Refresh README media
+
+README media is an explicit ESP32-only capture, not part of normal testing or
+CI. It uses the same real-board portal contract above, but records a short
+browser tour and stores all candidate files under the ignored
+`artifacts/readme-media/` directory by default:
+
+```bash
+./tools/portal-hardware run \
+  --platform esp32 \
+  --port /dev/serial/by-id/usb-... \
+  --client-interface USB_WIFI_ADAPTER \
+  --capture-readme-media
+```
+
+Review the printed artifact directory. To keep a run somewhere more convenient,
+pass `--output DIRECTORY`. After review, promote only the approved PNG/GIF
+files into tracked documentation assets:
+
+```bash
+./tools/promote-readme-media \
+  --from artifacts/readme-media/TIMESTAMP-esp32 \
+  --replace
+./scripts/check-docs.sh
+```
+
+The Docker renderer validates the GIF duration. The promotion tool requires the
+successful ESP32 media manifest, checks file types and size limits, and never
+copies raw video, browser reports, traces, or arbitrary artifact files. The
+renderer preserves the real recording but deliberately presents it at 1.25×
+duration and 6 fps so the
+README tour is readable; it does not change normal browser-contract timing.
+ESP8266 remains covered by the normal hardware and browser contract but does
+not produce duplicate README media.
+
 Back to [documentation](README.md) · [project overview](../README.md).

@@ -4,6 +4,16 @@ WiFiManagerPortalConfig is the supported presentation API for the built-in provi
 
 Apply presentation before autoConnect(), startConfigPortal(), or startWebPortal(). Configure portal policy during boot as well so each portal session begins consistently. Portal text and SVG assets are non-owning, so their RAM or PROGMEM data must have static firmware lifetime. WiFiManager locks presentation while a portal is active so asynchronous responses cannot observe partial configuration; setPortalConfig() returns false if it cannot accept the configuration.
 
+## Portal views
+
+These ESP32 captures use the same real-board portal contract described in
+[Testing](TESTING.md). The nearby networks shown are the networks visible to
+the capture device when the portal scans.
+
+| Overview | Wi-Fi and application settings |
+| --- | --- |
+| ![WiFiManager portal overview with branded identity, status, and portal actions.](assets/readme/portal-overview.png) | ![WiFiManager Wi-Fi page with nearby networks and an application setting.](assets/readme/portal-wifi-settings.png) |
+
 ## Standalone branded portal
 
 ~~~cpp

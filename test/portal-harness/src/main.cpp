@@ -20,8 +20,13 @@ void setup() {
     Serial.begin(115200);
     delay(300);
 
-    // The fixture intentionally has no station credentials. A finite window
-    // exercises timeout reset without leaving a board in a permanent portal.
+    // This fixture must be independent of whichever sketch was previously
+    // flashed to the board. Clear saved station credentials before starting
+    // the portal so browser artifacts always show the unconfigured flow.
+    wifi.resetSettings();
+
+    // A finite window exercises timeout reset without leaving a board in a
+    // permanent portal.
     wifi.setConfigPortalTimeout(15 * 60);
     wifi.setAPStaticIPConfig(
         IPAddress(192, 168, 4, 1),

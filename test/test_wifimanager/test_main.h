@@ -107,6 +107,7 @@ void test_scan_completion_wait();
 void test_scan_cancels_when_connect_pending();
 void test_scan_cancels_when_lifecycle_blocked();
 void test_scan_generation_invalidated_on_reset();
+void test_scan_restart_interval_is_platform_appropriate();
 void test_real_async_scan_completes();
 
 // Template rendering tests

@@ -27,6 +27,8 @@ printf '%s\n' '#!/usr/bin/env bash' \
 'printf "docker %s\n" "$*" >>"$CALL_LOG"' \
 'if [[ "$1" == "compose" && "$2" == "version" ]]; then echo "Docker Compose"; exit 0; fi' \
 'exit 0' >"$stub_bin/docker"
+printf '%s\n' '#!/usr/bin/env bash' \
+'printf "{\"state\":\"complete\",\"results_valid\":true}"' >"$stub_bin/curl"
 chmod 755 "$stub_bin"/*
 export PATH="$stub_bin:$PATH"
 
@@ -42,6 +44,11 @@ if "$root/tools/portal-hardware" doctor --client-interface wlan-main >/dev/null 
 fi
 if "$root/tools/portal-hardware" up --platform >/dev/null 2>&1; then
     echo 'missing option value did not reject the request' >&2
+    exit 1
+fi
+if "$root/tools/portal-hardware" run --platform esp8266 --port /dev/null \
+    --client-interface wlan-client --capture-readme-media >/dev/null 2>&1; then
+    echo 'ESP8266 README media capture was accepted' >&2
     exit 1
 fi
 
@@ -82,5 +89,9 @@ run_line="$(grep -n " run --rm portal-contract$" "$CALL_LOG" | tail -1 | cut -d:
     echo "portal contract was not rebuilt before execution" >&2
     exit 1
 }
+grep -Fq 'wait_for_portal_ready' "$root/tools/portal-hardware"
+grep -Fq 'api/wifi/scan-status' "$root/tools/portal-hardware"
+grep -Fq 'README media GIF exceeds its 2 MiB documentation budget' \
+    "$root/tests/portal-contract/render-readme-media.sh"
 
 echo 'portal-hardware CLI safety checks passed'

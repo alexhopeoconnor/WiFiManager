@@ -337,7 +337,16 @@ class WiFiManager
       unsigned long startedAt = 0;
       unsigned long finishedAt = 0;
       unsigned long timeoutMs = 15000;
+      // ESP32's high-level scan-complete notification can arrive before the
+      // radio has fully released its previous scan. A second scan started in
+      // that short window is reported only as WIFI_SCAN_FAILED by Arduino.
+      // Keep the established short ESP8266 cadence, but give ESP32 its
+      // documented radio hand-off time before retrying a user refresh.
+      #ifdef ESP32
+      unsigned long minRestartIntervalMs = 5000;
+      #else
       unsigned long minRestartIntervalMs = 2000;
+      #endif
       uint32_t generation = 0;
       uint32_t runningGeneration = 0;
       uint32_t completionGeneration = 0;
@@ -1061,6 +1070,7 @@ protected:
     void          wmTestForceScanState(wm_scan_state_t state) { _scan.state = state; }
     void          wmTestSetScanStartedAt(unsigned long startedAt) { _scan.startedAt = startedAt; }
     void          wmTestSetScanTimeoutMs(unsigned long timeoutMs) { _scan.timeoutMs = timeoutMs; }
+    unsigned long wmTestGetScanRestartIntervalMs() const { return _scan.minRestartIntervalMs; }
     void          wmTestInjectScanResults(const std::vector<WiFiScanNetwork>& results) {
       _scanResultsCache = results;
       _numNetworks = static_cast<int>(results.size());

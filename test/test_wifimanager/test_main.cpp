@@ -105,6 +105,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_scan_cancels_when_connect_pending),
     TEST_ENTRY(test_scan_cancels_when_lifecycle_blocked),
     TEST_ENTRY(test_scan_generation_invalidated_on_reset),
+    TEST_ENTRY(test_scan_restart_interval_is_platform_appropriate),
 
     TEST_ENTRY(test_real_async_scan_completes),
     // Template rendering tests

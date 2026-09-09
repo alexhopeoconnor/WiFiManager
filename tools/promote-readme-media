@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source_dir=""
+replace="no"
+
+usage() {
+    cat <<'EOF' >&2
+Usage: ./tools/promote-readme-media --from ARTIFACT_DIRECTORY --replace
+
+Copies approved WiFiManager README media from a successful ESP32 capture. The
+source directory is the run directory containing readme-media/manifest.json.
+EOF
+    exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --from) [[ $# -ge 2 ]] || usage; source_dir="$2"; shift 2 ;;
+        --replace) replace="yes"; shift ;;
+        *) usage ;;
+    esac
+done
+
+[[ -n "$source_dir" && "$replace" == "yes" ]] || usage
+source_dir="$(cd "$source_dir" && pwd)"
+media_dir="$source_dir/readme-media"
+manifest="$media_dir/manifest.json"
+
+[[ -r "$manifest" ]] || { echo "Missing README media manifest: $manifest" >&2; exit 1; }
+grep -Fq '"project":"WiFiManager"' "$manifest" &&
+    grep -Fq '"kind":"readme-media"' "$manifest" &&
+    grep -Fq '"status":"passed"' "$manifest" &&
+    grep -Fq '"platform":"esp32"' "$manifest" || {
+        echo "The media manifest is not a successful WiFiManager ESP32 capture." >&2
+        exit 1
+    }
+
+target_dir="$root/docs/assets/readme"
+validate_asset() {
+    local source_file="$1" expected_type="$2" max_bytes="$3"
+    [[ -s "$source_file" ]] || { echo "Missing media asset: $source_file" >&2; exit 1; }
+    [[ "$(file --brief --mime-type "$source_file")" == "$expected_type" ]] || {
+        echo "Unexpected media type for $source_file" >&2
+        exit 1
+    }
+    (( $(wc -c < "$source_file") <= max_bytes )) || {
+        echo "README media exceeds its size limit: $source_file" >&2
+        exit 1
+    }
+}
+
+# Verify the complete candidate before changing any tracked README asset.
+validate_asset "$media_dir/portal-tour.gif" image/gif $((2 * 1024 * 1024))
+validate_asset "$media_dir/portal-overview.png" image/png $((1024 * 1024))
+validate_asset "$media_dir/portal-wifi-settings.png" image/png $((1024 * 1024))
+
+install -d "$target_dir"
+for asset in portal-tour.gif portal-overview.png portal-wifi-settings.png; do
+    source_file="$media_dir/$asset"
+    cp -- "$source_file" "$target_dir/$asset"
+    printf 'Promoted %s\n' "docs/assets/readme/$asset"
+done

@@ -150,3 +150,24 @@ void test_scan_generation_invalidated_on_reset() {
     Serial.println("[TEST]   Scan generation invalidation on reset test completed successfully");
 }
 
+void test_scan_restart_interval_is_platform_appropriate() {
+    Serial.println("[TEST]   Testing platform scan restart interval...");
+
+    WiFiManager wm;
+
+#ifdef UNIT_TEST
+  #ifdef ESP32
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        5000, wm.wmTestGetScanRestartIntervalMs(),
+        "ESP32 must wait for the radio to settle after a completed scan");
+  #else
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        2000, wm.wmTestGetScanRestartIntervalMs(),
+        "ESP8266 keeps the established responsive scan restart interval");
+  #endif
+#else
+    TEST_IGNORE_MESSAGE("UNIT_TEST helpers unavailable");
+#endif
+
+    Serial.println("[TEST]   Platform scan restart interval test completed successfully");
+}

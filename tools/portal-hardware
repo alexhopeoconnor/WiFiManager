@@ -13,7 +13,8 @@ Usage:
       --client-interface IFACE [--take-over-client-adapter] [--output DIRECTORY]
   ./tools/portal-hardware run --platform esp8266|esp32 --port /dev/serial/by-id/... \
       --client-interface IFACE [--take-over-client-adapter] [--keep] \
-      [--browser auto|skip] [--station-env PATH] [--output DIRECTORY]
+      [--browser auto|skip] [--station-env PATH] [--output DIRECTORY] \
+      [--capture-readme-media]
   ./tools/portal-hardware down
 
 Only the named client interface may be disconnected or reconfigured. The tool
@@ -35,6 +36,7 @@ keep="no"
 browser="auto"
 station_env=""
 output_dir=""
+capture_readme_media="no"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform) [[ $# -ge 2 ]] || usage; platform="$2"; shift 2 ;;
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
         --browser) [[ $# -ge 2 ]] || usage; browser="$2"; shift 2 ;;
         --station-env) [[ $# -ge 2 ]] || usage; station_env="$2"; shift 2 ;;
         --output) [[ $# -ge 2 ]] || usage; output_dir="$2"; shift 2 ;;
+        --capture-readme-media) capture_readme_media="yes"; shift ;;
         *) usage ;;
     esac
 done
@@ -54,12 +57,17 @@ require_common() {
     wm_require nmcli
     wm_require pio
     wm_require docker
+    wm_require curl
     docker compose version >/dev/null
 }
 
 prepare_output_dir() {
     if [[ -z "$output_dir" ]]; then
-        output_dir="$(wm_portal_state_root)/runs/$(date -u +%Y%m%dT%H%M%SZ)-$platform"
+        if [[ "$capture_readme_media" == "yes" ]]; then
+            output_dir="$root/artifacts/readme-media/$(date -u +%Y%m%dT%H%M%SZ)-$platform"
+        else
+            output_dir="$(wm_portal_state_root)/runs/$(date -u +%Y%m%dT%H%M%SZ)-$platform"
+        fi
     fi
     install -d -m 700 "$output_dir"
     output_dir="$(cd "$output_dir" && pwd)"
@@ -77,6 +85,51 @@ validate_run_arguments() {
         echo "Station environment file is not readable: $station_env" >&2
         exit 1
     }
+    if [[ "$capture_readme_media" == "yes" ]]; then
+        [[ "$command_name" == "run" && "$platform" == "esp32" ]] || {
+            echo "--capture-readme-media is supported only by run --platform esp32" >&2
+            exit 2
+        }
+        [[ "$browser" == "auto" ]] || {
+            echo "--capture-readme-media requires --browser auto" >&2
+            exit 2
+        }
+    fi
+}
+
+write_readme_media_manifest() {
+    local media_dir="$output_dir/readme-media"
+    local required
+    for required in portal-tour.gif portal-overview.png portal-wifi-settings.png; do
+        [[ -s "$media_dir/$required" ]] || {
+            echo "README media output is incomplete: $media_dir/$required" >&2
+            return 1
+        }
+    done
+    printf '{"schema":1,"project":"WiFiManager","kind":"readme-media","status":"passed","platform":"esp32","created_at":"%s"}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$media_dir/manifest.json"
+    chmod 600 "$media_dir/manifest.json"
+}
+
+wait_for_portal_ready() {
+    # A portal SSID can be visible before its first background scan has
+    # completed. Wait for that normal portal-start work before the browser
+    # contract asks the device to perform a second, user-initiated refresh.
+    local attempt response
+    for attempt in $(seq 1 45); do
+        response="$(curl --interface "$client_interface" --connect-timeout 3 --max-time 5 \
+            --silent --show-error --fail http://192.168.4.1/api/wifi/scan-status 2>/dev/null || true)"
+        if [[ "$response" == *'"state":"complete"'* && "$response" == *'"results_valid":true'* ]]; then
+            return 0
+        fi
+        if [[ "$response" == *'"state":"failed"'* || "$response" == *'"state":"timeout"'* ]]; then
+            echo "Portal background scan did not become ready: $response" >&2
+            return 1
+        fi
+        sleep 1
+    done
+    echo 'Portal did not complete its initial Wi-Fi scan within 45 seconds.' >&2
+    return 1
 }
 
 start_portal_session() {
@@ -94,6 +147,10 @@ start_portal_session() {
         return 1
     fi
     if ! wm_verify_portal_route "$client_interface"; then
+        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+        return 1
+    fi
+    if ! wait_for_portal_ready; then
         wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
         return 1
     fi
@@ -139,6 +196,13 @@ case "$command_name" in
         export LOCAL_UID="$(id -u)"
         export LOCAL_GID="$(id -g)"
         export PORTAL_BROWSER_MODE="$browser"
+        if [[ "$capture_readme_media" == "yes" ]]; then
+            export PORTAL_CAPTURE_README_MEDIA=1
+            export PORTAL_CONTRACT_DOCKER_TARGET=media
+        else
+            export PORTAL_CAPTURE_README_MEDIA=0
+            export PORTAL_CONTRACT_DOCKER_TARGET=portal-contract
+        fi
         compose_files=(-f "$root/tests/portal-contract/compose.yaml")
         if [[ -n "$station_env" ]]; then
             export PORTAL_STATION_ENV_HOST="$(cd "$(dirname "$station_env")" && pwd)/$(basename "$station_env")"
@@ -148,6 +212,9 @@ case "$command_name" in
         # this invocation always tests the checked-out files, not a stale image.
         docker compose "${compose_files[@]}" build portal-contract
         docker compose "${compose_files[@]}" run --rm portal-contract
+        if [[ "$capture_readme_media" == "yes" ]]; then
+            write_readme_media_manifest
+        fi
         printf 'Portal contract passed. Artifacts: %s\n' "$output_dir"
         if [[ "$keep" == "yes" ]]; then
             printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
