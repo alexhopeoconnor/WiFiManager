@@ -38,7 +38,9 @@ WiFiManager remains a standalone provisioning library. If a device also needs
 persistent configuration, MQTT, Home Assistant discovery, OTA, mDNS, and an
 optional local web UI, see
 [DeviceFramework](https://github.com/alexhopeoconnor/DeviceFramework), which
-integrates this portal as part of that larger device lifecycle.
+integrates this portal as part of that larger device lifecycle. A
+DeviceFramework sketch includes DeviceFramework and calls its `setup()` and
+`loop()` APIs; do not create a second `WiFiManager` instance alongside it.
 
 ## Make it yours
 
