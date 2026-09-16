@@ -2,12 +2,13 @@
 #include <WiFiManager.h>
 
 WiFiManager portal;
+// WiFiManager reads this object while the portal is open, so it must outlive setup().
 WiFiManagerParameter brokerHost("broker_host", "MQTT broker", "mqtt.local", 40);
 
 void setup() {
     Serial.begin(115200);
 
-    portal.portalAddParameter(&brokerHost);
+    portal.portalAddParameter(&brokerHost);  // Adds an application-owned setting to the built-in form.
 
     // WiFiManager copies this read-only status section when it is registered.
     PortalInfoSection deviceInfo;
@@ -28,7 +29,7 @@ void setup() {
     portal.portalAddHomeCard(hint);
 
     portal.setSaveParamsCallback([](WiFiManager::WiFiManagerRequestArgs) {
-        // A product validates and persists this value here; this demo only prints it.
+        // Validate and persist a copy in the application; this example only reports it.
         Serial.print("MQTT broker selected: ");
         Serial.println(brokerHost.getValue());
     });
@@ -37,4 +38,6 @@ void setup() {
     portal.autoConnect("WiFiManager Content", "example-pass");
 }
 
-void loop() { portal.process(); }
+void loop() {
+    portal.process();  // Serves portal requests until provisioning completes or times out.
+}

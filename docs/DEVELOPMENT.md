@@ -7,12 +7,21 @@ lib_deps =
     WiFiManager=symlink:///path/to/WiFiManager
 ```
 
-The ESP32 environments pin the PlatformIO-compatible pioarduino 51.03.05
-platform package, which packages official Arduino-ESP32 3.0.5. This avoids the
-known six-second asynchronous scan failure in the older 2.0.17 framework. Core
-3 also requires the `SOC_WIFI_SUPPORTED`, `Network/src`, and ESP8266-transport
-ignore settings shown in this repository `platformio.ini`; keep those settings
-when adding an ESP32 environment.
+## Target pins
+
+The ESP32 test environments pin the pioarduino `51.03.05` platform package,
+which selects Arduino-ESP32 3.0.5 / ESP-IDF 5.1.4+. This is a test-target
+contract, not a library-manifest dependency: a consuming application chooses
+its own `platform` and must validate the complete framework/toolchain stack.
+Core 3 Wi-Fi builds need the C++14, `SOC_WIFI_SUPPORTED`, `Network/src`, and
+ESP8266-transport ignore settings in this repository's `platformio.ini`; keep
+those settings together when adding an ESP32 environment.
+
+ESP8266 test environments pin framework commit `521ae60` for the upstream
+Postmortem large-jump linker fix. The exact rationale and update rule are in
+the shared [ESP8266 linker-workaround note](https://github.com/alexhopeoconnor/arduino-home-assistant/blob/main/docs/ESP8266-LINKER-WORKAROUND.md).
+For the pioarduino release-to-Core mapping and the scoped repair for a stale
+global PlatformIO tool package, see [DeviceFramework's toolchain guide](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/TOOLCHAINS.md).
 
 Start a release with `bump-version.sh`. It updates package metadata and canonical installation snippets, then creates the changelog section. Replace its generated TODO with the release summary and update any behavioural documentation before running:
 
@@ -22,6 +31,8 @@ Start a release with `bump-version.sh`. It updates package metadata and canonica
 ./scripts/check-docs.sh
 ./scripts/test.sh compile --platform esp8266
 ./scripts/test.sh compile --platform esp32
+./scripts/test.sh examples --platform esp8266
+./scripts/test.sh examples --platform esp32
 ./scripts/prepare-release.sh vMAJOR.MINOR.PATCH --tag
 ```
 

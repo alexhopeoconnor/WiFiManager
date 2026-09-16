@@ -4,6 +4,32 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failed=0
 
+check_cpp_fence_scope() {
+    local markdown="$1"
+    awk '
+        function brace_delta(line, copy) {
+            copy = line
+            return gsub(/\{/, "{", copy) - gsub(/\}/, "}", copy)
+        }
+        /^```cpp[[:space:]]*$/ { in_cpp = 1; depth = 0; next }
+        in_cpp && /^```[[:space:]]*$/ { in_cpp = 0; next }
+        in_cpp {
+            line = $0
+            sub(/^[[:space:]]+/, "", line)
+            if (depth == 0 &&
+                (line ~ /^(if|for|while|switch)[[:space:]]*\(/ ||
+                 line ~ /^[A-Za-z_][A-Za-z0-9_:]*::[A-Za-z0-9_]+[[:space:]]*\(/ ||
+                 line ~ /^[A-Za-z_][A-Za-z0-9_]*\./ ||
+                 line ~ /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/)) {
+                printf "%s:%d: C++ expression appears at namespace scope; wrap it in a function.\n", FILENAME, FNR > "/dev/stderr"
+                failed = 1
+            }
+            depth += brace_delta($0)
+        }
+        END { exit failed }
+    ' "$markdown"
+}
+
 link_pattern='\]\(([^ )]+)'
 while IFS= read -r file; do
     in_fence=false
@@ -33,6 +59,7 @@ while IFS= read -r file; do
             fi
         done
     done < "$file"
+    check_cpp_fence_scope "$file" || failed=1
 done < <(find "$root" -path "$root/.git" -prune -o -path '*/.pio' -prune -o -type f -name '*.md' -print)
 
 for required in README.md CHANGELOG.md docs/README.md docs/GETTING_STARTED.md docs/PORTAL_UI.md docs/PORTAL_API.md docs/TESTING.md docs/DEVELOPMENT.md; do

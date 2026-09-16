@@ -65,7 +65,7 @@ A normal accepted save returns 202 and directs the portal to poll /api/wifi/conn
 
 ~~~json
 {
-  "state": "idle | waiting | success | failed",
+  "state": "success",
   "message": "human readable status",
   "wifiStatus": "WL_CONNECTED",
   "stationIp": "192.168.1.42",
@@ -73,7 +73,11 @@ A normal accepted save returns 202 and directs the portal to poll /api/wifi/conn
 }
 ~~~
 
-stationIp and redirectUrl are present only after success. If WiFiManager uses a non-default HTTP port, redirectUrl includes it.
+`state` is one of `idle`, `waiting`, `success`, or `failed`. The example shows
+a successful join; `stationIp` and `redirectUrl` are present only in that state.
+If the portal server is not on port 80, `redirectUrl` includes that port. When
+connect-on-save is disabled, a saved configuration has no station address and
+the built-in portal remains open.
 
 After observing success, the built-in portal POSTs /api/wifi/connect-complete. A 409 response means successful handoff is not ready; otherwise WiFiManager keeps the portal alive briefly, receives the acknowledgement, and then closes after a grace delay. Browser captive redirects can still fail, so the portal keeps the station address visible.
 

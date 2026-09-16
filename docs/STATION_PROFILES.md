@@ -18,18 +18,36 @@ A candidate submitted by the portal or another application subsystem is only com
 
 ## Direct WiFiManager use
 
-Implement a small store appropriate to the application. WiFiManager neither allocates nor owns it:
+Implement a small store appropriate to the application. The manager neither allocates nor owns it. This complete in-memory version makes the ownership and return contract visible; use the buildable EEPROM example when the profiles must survive a restart:
 
-~~~cpp
-class MyProfileStore final : public WiFiManagerStationProfileStore {
+```cpp
+class MemoryProfileStore final : public WiFiManagerStationProfileStore {
 public:
-    bool load(WiFiManagerStationProfiles& profiles) override;
-    bool save(const WiFiManagerStationProfiles& profiles) override;
-    bool clear() override;
+    bool load(WiFiManagerStationProfiles& profiles) override {
+        if (!hasProfiles_) return false;  // No saved primary profile: open the portal.
+        profiles = profiles_;
+        return true;
+    }
+
+    bool save(const WiFiManagerStationProfiles& profiles) override {
+        profiles_ = profiles;
+        hasProfiles_ = true;
+        return true;  // A durable store must return false when its write fails.
+    }
+
+    bool clear() override {
+        profiles_ = {};
+        hasProfiles_ = false;
+        return true;
+    }
+
+private:
+    WiFiManagerStationProfiles profiles_{};
+    bool hasProfiles_ = false;
 };
 
 WiFiManager wifi;
-MyProfileStore profiles;
+MemoryProfileStore profiles;  // Must outlive WiFiManager's asynchronous connection work.
 
 void setup() {
     wifi.setStationProfileStore(&profiles);
@@ -38,11 +56,11 @@ void setup() {
 }
 
 void loop() {
-    wifi.process();
+    wifi.process();  // Advances profile retries and serves the fallback portal.
 }
-~~~
+```
 
-The store must return a complete WiFiManagerStationProfiles value. Each enabled profile has a NUL-terminated SSID of at most 32 characters and an optional NUL-terminated password of at most 64 characters. Keep slot 0 enabled; set hasPassword to false for an open network.
+This memory-only store intentionally loses profiles on restart. The store must return a complete `WiFiManagerStationProfiles` value. Each enabled profile has a NUL-terminated SSID of at most 32 characters and an optional NUL-terminated password of at most 64 characters. Keep slot 0 enabled; set `hasPassword = false` for an open network.
 
 When load() returns false, WiFiManager treats the profile set as unavailable and opens the normal configuration portal. When save() or clear() returns false, getStationStatus().storageSaveFailed is set and the status message explains the failure.
 
