@@ -18,6 +18,8 @@ printf '%s\n' '#!/usr/bin/env bash' \
 'echo "192.168.4.1 dev wlan-client src 192.168.4.2"' >"$stub_bin/ip"
 printf '%s\n' '#!/usr/bin/env bash' \
 'printf "%s\\n" "$*" >>"$CALL_LOG"' \
+'if [[ "${NMCLI_FAIL_ADD:-}" == "yes" && "$1" == "connection" && "$2" == "add" ]]; then exit 7; fi' \
+'if [[ "${NMCLI_SIGNAL_PARENT:-}" == "yes" && "$1" == "connection" && "$2" == "add" ]]; then kill -TERM "$PPID"; exit 0; fi' \
 'if [[ "${NMCLI_FAIL_UP:-}" == "yes" && "$1" == "connection" && "$2" == "up" ]]; then exit 7; fi' \
 'if [[ "$1" == "-t" && "$2" == "-f" && "$3" == "SSID" ]]; then echo "WM Contract ESP8266"; exit 0; fi' \
 'if [[ "$1" == "-g" && "$2" == "connection.uuid" ]]; then echo "stub-uuid"; exit 0; fi' \
@@ -80,12 +82,70 @@ fi
 source "$root/tools/lib/portal-hardware-session.sh"
 wm_wait_for_portal_ssid() { return 0; }
 export NMCLI_FAIL_UP=yes
-if wm_create_portal_connection wlan-client 'fixture portal' placeholder; then
+if wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266; then
     echo 'failed association was reported as success' >&2
     exit 1
 fi
 unset NMCLI_FAIL_UP
+grep -Eq 'connection delete (uuid stub-uuid|wifimanager-portal-)' "$CALL_LOG"
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'failed association left portal recovery state behind' >&2
+    exit 1
+}
+
+# The pending record must be removed even when NetworkManager rejects the
+# connection before it has a UUID.
+export NMCLI_FAIL_ADD=yes
+if wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266; then
+    echo 'failed connection creation was reported as success' >&2
+    exit 1
+fi
+unset NMCLI_FAIL_ADD
 grep -Eq 'connection delete wifimanager-portal-' "$CALL_LOG"
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'failed connection creation left pending recovery state behind' >&2
+    exit 1
+}
+
+# A portal scan failure must stop before `connection add` and clear the
+# pre-add pending record, even though this helper is invoked in an `if`.
+wm_wait_for_portal_ssid() { return 1; }
+if wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266; then
+    echo 'failed portal scan was reported as success' >&2
+    exit 1
+fi
+wm_wait_for_portal_ssid() { return 0; }
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'failed portal scan left pending recovery state behind' >&2
+    exit 1
+}
+
+# Exercise the real runner trap: a TERM immediately after `connection add`
+# must remove its exact pending name and clear the atomically written state.
+: >"$CALL_LOG"
+export NMCLI_SIGNAL_PARENT=yes
+if "$root/tools/portal-hardware" up --platform esp8266 --port /dev/null \
+    --client-interface wlan-client >/dev/null 2>&1; then
+    echo 'runner survived a connection-creation interrupt' >&2
+    exit 1
+fi
+unset NMCLI_SIGNAL_PARENT
+grep -Eq 'connection delete wifimanager-portal-' "$CALL_LOG"
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'runner interrupt left a portal state record behind' >&2
+    exit 1
+}
+
+# Model an uncatchable host death after the pre-add atomic write. `down` must
+# accept its name-only pending record and remove that one connection.
+wm_write_state wlan-client esp8266 '' wifimanager-pending-recovery
+grep -Fxq 'WM_PORTAL_STATE=pending' "$(wm_state_file)"
+"$root/tools/portal-hardware" down >/dev/null
+grep -Fq 'connection delete wifimanager-pending-recovery' "$CALL_LOG"
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'pending portal recovery state was not cleared' >&2
+    exit 1
+}
 
 # A retained session must be removed explicitly, never silently overwritten.
 wm_write_state wlan-client esp8266 stale-uuid stale-name
@@ -120,6 +180,9 @@ grep -Fq 'compose.ota.yaml' "$root/tools/portal-hardware"
 grep -Fq 'wait_for_ota_marker B' "$root/tools/portal-hardware"
 grep -Fq 'pio_for_portal_environment "$ota_environment_a"' "$root/tools/portal-hardware"
 grep -Fq 'WIFIMANAGER_PLATFORMIO_CORE_DIR' "$root/tools/portal-hardware"
+grep -Fq 'WIFIMANAGER_PIO_EXECUTABLE' "$root/tools/portal-hardware"
+grep -Fq 'deviceframework-hardware-test.lock' "$root/tools/lib/portal-hardware-session.sh"
+grep -Fq 'WM_PORTAL_CONNECTION_OWNED' "$root/tools/lib/portal-hardware-session.sh"
 grep -Fq 'assert_ota_fixture_pair' "$root/scripts/test.sh"
 grep -Fq 'WiFiManager Unity compile check passed' "$root/scripts/test.sh"
 grep -Fq 'eagle.flash.4m1m.ld' "$root/test/portal-harness/platformio.ini"

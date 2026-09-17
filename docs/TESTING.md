@@ -60,7 +60,8 @@ pio device list
 The runner flashes the selected board, captures normal-boot serial output with
 the repository Bash helper, requires Unity's `Tests 0 Failures` and `OK`
 summary, and prints lifecycle metrics. Hardware work shares a lock with the
-portal contract, so two invocations cannot flash or use the same board at once.
+portal contract and DeviceFramework's hardware runners on the same host, so
+two first-party invocations cannot flash or use the same board at once.
 
 ## Docker portal contract
 
@@ -70,6 +71,11 @@ selected board, joins its AP through one explicitly selected **secondary**
 Wi-Fi adapter, then runs its HTTP and browser contract in a pinned Playwright
 Docker image. Docker uses host networking only to reach the already-routed
 portal; it never runs NetworkManager or changes host adapters.
+
+The runner resolves PlatformIO from `WIFIMANAGER_PIO_EXECUTABLE`, then `PATH`,
+then PlatformIO's standard `~/.platformio/penv/bin/pio` installation. That
+makes the same command work from a non-interactive SSH shell without modifying
+the user's `PATH`.
 
 ```bash
 ./tools/portal-hardware doctor --client-interface wlx74da385d4165
@@ -131,9 +137,13 @@ the fixture to a real LAN. Copy the ignored template below, add local
 credentials, and pass it explicitly; it is mounted read-only into the test
 container and is never logged by the runner.
 
-A retained session is deliberately never overwritten. If a previous `up` or an
-interrupted `run` left one behind, run `./tools/portal-hardware down` first;
-that removes only the named temporary connection recorded by the tool.
+A retained session is deliberately never overwritten. Before touching
+NetworkManager, the runner atomically records its uniquely generated connection
+name; after creation it atomically replaces that pending record with the exact
+UUID. Ordinary failures and interrupts remove that connection immediately, and
+`down` accepts either record after an uncatchable host termination or an
+intentional `up`/`--keep` session. It never removes another NetworkManager
+connection.
 
 ```bash
 cp test/portal-station.env.example test/portal-station.env

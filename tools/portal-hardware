@@ -52,6 +52,12 @@ ota_environment_b=""
 ota_firmware_a=""
 ota_firmware_b=""
 ota_browser_prebuilt="no"
+# `wm_create_portal_connection` sets these before NetworkManager mutates the
+# secondary adapter.  Keeping the ownership record in-process means the
+# signal trap can clean up the exact pending or active connection immediately.
+WM_PORTAL_CONNECTION_UUID=""
+WM_PORTAL_CONNECTION_NAME=""
+WM_PORTAL_CONNECTION_OWNED="no"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform) [[ $# -ge 2 ]] || usage; platform="$2"; shift 2 ;;
@@ -71,10 +77,41 @@ done
 require_common() {
     wm_require ip
     wm_require nmcli
-    wm_require pio
+    wm_pio_available
     wm_require docker
     wm_require curl
     docker compose version >/dev/null
+}
+
+wm_pio_executable() {
+    # Hardware runners are commonly launched over non-interactive SSH, where
+    # a normal PlatformIO installation is not necessarily on PATH.  Honor an
+    # explicit override first, then PATH, then PlatformIO's standard venv.
+    # This mirrors DeviceFramework's resolver without changing a user's PATH.
+    local executable
+    if [[ -n "${WIFIMANAGER_PIO_EXECUTABLE:-}" ]]; then
+        executable="$WIFIMANAGER_PIO_EXECUTABLE"
+    else
+        executable="$(command -v pio 2>/dev/null || true)"
+        if [[ -z "$executable" && -x "$HOME/.platformio/penv/bin/pio" ]]; then
+            executable="$HOME/.platformio/penv/bin/pio"
+        fi
+    fi
+    [[ -n "$executable" && -x "$executable" ]] || {
+        echo "PlatformIO is required; install it or set WIFIMANAGER_PIO_EXECUTABLE." >&2
+        return 1
+    }
+    printf '%s\n' "$executable"
+}
+
+wm_pio_available() {
+    wm_pio_executable >/dev/null
+}
+
+wm_pio() {
+    local executable
+    executable="$(wm_pio_executable)" || return
+    "$executable" "$@"
 }
 
 pio_for_portal_environment() {
@@ -89,7 +126,7 @@ pio_for_portal_environment() {
         esp32_core_3_3_11|esp32_ota_*)
             ;;
         *)
-            pio "$@"
+            wm_pio "$@"
             return
             ;;
     esac
@@ -100,7 +137,7 @@ pio_for_portal_environment() {
     cache_dir="${WIFIMANAGER_PLATFORMIO_CACHE_DIR:-$core_dir/cache}"
     install -d -m 700 "$core_dir" "$packages_dir" "$cache_dir"
     PLATFORMIO_CORE_DIR="$core_dir" PLATFORMIO_PACKAGES_DIR="$packages_dir" \
-        PLATFORMIO_CACHE_DIR="$cache_dir" pio "$@"
+        PLATFORMIO_CACHE_DIR="$cache_dir" wm_pio "$@"
 }
 
 prepare_output_dir() {
@@ -220,19 +257,15 @@ start_portal_session() {
     if [[ -n "$expected_a_artifact" ]]; then
         ota_assert_a_artifact_matches_build "$expected_a_artifact"
     fi
-    if ! wm_create_portal_connection "$client_interface" "$ssid" "default1"; then
+    if ! wm_create_portal_connection "$client_interface" "$ssid" "default1" "$platform"; then
         return 1
     fi
     if ! wm_verify_portal_route "$client_interface"; then
-        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+        wm_cleanup_created_connection
         return 1
     fi
     if ! wait_for_portal_ready; then
-        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
-        return 1
-    fi
-    if ! wm_write_state "$client_interface" "$platform" "$WM_PORTAL_CONNECTION_UUID" "$WM_PORTAL_CONNECTION_NAME"; then
-        wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+        wm_cleanup_created_connection
         return 1
     fi
     printf 'Portal connected on %s. Artifacts: %s\n' "$client_interface" "$output_dir"
@@ -457,9 +490,26 @@ run_ota_contract() {
 
 finish_portal_session() {
     wm_load_state
-    wm_remove_connection "$WM_PORTAL_CONNECTION_UUID"
+    wm_remove_connection "$WM_PORTAL_CONNECTION_UUID" "$WM_PORTAL_CONNECTION_NAME"
     wm_clear_state
 }
+
+cleanup_portal_session() {
+    local status="${1:-$?}"
+    # A signal must never fall through into the rest of the hardware run, and
+    # a recursive EXIT trap must not obscure the original status.
+    trap - EXIT HUP INT TERM
+    if [[ "${WM_PORTAL_CONNECTION_OWNED:-no}" == "yes" ]] && \
+        { (( status != 0 )) || { [[ "$command_name" != "up" && "$keep" != "yes" ]]; }; }; then
+        wm_cleanup_created_connection || true
+    fi
+    exit "$status"
+}
+
+trap 'cleanup_portal_session "$?"' EXIT
+trap 'cleanup_portal_session 129' HUP
+trap 'cleanup_portal_session 130' INT
+trap 'cleanup_portal_session 143' TERM
 
 case "$command_name" in
     doctor)
@@ -480,12 +530,6 @@ case "$command_name" in
         ;;
     run)
         start_portal_session
-        cleanup() {
-            if [[ "$keep" != "yes" ]]; then
-                finish_portal_session || true
-            fi
-        }
-        trap cleanup EXIT INT TERM
         export PORTAL_ARTIFACT_DIR="$output_dir"
         export LOCAL_UID="$(id -u)"
         export LOCAL_GID="$(id -g)"
@@ -535,12 +579,6 @@ case "$command_name" in
         prepare_ota_firmware
         prepare_ota_contract_image
         start_portal_session "$ota_environment_a" yes "$ota_firmware_a"
-        cleanup() {
-            if [[ "$keep" != "yes" ]]; then
-                finish_portal_session || true
-            fi
-        }
-        trap cleanup EXIT INT TERM
 
         # A must be visible through the real portal before a B upload can be
         # meaningful. On ESP8266 the marker also reports the actual active
