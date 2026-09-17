@@ -3,7 +3,7 @@ set -euo pipefail
 
 playwright_args=(test --config /work/playwright.config.js)
 if [[ -n "${PORTAL_TEST_FILE:-}" ]]; then
-    # OTA is a destructive, time-bounded board contract. Run only its browser
+    # OTA is a destructive, time-bounded board test harness. Run only its browser
     # spec instead of allowing ordinary portal tests to consume its AP window.
     playwright_args+=("$PORTAL_TEST_FILE")
 fi

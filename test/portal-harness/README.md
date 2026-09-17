@@ -11,7 +11,7 @@ Use it through the repository runner so a secondary Wi-Fi adapter is explicitly 
   --client-interface wlx...
 ```
 
-The ESP8266 portal SSID is `WM Contract ESP8266`; the ESP32 SSID is `WM Contract ESP32`. Both use `default1` exclusively for local development tests.
+The ESP8266 portal SSID is `WM Test Harness ESP8266`; the ESP32 SSID is `WM Test Harness ESP32`. Both use `default1` exclusively for local development tests.
 
 The runner cleans up only the temporary connection it creates on the named secondary interface. It refuses to run if that interface is the system default route.
 
@@ -26,9 +26,11 @@ the `WM_NMCLI_AUTH` options.
 ## A/B portal OTA fixture
 
 The same fixture has dedicated `*_ota_a` and `*_ota_b` PlatformIO environments
-for the physical portal HTTP OTA contract. A and B differ only by a compiled
-marker served from the fixture-only `/api/test/firmware-marker` endpoint. That
-proves a B boot without trusting saved portal values, EEPROM, or a filename.
+for the physical portal HTTP OTA test harness. A and B differ only by a compiled
+marker served from the fixture-only `/api/test/firmware-marker` endpoint and an
+immutable serial boot marker. The test harness requires serial A, updater
+start/completion, then serial B, so it proves a B boot without trusting saved
+portal values, EEPROM, or a filename.
 
 ```bash
 ./tools/portal-hardware ota \
@@ -43,4 +45,6 @@ ESP8266 explicitly uses `eagle.flash.4m1m.ld`. ESP32 uses the tracked two-slot
 and B before it touches the board, validates the matching ESP32 slots (or the
 live ESP8266 updater capacity), then erases the explicitly selected test board
 before serial-flashing A. A successful run leaves B installed in the
-portal-only fixture.
+portal-only fixture. It requires Python PySerial and retains a passive,
+no-reset `serial-ota.log` in the private run artifact directory for both
+success and failure diagnosis.

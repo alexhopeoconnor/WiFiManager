@@ -1,17 +1,17 @@
 ARG PLAYWRIGHT_VERSION=1.63.0
-FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS portal-contract
+FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS portal-harness
 
 ARG PLAYWRIGHT_VERSION
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 WORKDIR /work
-COPY tests/portal-contract/package.json tests/portal-contract/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts && \
     [ "$(node -p "require('@playwright/test/package.json').version")" = "$PLAYWRIGHT_VERSION" ]
-COPY tests/portal-contract/ ./
-RUN chmod 755 /work/run-portal-contract.sh /work/render-readme-media.sh
-CMD ["/work/run-portal-contract.sh"]
+COPY . ./
+RUN chmod 755 /work/run-portal-harness.sh /work/render-readme-media.sh
+CMD ["/work/run-portal-harness.sh"]
 
-FROM portal-contract AS media
+FROM portal-harness AS media
 USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \

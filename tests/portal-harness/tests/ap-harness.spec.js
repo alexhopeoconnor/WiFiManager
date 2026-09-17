@@ -1,7 +1,18 @@
 const { test, expect } = require('@playwright/test');
 
+const hasStationCredentials = Boolean(process.env.PORTAL_STATION_ENV);
+
+async function saveDiagnosticScreenshot(page, target) {
+  // The optional station hand-off submits real local credentials. Playwright's
+  // automatic artifacts are disabled in that mode, and explicit screenshots
+  // must honor the same boundary.
+  if (!hasStationCredentials) {
+    await page.screenshot({ path: target, fullPage: true });
+  }
+}
+
 const fixtureParameters = [
-  { id: 'installation_label', value: 'Contract fixture' },
+  { id: 'installation_label', value: 'Harness fixture' },
   { id: 'escaped_value', value: "7(f+4]2y3fsYTQt'Uhxc\"d\\<>&" },
   { id: 'mqtt_host', value: 'broker.example.local' },
   { id: 'mqtt_port', value: '1883' },
@@ -12,7 +23,7 @@ const fixtureParameters = [
   { id: 'latitude', value: '-27.4698' },
   { id: 'longitude', value: '153.0251' },
   { id: 'firmware_channel', value: 'stable' },
-  { id: 'owner_name', value: 'Portal contract' },
+  { id: 'owner_name', value: 'Portal test harness' },
   { id: 'notes', value: 'Thirteen-field rendering fixture' },
 ];
 const escapedUpdatedValue = "updated 'quote\" slash\\<>&";
@@ -49,7 +60,7 @@ async function waitForScan(request) {
   return result;
 }
 
-test.describe('portal AP contract', () => {
+test.describe('portal AP test harness', () => {
   test('serves API, retains all thirteen fixture parameters, and completes a real scan', async ({ request }) => {
     const root = await request.get('/');
     expect(root.ok()).toBeTruthy();
@@ -115,7 +126,7 @@ test.describe('portal AP contract', () => {
 
     await page.goto('/', { waitUntil: 'networkidle' });
     await expect(page.locator('#wm-reset-portal-timeout')).toBeVisible();
-    await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/portal-overview-desktop.png`, fullPage: true });
+    await saveDiagnosticScreenshot(page, `${process.env.ARTIFACT_DIR}/portal-overview-desktop.png`);
 
     await page.goto('/#/wifi', { waitUntil: 'networkidle' });
     await expect(page.locator('#wm-refresh-scan')).toBeVisible();
@@ -124,7 +135,7 @@ test.describe('portal AP contract', () => {
     await expect(page.locator('#wm-f-installation_label')).toBeVisible();
     await expect(page.locator('#wm-f-escaped_value')).toHaveValue(fixtureParameters[1].value);
     await page.locator('#wm-f-installation_label').fill('Browser verified');
-    await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/portal-wifi-desktop.png`, fullPage: true });
+    await saveDiagnosticScreenshot(page, `${process.env.ARTIFACT_DIR}/portal-wifi-desktop.png`);
 
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
     const mobilePage = await mobile.newPage();
@@ -134,7 +145,7 @@ test.describe('portal AP contract', () => {
     });
     await mobilePage.goto('/#/info', { waitUntil: 'networkidle' });
     await expect(mobilePage.locator('.wm-page-head')).toBeVisible();
-    await mobilePage.screenshot({ path: `${process.env.ARTIFACT_DIR}/portal-device-mobile.png`, fullPage: true });
+    await saveDiagnosticScreenshot(mobilePage, `${process.env.ARTIFACT_DIR}/portal-device-mobile.png`);
 
     await mobile.close();
     await desktop.close();

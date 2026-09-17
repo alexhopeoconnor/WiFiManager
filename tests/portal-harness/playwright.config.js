@@ -1,7 +1,13 @@
+// Configuration for the browser half of the portal test harness.
 const path = require('path');
 const { defineConfig } = require('@playwright/test');
 
 const artifactDir = process.env.ARTIFACT_DIR || path.join(__dirname, 'artifacts');
+// The optional station-handoff test submits real local Wi-Fi credentials. The
+// runner mounts only its generated two-key file, but Playwright traces can
+// retain request bodies, so leave no screenshots, video, or trace behind for
+// that one opt-in credential-bearing mode.
+const hasStationCredentials = Boolean(process.env.PORTAL_STATION_ENV);
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -18,8 +24,8 @@ module.exports = defineConfig({
   ],
   use: {
     baseURL: process.env.PORTAL_URL || 'http://192.168.4.1',
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
+    screenshot: hasStationCredentials ? 'off' : 'only-on-failure',
+    trace: hasStationCredentials ? 'off' : 'retain-on-failure',
+    video: hasStationCredentials ? 'off' : 'retain-on-failure',
   },
 });

@@ -4,18 +4,17 @@ set -euo pipefail
 usage() {
     cat <<'USAGE' >&2
 Usage:
-  ./scripts/test.sh compile      --platform esp8266|esp32|esp32-current
-  ./scripts/test.sh unity        --platform esp8266|esp32|esp32-current
+  ./scripts/test.sh compile      --platform esp8266|esp32
+  ./scripts/test.sh unity        --platform esp8266|esp32
   ./scripts/test.sh examples     --platform esp8266|esp32
-  ./scripts/test.sh ota-fixtures --platform esp8266|esp32|esp32-current
-  ./scripts/test.sh packages     --platform esp8266|esp32|esp32-current
+  ./scripts/test.sh ota-fixtures --platform esp8266|esp32
   ./scripts/test.sh hardware     --platform esp8266|esp32 --port /dev/serial/by-id/...
 USAGE
     exit 2
 }
 
 mode="${1:-}"
-[[ "$mode" == "compile" || "$mode" == "unity" || "$mode" == "examples" || "$mode" == "ota-fixtures" || "$mode" == "packages" || "$mode" == "hardware" ]] || usage
+[[ "$mode" == "compile" || "$mode" == "unity" || "$mode" == "examples" || "$mode" == "ota-fixtures" || "$mode" == "hardware" ]] || usage
 shift
 
 platform=""
@@ -29,41 +28,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$platform" in
-    esp8266|esp32)
-        environment="$platform"
-        ;;
-    esp32-current)
-        environment="esp32_core_3_3_11"
-        ;;
+    esp8266|esp32) environment="$platform" ;;
     *) usage ;;
 esac
-[[ "$mode" != "examples" || "$platform" != "esp32-current" ]] || {
-    echo "The current ESP32 lane is a clean-consumer check; examples retain their explicit compatibility environments." >&2
-    exit 2
-}
-[[ "$mode" != "hardware" || "$platform" != "esp32-current" ]] || {
-    echo "The current ESP32 lane is a board-free clean-consumer check; use esp32 for the existing Unity hardware suite." >&2
-    exit 2
-}
-[[ "$mode" != "ota-fixtures" || "$platform" != "esp32" ]] || {
-    echo "ESP32 OTA fixtures are pinned to the isolated 3.3.11 graph; use --platform esp32-current." >&2
-    exit 2
-}
 [[ "$mode" != "hardware" || -n "$port" ]] || usage
 [[ "$mode" != "hardware" || -e "$port" ]] || { echo "Serial port not found: $port" >&2; exit 1; }
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 pio_for_platform() {
-    if [[ "$platform" != "esp32-current" ]]; then
+    if [[ "$platform" != "esp32" ]]; then
         pio "$@"
         return
     fi
 
-    # pioarduino Core 3.3.11's esptool package form cannot safely share a
-    # PlatformIO Core directory with a legacy Core 3.0.5 tool-esptoolpy
-    # installation. Keep the current validation lane in a project-owned,
-    # user-cache location unless the developer deliberately supplies one.
+    # Keep the maintained Core 3.3.11 package form in a persistent project
+    # cache. It is never cleared by this script and avoids stale global
+    # package metadata selecting an incompatible uploader.
     local core_dir packages_dir cache_dir
     core_dir="${WIFIMANAGER_PLATFORMIO_CORE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/wifimanager-platformio/core-3.3.11}"
     packages_dir="${WIFIMANAGER_PLATFORMIO_PACKAGES_DIR:-$core_dir/packages}"
@@ -86,7 +67,7 @@ assert_ota_fixture_pair() {
         echo "Portal OTA fixture A and B are identical." >&2
         return 1
     fi
-    if [[ "$platform" == "esp32-current" ]]; then
+    if [[ "$platform" == "esp32" ]]; then
         capacity=$((0x1F0000))
         for firmware in "$firmware_a" "$firmware_b"; do
             size="$(wc -c < "$firmware" | tr -d '[:space:]')"
@@ -112,7 +93,7 @@ if [[ "$mode" == "examples" ]]; then
         exit 1
     fi
     for example in "${examples[@]}"; do
-        pio_for_platform run -d "$example" -e "$platform" </dev/null
+        pio_for_platform run -d "$example" -e "$environment" </dev/null
     done
     echo "WiFiManager examples compile check passed for $platform"
     exit 0
@@ -120,11 +101,7 @@ fi
 
 if [[ "$mode" == "ota-fixtures" ]]; then
     fixture_platform="$platform"
-    # ESP32 OTA fixtures are deliberately pinned to the current 3.3.11 lane.
-    # Accept the same public target name as the clean-consumer check so CI
-    # never mixes legacy and current platform package graphs in one worker.
-    if [[ "$fixture_platform" == "esp32-current" ]]; then
-        fixture_platform="esp32"
+    if [[ "$fixture_platform" == "esp32" ]]; then
         "$root/tools/check-ota-partitions.sh"
     fi
     for image in a b; do
@@ -144,28 +121,16 @@ if [[ "$mode" == "unity" ]]; then
     exit 0
 fi
 
-if [[ "$mode" == "packages" ]]; then
-    pio_for_platform pkg list -d "$root/test/compile-project" -e "$environment"
-    exit 0
-fi
-
 if [[ "$mode" == "hardware" ]]; then
     # Upload first, then capture from the normal boot reset. The Unity sketch
     # deliberately waits two seconds before it begins its test sequence.
-    pio test -d "$root" -e "$platform" --filter test_wifimanager \
+    pio_for_platform test -d "$root" -e "$platform" --filter test_wifimanager \
         --upload-port "$port" --without-testing
     "$root/scripts/capture-unity-serial.sh" --port "$port" --timeout 300
     echo "WiFiManager hardware test passed for $platform on $port"
     exit 0
 fi
 
-cached_library="$root/test/compile-project/.pio/libdeps/${environment}/WiFiManager"
-# The fixture intentionally declares only this local package. Remove a prior
-# link so each check resolves the current manifest as a fresh consumer would.
-if [[ -d "$cached_library" || -e "${cached_library}.pio-link" ]]; then
-    pio_for_platform pkg uninstall -d "$root/test/compile-project" -e "$environment" \
-        -l WiFiManager --no-save --skip-dependencies >/dev/null
-fi
 pio_for_platform run -d "$root/test/compile-project" -e "$environment"
 
 echo "WiFiManager consumer compile check passed for $platform"

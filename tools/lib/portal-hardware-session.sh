@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared host-side helpers for the WiFiManager portal hardware contract.
+# Shared host-side helpers for the WiFiManager portal hardware test harness.
 # They never modify a network interface other than the explicit client adapter.
 
 wm_portal_state_root() {
@@ -128,7 +128,7 @@ wm_acquire_hardware_lock() {
     local lock_file="${WM_HARDWARE_LOCK_FILE:-${TMPDIR:-/tmp}/deviceframework-hardware-test.lock}"
     # `ota` deliberately acquires this before it builds firmware, then calls
     # the shared portal-start helper which also acquires it. Keep that nested
-    # path idempotent so the lock covers the whole A/B contract rather than
+    # path idempotent so the lock covers the whole A/B test harness rather than
     # only the serial flash and adapter connection.
     [[ "${WM_HARDWARE_LOCK_HELD:-no}" == "yes" ]] && return 0
     exec 9>"$lock_file"
@@ -140,7 +140,7 @@ wm_acquire_hardware_lock() {
 }
 
 wm_require_client_adapter() {
-    local interface="$1" allow_takeover="$2" default_interface active_connection
+    local interface="$1" allow_takeover="$2" default_interface device_type active_connection
     ip link show "$interface" >/dev/null 2>&1 || {
         echo "Wi-Fi interface not found: $interface" >&2
         return 1
@@ -150,7 +150,22 @@ wm_require_client_adapter() {
         echo "Refusing to use the host default-route interface: $interface" >&2
         return 1
     }
-    active_connection="$(wm_nmcli -g GENERAL.CONNECTION device show "$interface" 2>/dev/null || true)"
+    # A non-default Ethernet, tunnel, or virtual interface can otherwise look
+    # harmless here and reach board flashing before the first Wi-Fi scan
+    # fails. Ask NetworkManager through the already-selected authorization
+    # path, so a denied inspection cannot be mistaken for a usable adapter.
+    if ! device_type="$(wm_nmcli -g GENERAL.TYPE device show "$interface" 2>/dev/null)"; then
+        echo "NetworkManager could not determine the selected portal adapter type: $interface" >&2
+        return 1
+    fi
+    [[ "$device_type" == "wifi" ]] || {
+        echo "Client adapter is not Wi-Fi: $interface ($device_type)." >&2
+        return 1
+    }
+    if ! active_connection="$(wm_nmcli -g GENERAL.CONNECTION device show "$interface" 2>/dev/null)"; then
+        echo "NetworkManager could not inspect the selected portal adapter: $interface" >&2
+        return 1
+    fi
     if [[ -n "$active_connection" && "$active_connection" != "--" && "$allow_takeover" != "yes" ]]; then
         echo "Client adapter $interface already has connection '$active_connection'." >&2
         echo "Pass --take-over-client-adapter to replace only that adapter's connection." >&2
@@ -160,8 +175,8 @@ wm_require_client_adapter() {
 
 wm_portal_ssid() {
     case "$1" in
-        esp8266) printf '%s\n' 'WM Contract ESP8266' ;;
-        esp32) printf '%s\n' 'WM Contract ESP32' ;;
+        esp8266) printf '%s\n' 'WM Test Harness ESP8266' ;;
+        esp32) printf '%s\n' 'WM Test Harness ESP32' ;;
         *) return 1 ;;
     esac
 }
@@ -194,11 +209,49 @@ wm_remove_connection_by_name() {
     local name="$1"
     [[ -n "$name" ]] || return 0
     wm_nmcli connection down "$name" >/dev/null 2>&1 || true
-    wm_nmcli connection delete "$name" >/dev/null 2>&1 || true
+    if ! wm_nmcli connection delete "$name"; then
+        # A pending recovery record can survive an uncatchable exit before
+        # `connection add` ran. Only a successful complete listing which does
+        # not contain this generated name proves that there is nothing left to
+        # remove; an authorization or NetworkManager query failure must retain
+        # the record for an explicit later `down` command.
+        if wm_connection_name_is_absent "$name"; then
+            return 0
+        fi
+        wm_report_portal_connection_cleanup_failure
+        return 1
+    fi
+}
+
+wm_connection_name_is_absent() {
+    local name="$1" names
+    if ! names="$(wm_nmcli -t -f NAME connection show 2>/dev/null)"; then
+        return 1
+    fi
+    ! grep -Fxq -- "$name" <<<"$names"
+}
+
+wm_connection_uuid_is_absent() {
+    local uuid="$1" uuids
+    if ! uuids="$(wm_nmcli -t -f UUID connection show 2>/dev/null)"; then
+        return 1
+    fi
+    ! grep -Fxq -- "$uuid" <<<"$uuids"
+}
+
+wm_report_portal_connection_cleanup_failure() {
+    echo 'Could not remove the temporary WiFiManager portal connection. Its recovery state was retained; restore NetworkManager authorization and run ./tools/portal-hardware down.' >&2
 }
 
 wm_create_portal_connection() {
-    local interface="$1" ssid="$2" password="$3" platform="${4:-}" name uuid
+    local interface="$1" ssid="$2" password="$3" platform="${4:-}" reconnect_after_drop="${5:-no}" name uuid
+    case "$reconnect_after_drop" in
+        yes|no) ;;
+        *)
+            echo "Portal connection reconnect policy must be yes or no." >&2
+            return 2
+            ;;
+    esac
     name="wifimanager-portal-${RANDOM}-$(date +%s)"
     # Publish the owned name before the first NetworkManager mutation.  The
     # caller's signal trap can then remove it throughout the pending-to-active
@@ -217,7 +270,16 @@ wm_create_portal_connection() {
     fi
     wm_nmcli device disconnect "$interface" >/dev/null 2>&1 || true
     if ! wm_wait_for_portal_ssid "$interface" "$ssid"; then
-        wm_cleanup_created_connection
+        # No `connection add` has run on this path, so this process knows that
+        # its pending record has no NetworkManager profile to remove. Clear it
+        # directly rather than requiring a privileged delete of a profile that
+        # cannot exist.
+        if ! wm_clear_state; then
+            wm_report_portal_connection_cleanup_failure
+            return 1
+        fi
+        WM_PORTAL_CONNECTION_OWNED=no
+        unset WM_PORTAL_CONNECTION_UUID WM_PORTAL_CONNECTION_NAME
         return 1
     fi
     if ! wm_nmcli connection add type wifi ifname "$interface" con-name "$name" ssid "$ssid" \
@@ -247,6 +309,15 @@ wm_create_portal_connection() {
         wm_cleanup_created_connection
         return 1
     fi
+    # The ordinary portal runner must leave its disposable connection inert so
+    # it cannot surprise a developer later. The OTA runner is different: the
+    # board intentionally disappears after POST /u, then returns as the same
+    # AP, so its one owned connection needs to reassociate autonomously for the
+    # browser and host-side B checks. Cleanup still deletes this exact profile.
+    if [[ "$reconnect_after_drop" == yes ]] && ! wm_nmcli connection modify "$name" connection.autoconnect yes; then
+        wm_cleanup_created_connection
+        return 1
+    fi
     if ! wm_nmcli connection up "$name" ifname "$interface"; then
         wm_cleanup_created_connection
         return 1
@@ -264,11 +335,22 @@ wm_verify_portal_route() {
 
 wm_remove_connection() {
     local uuid="${1:-}" name="${2:-}"
+    [[ -n "$uuid" || -n "$name" ]] || return 0
     if [[ -n "$uuid" ]]; then
         wm_nmcli connection down uuid "$uuid" >/dev/null 2>&1 || true
-        wm_nmcli connection delete uuid "$uuid" >/dev/null 2>&1 || true
+        if ! wm_nmcli connection delete uuid "$uuid"; then
+            # An active UUID means this runner did create a profile. Retain
+            # the exact recovery state unless the same authorized
+            # NetworkManager view positively proves another actor already
+            # removed it. A failed listing (including an expired scoped sudo
+            # ticket) is never treated as absence.
+            if ! wm_connection_uuid_is_absent "$uuid"; then
+                wm_report_portal_connection_cleanup_failure
+                return 1
+            fi
+        fi
     elif [[ -n "$name" ]]; then
-        wm_remove_connection_by_name "$name"
+        wm_remove_connection_by_name "$name" || return 1
     fi
 }
 
@@ -277,8 +359,11 @@ wm_cleanup_created_connection() {
     # separate from `finish_portal_session`, which reads a retained state file
     # for an explicit later `down` command.
     [[ "${WM_PORTAL_CONNECTION_OWNED:-no}" == "yes" ]] || return 0
-    wm_remove_connection "${WM_PORTAL_CONNECTION_UUID:-}" "${WM_PORTAL_CONNECTION_NAME:-}"
-    wm_clear_state
+    wm_remove_connection "${WM_PORTAL_CONNECTION_UUID:-}" "${WM_PORTAL_CONNECTION_NAME:-}" || return 1
+    if ! wm_clear_state; then
+        echo 'The temporary WiFiManager portal connection was removed, but its recovery state could not be cleared.' >&2
+        return 1
+    fi
     WM_PORTAL_CONNECTION_OWNED=no
     unset WM_PORTAL_CONNECTION_UUID WM_PORTAL_CONNECTION_NAME
 }
@@ -375,5 +460,5 @@ wm_load_state() {
 wm_clear_state() {
     local file
     file="$(wm_state_file)"
-    rm -f "$file"
+    rm -f -- "$file"
 }

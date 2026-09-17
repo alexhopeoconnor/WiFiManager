@@ -1,13 +1,13 @@
 # Testing
 
-WiFiManager separates repeatable package checks from opt-in tests that flash a
-real board or join a captive portal. The normal commands never need a board,
+WiFiManager separates repeatable board-free builds from opt-in tests that flash
+a real board or join a captive portal. The normal commands never need a board,
 local Wi-Fi credentials, browser binary, or sibling checkout.
 
-| Physical contract | Transport | Host adapter | Secret source | Required proof |
+| Physical test harness | Transport | Host adapter | Secret source | Required proof |
 | --- | --- | --- | --- | --- |
-| Portal lifecycle suite | Serial flash + captive-portal HTTP/browser | Named secondary adapter | safe fixture AP password | Unity/lifecycle checks and portal UI/API contract |
-| Portal HTTP OTA | WiFiManager multipart `POST /u` | Named secondary adapter | safe fixture AP password | A → rendered browser upload B → automatic reboot → B twice |
+| Portal lifecycle suite | Serial flash + captive-portal HTTP/browser | Named secondary adapter | safe fixture AP password | Unity/lifecycle checks and portal UI/API coverage |
+| Portal HTTP OTA | WiFiManager multipart `POST /u` | Named secondary adapter | safe fixture AP password | serial A → updater accepts/completes B → serial B, plus browser automatic-reboot/B-twice proof |
 
 The selected secondary adapter is intentionally never used for normal LAN
 testing. It is `never-default`, so the host's ordinary route remains intact.
@@ -15,29 +15,26 @@ testing. It is `never-default`, so the host's ordinary route remains intact.
 ## Board-free fixture, consumer, and example builds
 
 The Unity compile check builds WiFiManager's own fixture without a board. The
-clean-consumer check builds a project that declares only WiFiManager. Together
-they prove the package manifest resolves DFTE, ESPAsyncWebServer, and the correct
-ESP8266 or ESP32 TCP dependency without a sibling checkout. The runner removes
-a prior local package link before each check, so dependency resolution uses the
-current manifest rather than a stale `.pio` copy.
+consumer check builds a project that declares only WiFiManager, proving that a
+normal PlatformIO dependency resolution can compile DFTE, ESPAsyncWebServer,
+and the correct ESP8266 or ESP32 TCP dependency. Normal commands reuse the
+persistent PlatformIO cache; they do not delete, reinstall, or separately
+assert the package graph.
 
 ```bash
 ./scripts/test.sh compile --platform esp8266
 ./scripts/test.sh compile --platform esp32
-./scripts/test.sh compile --platform esp32-current
 ./scripts/test.sh unity --platform esp8266
 ./scripts/test.sh unity --platform esp32
-./scripts/test.sh unity --platform esp32-current
 ./scripts/test.sh examples --platform esp8266
 ./scripts/test.sh examples --platform esp32
 ./scripts/test.sh ota-fixtures --platform esp8266
-./scripts/test.sh ota-fixtures --platform esp32-current
+./scripts/test.sh ota-fixtures --platform esp32
 ```
 
 CI runs these board-free checks for pull requests and pushes to the maintained
-branch. `esp32` remains the explicit Arduino-ESP32 3.0.5 compatibility lane;
-`esp32-current` is the clean-consumer Arduino-ESP32 3.3.11 validation lane.
-The OTA fixture builds also use 3.3.11 for ESP32 and compile both immutable A
+branch. `esp32` uses Arduino-ESP32 3.3.11 and compiles the guided examples.
+The OTA fixture builds compile both immutable A
 and B images against their tracked OTA partition layout. CI rejects equal A/B
 artifacts, an ESP32 image larger than either 0x1F0000-byte app slot, or a
 partition-table edit that breaks the required two-slot/no-filesystem layout. These checks
@@ -60,15 +57,15 @@ pio device list
 The runner flashes the selected board, captures normal-boot serial output with
 the repository Bash helper, requires Unity's `Tests 0 Failures` and `OK`
 summary, and prints lifecycle metrics. Hardware work shares a lock with the
-portal contract and DeviceFramework's hardware runners on the same host, so
+portal test harness and DeviceFramework's hardware runners on the same host, so
 two first-party invocations cannot flash or use the same board at once.
 
-## Docker portal contract
+## Docker portal test harness
 
 `test/portal-harness` is deliberately tiny portal-only firmware, not an example
 or consuming application. `tools/portal-hardware` flashes it to one explicitly
 selected board, joins its AP through one explicitly selected **secondary**
-Wi-Fi adapter, then runs its HTTP and browser contract in a pinned Playwright
+Wi-Fi adapter, then runs its HTTP and browser test harness in a pinned Playwright
 Docker image. Docker uses host networking only to reach the already-routed
 portal; it never runs NetworkManager or changes host adapters.
 
@@ -125,11 +122,11 @@ on failure, JSON results, and the HTML report are saved under the printed XDG
 state-directory artifact path.
 
 On ESP8266, an AP+STA scan can briefly move the radio off the AP channel. The
-client may reconnect during that interval; the contract deliberately retries
+client may reconnect during that interval; the test harness deliberately retries
 that transport interruption and still requires a reachable portal with a
 complete, valid scan result.
 
-The normal browser contract catches the common regression case. When changing
+The normal browser test harness catches the common regression case. When changing
 parameter rendering, run the opt-in ESP8266 soak as well. It performs twelve
 full browser renders and API fetches while the AP is active, asserting all
 thirteen fields and their exact values on every pass. This targets the
@@ -155,8 +152,25 @@ only that managed connection when finished:
 
 An optional station handoff test is deliberately separate because it connects
 the fixture to a real LAN. Copy the ignored template below, add local
-credentials, and pass it explicitly; it is mounted read-only into the test
-container and is never logged by the runner.
+credentials, and pass it explicitly. The runner parses only `WIFI_SSID` and
+`WIFI_PASSWORD` into a generated mode-600 two-key file, mounts that file
+read-only into the test container, and removes it after the browser run; it
+never mounts the complete local environment file or logs either value. Because
+browser traces can retain request bodies, this opt-in mode disables Playwright
+screenshots, video, and tracing, including explicit diagnostic screenshots. It
+cannot be combined with README-media capture. Docker builds from the tracked
+`tests/portal-harness` directory only, so neither the source environment file
+nor the generated two-key file enters its build context. Keep its private output
+directory private and review any remaining report before sharing it.
+
+After either a passing or failing station-handoff attempt, the runner
+serial-flashes the portal-only fixture once more. Its `setup()` clears saved
+station settings, so the selected test board returns to the clean no-station
+portal state and does not retain the developer's Wi-Fi credentials. A failed
+restore or a failure to see the cleaned fixture AP return makes the command
+fail. `--keep` affects only the runner's temporary
+secondary-adapter connection; it does not retain station credentials on the
+board.
 
 A retained session is deliberately never overwritten. Before touching
 NetworkManager, the runner atomically records its uniquely generated connection
@@ -174,7 +188,7 @@ cp test/portal-station.env.example test/portal-station.env
 ## Refresh README media
 
 README media is an explicit ESP32-only capture, not part of normal testing or
-CI. It uses the same real-board portal contract above, but records a short
+CI. It uses the same real-board portal test harness above, but records a short
 browser tour and stores all candidate files under the ignored
 `artifacts/readme-media/` directory by default:
 
@@ -202,11 +216,11 @@ successful ESP32 media manifest, checks file types and size limits, and never
 copies raw video, browser reports, traces, or arbitrary artifact files. The
 renderer preserves the real recording but deliberately presents it at 1.25×
 duration and 6 fps so the
-README tour is readable; it does not change normal browser-contract timing.
-ESP8266 remains covered by the normal hardware and browser contract but does
+README tour is readable; it does not change normal browser-test-harness timing.
+ESP8266 remains covered by the normal hardware and browser test harness but does
 not produce duplicate README media.
 
-## Portal HTTP OTA A/B contract
+## Portal HTTP OTA A/B test harness
 
 `portal-hardware ota` is a separate opt-in physical test for WiFiManager's
 built-in HTTP update path. It exercises the rendered firmware-update page and
@@ -220,13 +234,13 @@ its real multipart `POST /u` request; it is not an ArduinoOTA/UDP test.
 ```
 
 The selected `--client-interface` has exactly the same safety rules as the
-normal portal contract: it must be the explicitly named secondary adapter and
+normal portal test harness: it must be the explicitly named secondary adapter and
 cannot be the host default-route interface. The test never attaches that
 adapter to a normal station network. The fixture AP uses the safe local
 `default1` WPA password; this is an AP-access test, not a claim that `/u` has
 HTTP route authentication.
 
-The runner performs the following complete contract:
+The test harness performs the following complete run:
 
 1. Builds immutable A and B fixture images. Their marker is compiled into the
    binary, not saved in WiFiManager settings or EEPROM.
@@ -241,6 +255,18 @@ The runner performs the following complete contract:
    `#wm-ota-file` browser input, and submits the rendered form.
 6. Requires the real `POST /u` success response, an automatic portal outage,
    automatic restart, and two independent B-marker responses.
+
+The OTA command additionally requires Python with PySerial (the
+`python3-serial` package on Debian/Ubuntu) and retains a passive,
+no-reset `serial-ota.log` beside the browser artifacts. It attaches immediately
+after serial-flashing A releases the port—before portal association and the A
+marker check—and remains attached through the two B checks. A passing run
+requires the log's ordered immutable A marker, WiFiManager's update-start and
+update-complete lines, then immutable B marker. This preserves firmware-side
+portal-start and DHCP evidence as well as OTA evidence, without manufacturing a
+reset. OTA-only fixture images wait five seconds after their upload reset so
+the passive recorder can attach before A/B boot evidence is emitted; ordinary
+portal test-harness startup remains fast.
 
 The fixture marker endpoint exists only in `test/portal-harness`; it is not a
 WiFiManager library route or a product-firmware pattern. The test does not

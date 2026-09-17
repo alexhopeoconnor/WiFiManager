@@ -1,8 +1,8 @@
-# OTA-only overlay. The normal portal contract neither builds nor mounts a
+# OTA-only overlay. The normal portal test harness neither builds nor mounts a
 # firmware image. portal-hardware supplies this absolute path after it has
 # built B and copied it into the run's private artifact directory.
 services:
-  portal-contract:
+  portal-harness:
     environment:
       PORTAL_OTA_FIRMWARE: /firmware/portal-ota-b.bin
       PORTAL_OTA_INITIAL_MARKER: ${PORTAL_OTA_INITIAL_MARKER:-A}

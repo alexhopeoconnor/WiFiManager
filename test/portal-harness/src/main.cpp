@@ -6,24 +6,33 @@ namespace {
 // These markers belong only to the portal hardware fixture. They are compiled
 // into the image rather than stored in Wi-FiManager settings, so an A -> B
 // assertion proves that the new firmware booted after the updater restarted
-// the board. Normal portal-contract builds retain a descriptive fixture value.
-#ifndef WM_OTA_TEST_IMAGE
-#define WM_OTA_TEST_IMAGE "portal-contract"
+// the board. Normal portal test-harness builds retain a descriptive fixture
+// value.
+#if defined(WM_OTA_TEST_IMAGE)
+// PlatformIO releases the serial port only after the upload-triggered reset.
+// The physical OTA test harness then attaches passively, so give it the same
+// explicit window as the DeviceFramework A/B fixtures before boot evidence or
+// portal work begins. Normal portal test-harness builds keep the short delay.
+constexpr unsigned long kSerialMonitorAttachDelayMs = 5000UL;
+#else
+#define WM_OTA_TEST_IMAGE "portal-harness"
+constexpr unsigned long kSerialMonitorAttachDelayMs = 300UL;
 #endif
 
 #if defined(ESP8266)
-constexpr char kPortalSsid[] = "WM Contract ESP8266";
+constexpr char kPortalSsid[] = "WM Test Harness ESP8266";
 #else
-constexpr char kPortalSsid[] = "WM Contract ESP32";
+constexpr char kPortalSsid[] = "WM Test Harness ESP32";
 #endif
 constexpr char kPortalPassword[] = "default1";
 
 WiFiManager wifi;
 WiFiManagerParameter kInstallationLabel(
-    "installation_label", "Installation label", "Contract fixture", 32);
+    "installation_label", "Installation label", "Harness fixture", 32);
 // Keep the characters from upstream issue #1863 in the portal fixture. The
-// browser contract verifies this value through JSON, DOM rendering, save, and
-// a subsequent reload rather than relying on a string-only serializer check.
+// browser test harness verifies this value through JSON, DOM rendering, save,
+// and a subsequent reload rather than relying on a string-only serializer
+// check.
 WiFiManagerParameter kEscapedValue(
     "escaped_value", "Escaped value", "7(f+4]2y3fsYTQt'Uhxc\"d\\<>&", 64);
 WiFiManagerParameter kMqttHost(
@@ -45,7 +54,7 @@ WiFiManagerParameter kLongitude(
 WiFiManagerParameter kFirmwareChannel(
     "firmware_channel", "Firmware channel", "stable", 16);
 WiFiManagerParameter kOwnerName(
-    "owner_name", "Owner name", "Portal contract", 48);
+    "owner_name", "Owner name", "Portal test harness", 48);
 WiFiManagerParameter kNotes(
     "notes", "Notes", "Thirteen-field rendering fixture", 64);
 
@@ -91,7 +100,12 @@ void registerOtaTestMarker() {
 
 void setup() {
     Serial.begin(115200);
-    delay(300);
+    delay(kSerialMonitorAttachDelayMs);
+    // The physical HTTP OTA test harness records this immutable marker before
+    // and after its browser upload. It cannot be faked by saved portal values
+    // or an HTTP response from a stale image.
+    Serial.print(F("WiFiManager portal OTA fixture image: "));
+    Serial.println(WM_OTA_TEST_IMAGE);
 
     // This fixture must be independent of whichever sketch was previously
     // flashed to the board. Clear saved station credentials before starting
@@ -107,7 +121,7 @@ void setup() {
         IPAddress(255, 255, 255, 0));
     registerOtaTestMarker();
     // Keep custom parameters on their own native Save parameters page. This
-    // lets the browser contract exercise a parameter-only submit without
+    // lets the browser test harness exercise a parameter-only submit without
     // starting a station connection as part of the regression test.
     wifi.portalSetLayoutParamsLocation(PortalParamsLocation::SetupPage);
     for (auto* parameter : kPortalParameters) {

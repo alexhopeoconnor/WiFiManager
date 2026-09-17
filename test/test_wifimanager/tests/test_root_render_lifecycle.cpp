@@ -87,8 +87,8 @@ void test_portal_default_presentation() {
     TEST_ASSERT_NOT_EQUAL(-1, bootstrap.indexOf(F("\"logoAltText\":\"\"")));
 }
 
-void test_bootstrap_json_contract_v3() {
-    Serial.println("[TEST]   Testing bootstrap JSON v3 contract...");
+void test_bootstrap_json_schema_v3() {
+    Serial.println("[TEST]   Testing bootstrap JSON v3 schema...");
 
     WiFiManager wm;
     WiFiManagerHandlers handlers(&wm);
@@ -143,7 +143,7 @@ void test_bootstrap_json_contract_v3() {
     TEST_ASSERT_EQUAL(-1, j.indexOf(F("\"portalTimeoutSecondsRemaining\":0")));
     wm.wmTestSetPortalActive(false);
 
-    Serial.println("[TEST]   Bootstrap JSON v2 contract test completed successfully");
+    Serial.println("[TEST]   Bootstrap JSON v3 schema test completed successfully");
 }
 
 void test_bootstrap_json_snapshot_consistency() {

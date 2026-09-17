@@ -939,6 +939,11 @@ void WiFiManagerHandlers::handleUpdating(AsyncWebServerRequest *request, String 
     }
     
     #ifdef ESP8266
+      // ESPAsyncWebServer invokes this upload callback from the ESP8266 SYS
+      // context. The core's default Updater mode yields around flash erases
+      // and writes, but yield() panics from that context. Tell the core this
+      // upload is asynchronous before the first Update call.
+      Update.runAsync(true);
       WiFiUDP::stopAll();
       uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
     #elif defined(ESP32)
@@ -1610,4 +1615,3 @@ void WiFiManagerHandlers::handleApiPortalExit(AsyncWebServerRequest *request) {
 }
 
 #endif // defined(ESP8266) || defined(ESP32)
-

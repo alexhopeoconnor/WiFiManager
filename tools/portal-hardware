@@ -52,6 +52,12 @@ ota_environment_b=""
 ota_firmware_a=""
 ota_firmware_b=""
 ota_browser_prebuilt="no"
+ota_serial_capture_pid=""
+ota_serial_capture_log=""
+ota_serial_capture_ready=""
+ota_serial_capture_status=""
+station_handoff_env_file=""
+station_handoff_fixture_restore_needed="no"
 # `wm_create_portal_connection` sets these before NetworkManager mutates the
 # secondary adapter.  Keeping the ownership record in-process means the
 # signal trap can clean up the exact pending or active connection immediately.
@@ -81,6 +87,14 @@ require_common() {
     wm_require docker
     wm_require curl
     docker compose version >/dev/null
+}
+
+require_ota_serial_capture() {
+    wm_require python3
+    python3 -c 'import serial' >/dev/null 2>&1 || {
+        echo "Portal OTA serial evidence requires Python pyserial (for example, python3-serial)." >&2
+        return 1
+    }
 }
 
 wm_pio_executable() {
@@ -119,11 +133,9 @@ pio_for_portal_environment() {
     shift
 
     case "$environment" in
-        # The ESP32 A/B fixture extends the 3.3.11 environment. Its package
-        # graph must not share a Core directory with the legacy 3.0.5 portal
-        # fixture, whose tool-esptoolpy package name collides with current
-        # pioarduino metadata.
-        esp32_core_3_3_11|esp32_ota_*)
+        # Keep the maintained Core 3.3.11 graph in the same persistent cache
+        # as the ESP32 A/B fixture. It is never cleared by this test harness.
+        esp32|esp32_ota_*)
             ;;
         *)
             wm_pio "$@"
@@ -164,6 +176,20 @@ validate_run_arguments() {
         echo "Station environment file is not readable: $station_env" >&2
         exit 1
     }
+    if [[ -n "$station_env" ]]; then
+        [[ "$command_name" == "run" ]] || {
+            echo "--station-env is supported only by the browser-backed run command." >&2
+            exit 2
+        }
+        [[ "$browser" == "auto" ]] || {
+            echo "--station-env requires --browser auto so the real hand-off is exercised." >&2
+            exit 2
+        }
+        [[ "$capture_readme_media" == "no" ]] || {
+            echo "--station-env cannot be combined with README media capture." >&2
+            exit 2
+        }
+    fi
     if [[ "$capture_readme_media" == "yes" ]]; then
         [[ "$command_name" == "run" && "$platform" == "esp32" ]] || {
             echo "--capture-readme-media is supported only by run --platform esp32" >&2
@@ -200,6 +226,96 @@ validate_run_arguments() {
     fi
 }
 
+read_station_handoff_value() {
+    local requested_key="$1" line value="" found=no
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Accept the documented KEY=VALUE file format without evaluating it as
+        # shell code. A value may contain '=' but not a second declaration of
+        # the same key, which would make the generated minimal file ambiguous.
+        line="${line%$'\r'}"
+        case "$line" in
+            "$requested_key"=*)
+                [[ "$found" == no ]] || {
+                    echo "Station environment defines $requested_key more than once." >&2
+                    return 1
+                }
+                value="${line#*=}"
+                found=yes
+                ;;
+        esac
+    done <"$station_env"
+    [[ "$found" == yes && -n "$value" ]] || {
+        echo "Station environment must define a non-empty $requested_key value." >&2
+        return 1
+    }
+    printf '%s' "$value"
+}
+
+prepare_station_handoff_env() {
+    local ssid password
+    ssid="$(read_station_handoff_value WIFI_SSID)" || return 1
+    password="$(read_station_handoff_value WIFI_PASSWORD)" || return 1
+    station_handoff_env_file="$(mktemp "$output_dir/.portal-station.XXXXXX")" || {
+        echo 'Could not create the private station-handoff environment file.' >&2
+        return 1
+    }
+    if ! {
+        printf 'WIFI_SSID=%s\n' "$ssid"
+        printf 'WIFI_PASSWORD=%s\n' "$password"
+    } >"$station_handoff_env_file"; then
+        rm -f -- "$station_handoff_env_file"
+        station_handoff_env_file=""
+        echo 'Could not write the private station-handoff environment file.' >&2
+        return 1
+    fi
+    if ! chmod 600 "$station_handoff_env_file"; then
+        rm -f -- "$station_handoff_env_file"
+        station_handoff_env_file=""
+        echo 'Could not protect the private station-handoff environment file.' >&2
+        return 1
+    fi
+    export PORTAL_STATION_ENV_HOST="$station_handoff_env_file"
+}
+
+remove_station_handoff_env() {
+    [[ -n "$station_handoff_env_file" ]] || return 0
+    if ! rm -f -- "$station_handoff_env_file"; then
+        echo 'Could not remove the private station-handoff environment file.' >&2
+        return 1
+    fi
+    station_handoff_env_file=""
+    unset PORTAL_STATION_ENV_HOST
+}
+
+restore_station_handoff_fixture() {
+    local ssid
+    [[ "$station_handoff_fixture_restore_needed" == yes ]] || return 0
+    # The optional browser hand-off deliberately persists its supplied station
+    # credentials long enough to exercise WiFiManager's real connect path.
+    # Reflash the same portal-only fixture afterwards: its setup() calls
+    # resetSettings(), so the selected test board returns to a no-station
+    # state without retaining a developer's Wi-Fi credentials. This is normal
+    # test cleanup, not OTA evidence; the OTA command never accepts a station
+    # environment and never calls this function.
+    printf 'Restoring the clean portal-only fixture after station hand-off.\n'
+    if ! pio_for_portal_environment "$platform" run -d "$root/test/portal-harness" -e "$platform" \
+        -t upload --upload-port "$port"; then
+        echo 'Could not restore the clean portal-only fixture after station hand-off.' >&2
+        return 1
+    fi
+    # The board deliberately disappears during the cleanup reflash. Require
+    # its fixture AP to return and be routed through the owned secondary
+    # adapter before declaring the developer-supplied credentials scrubbed.
+    ssid="$(wm_portal_ssid "$platform")" || return 1
+    if ! wm_wait_for_portal_ssid "$client_interface" "$ssid" || \
+        ! wm_verify_portal_route "$client_interface" || \
+        ! wait_for_portal_ready; then
+        echo 'The clean portal-only fixture did not return after station hand-off cleanup.' >&2
+        return 1
+    fi
+    station_handoff_fixture_restore_needed="no"
+}
+
 write_readme_media_manifest() {
     local media_dir="$output_dir/readme-media"
     local required
@@ -217,7 +333,7 @@ write_readme_media_manifest() {
 wait_for_portal_ready() {
     # A portal SSID can be visible before its first background scan has
     # completed. Wait for that normal portal-start work before the browser
-    # contract asks the device to perform a second, user-initiated refresh.
+    # test harness asks the device to perform a second, user-initiated refresh.
     local attempt response
     for attempt in $(seq 1 45); do
         response="$(curl --interface "$client_interface" --connect-timeout 3 --max-time 5 \
@@ -236,13 +352,16 @@ wait_for_portal_ready() {
 }
 
 start_portal_session() {
-    local environment="${1:-$platform}" erase_before_upload="${2:-no}" expected_a_artifact="${3:-}" ssid
+    local environment="${1:-$platform}" erase_before_upload="${2:-no}" expected_a_artifact="${3:-}" capture_ota_serial="${4:-no}" ssid reconnect_after_drop="no"
     validate_run_arguments
     require_common
     wm_acquire_hardware_lock
     wm_require_no_active_session
-    wm_require_client_adapter "$client_interface" "$takeover"
+    # Choose the real NetworkManager authorization path before inspecting the
+    # secondary adapter. A headless shell must not mistake a denied inspection
+    # for an idle adapter and then replace a connection it does not own.
     wm_prepare_networkmanager_authorization
+    wm_require_client_adapter "$client_interface" "$takeover"
     prepare_output_dir
     ssid="$(wm_portal_ssid "$platform")"
 
@@ -255,10 +374,23 @@ start_portal_session() {
         ota_assert_a_artifact_matches_build "$expected_a_artifact"
     fi
     pio_for_portal_environment "$environment" run -d "$root/test/portal-harness" -e "$environment" -t upload --upload-port "$port"
+    if [[ "$capture_ota_serial" == yes ]]; then
+        # Attach only after PlatformIO releases the serial port. Capture the
+        # complete A boot, including portal start and DHCP, before the adapter
+        # is asked to associate with the fixture AP.
+        start_ota_serial_capture
+    fi
     if [[ -n "$expected_a_artifact" ]]; then
         ota_assert_a_artifact_matches_build "$expected_a_artifact"
     fi
-    if ! wm_create_portal_connection "$client_interface" "$ssid" "default1" "$platform"; then
+    # OTA and the optional station hand-off both deliberately reboot the test
+    # board. Let only those owned disposable profiles reassociate after that
+    # outage; ordinary portal work keeps the secondary adapter inert after its
+    # current run.
+    if [[ "$capture_ota_serial" == yes || -n "$station_env" ]]; then
+        reconnect_after_drop=yes
+    fi
+    if ! wm_create_portal_connection "$client_interface" "$ssid" "default1" "$platform" "$reconnect_after_drop"; then
         return 1
     fi
     if ! wm_verify_portal_route "$client_interface"; then
@@ -445,14 +577,14 @@ validate_running_ota_capacity() {
     ota_assert_firmware_fits "$ota_firmware_b" "$capacity" B
 }
 
-configure_ota_contract_environment() {
+configure_ota_harness_environment() {
     export PORTAL_ARTIFACT_DIR="$output_dir"
     export LOCAL_UID="$(id -u)"
     export LOCAL_GID="$(id -g)"
     export PORTAL_BROWSER_MODE=auto
-    # OTA is its own contract. Do not inherit a developer's unrelated media,
+    # OTA is its own test harness. Do not inherit a developer's unrelated media,
     # stress, target, or test-selection setting into a physical firmware run.
-    export PORTAL_CONTRACT_DOCKER_TARGET=portal-contract
+    export PORTAL_HARNESS_DOCKER_TARGET=portal-harness
     export PORTAL_CAPTURE_README_MEDIA=0
     export PORTAL_CUSTOM_PARAMETER_STRESS=0
     export PORTAL_TEST_FILE=tests/ota.spec.js
@@ -464,36 +596,119 @@ configure_ota_contract_environment() {
 
 ota_compose_files() {
     printf '%s\n' \
-        -f "$root/tests/portal-contract/compose.yaml" \
-        -f "$root/tests/portal-contract/compose.ota.yaml"
+        -f "$root/tests/portal-harness/compose.yaml" \
+        -f "$root/tests/portal-harness/compose.ota.yaml"
 }
 
-prepare_ota_contract_image() {
+prepare_ota_harness_image() {
     local -a compose_files
-    configure_ota_contract_environment
+    configure_ota_harness_environment
     mapfile -t compose_files < <(ota_compose_files)
     # Build before A is flashed. A cold Playwright build can otherwise consume
     # the finite portal window before the browser has connected.
-    docker compose "${compose_files[@]}" build portal-contract
+    docker compose "${compose_files[@]}" build portal-harness
     ota_browser_prebuilt=yes
 }
 
-run_ota_contract() {
+run_ota_harness() {
     local -a compose_files
-    configure_ota_contract_environment
+    configure_ota_harness_environment
     mapfile -t compose_files < <(ota_compose_files)
     [[ "$ota_browser_prebuilt" == yes ]] || {
         echo "Portal OTA browser image was not prepared before A was flashed." >&2
         return 1
     }
-    docker compose "${compose_files[@]}" run --rm portal-contract
+    docker compose "${compose_files[@]}" run --rm portal-harness
+}
+
+start_ota_serial_capture() {
+    local attempt
+    ota_serial_capture_log="$output_dir/serial-ota.log"
+    ota_serial_capture_ready="$output_dir/.serial-ota.ready"
+    ota_serial_capture_status="$output_dir/serial-ota-capture.log"
+    rm -f -- "$ota_serial_capture_ready"
+    install -m 600 /dev/null "$ota_serial_capture_log"
+    install -m 600 /dev/null "$ota_serial_capture_status"
+    python3 "$root/tools/capture-serial.py" \
+        --port "$port" \
+        --output "$ota_serial_capture_log" \
+        --ready-file "$ota_serial_capture_ready" \
+        >>"$ota_serial_capture_status" 2>&1 &
+    ota_serial_capture_pid=$!
+
+    for attempt in $(seq 1 50); do
+        [[ -f "$ota_serial_capture_ready" ]] && return 0
+        if ! kill -0 "$ota_serial_capture_pid" >/dev/null 2>&1; then
+            wait "$ota_serial_capture_pid" || true
+            ota_serial_capture_pid=""
+            echo "Portal OTA serial recorder exited before it became ready: $ota_serial_capture_status" >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+    echo "Portal OTA serial recorder did not become ready: $ota_serial_capture_status" >&2
+    stop_ota_serial_capture || true
+    return 1
+}
+
+require_ota_serial_capture_running() {
+    [[ -n "$ota_serial_capture_pid" ]] && kill -0 "$ota_serial_capture_pid" >/dev/null 2>&1 || {
+        echo "Portal OTA serial recorder stopped unexpectedly: $ota_serial_capture_status" >&2
+        return 1
+    }
+}
+
+assert_ota_serial_sequence() {
+    python3 - "$ota_serial_capture_log" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8", errors="replace") as source:
+    lines = source.readlines()
+
+def first_after(marker, start=0):
+    for index in range(start, len(lines)):
+        if marker in lines[index]:
+            return index
+    return None
+
+a = first_after("WiFiManager portal OTA fixture image: A")
+upload_started = first_after("[OTA] Update file:", (a or 0) + 1)
+upload_completed = first_after("[OTA] OTA FILE END bytes:", (upload_started or 0) + 1)
+b = first_after("WiFiManager portal OTA fixture image: B", (upload_completed or 0) + 1)
+
+if None in (a, upload_started, upload_completed, b):
+    raise SystemExit("Serial portal-OTA evidence is missing its required A/upload/B ordering.")
+PY
+}
+
+stop_ota_serial_capture() {
+    local status=0
+    [[ -n "$ota_serial_capture_pid" ]] || return 0
+    if kill -0 "$ota_serial_capture_pid" >/dev/null 2>&1; then
+        kill -TERM "$ota_serial_capture_pid" >/dev/null 2>&1 || status=1
+    fi
+    if ! wait "$ota_serial_capture_pid"; then
+        status=1
+    fi
+    ota_serial_capture_pid=""
+    (( status == 0 )) || return "$status"
+    if ! assert_ota_serial_sequence; then
+        echo "Serial portal-OTA evidence did not observe ordered A/upload/B markers: $ota_serial_capture_log" >&2
+        return 1
+    fi
 }
 
 finish_portal_session() {
-    wm_load_state
-    wm_prepare_networkmanager_authorization
-    wm_remove_connection "$WM_PORTAL_CONNECTION_UUID" "$WM_PORTAL_CONNECTION_NAME"
-    wm_clear_state
+    # A normal run already owns an in-process record. `down` starts fresh, so
+    # load its retained exact record and select the scoped authorization path
+    # before attempting deletion.
+    if [[ "${WM_PORTAL_CONNECTION_OWNED:-no}" != "yes" ]]; then
+        wm_load_state
+        wm_prepare_networkmanager_authorization
+        WM_PORTAL_CONNECTION_OWNED=yes
+    fi
+    wm_cleanup_created_connection
 }
 
 cleanup_portal_session() {
@@ -501,9 +716,21 @@ cleanup_portal_session() {
     # A signal must never fall through into the rest of the hardware run, and
     # a recursive EXIT trap must not obscure the original status.
     trap - EXIT HUP INT TERM
+    stop_ota_serial_capture || true
+    if ! restore_station_handoff_fixture; then
+        (( status != 0 )) || status=1
+    fi
+    if ! remove_station_handoff_env; then
+        (( status != 0 )) || status=1
+    fi
     if [[ "${WM_PORTAL_CONNECTION_OWNED:-no}" == "yes" ]] && \
         { (( status != 0 )) || { [[ "$command_name" != "up" && "$keep" != "yes" ]]; }; }; then
-        wm_cleanup_created_connection || true
+        if ! wm_cleanup_created_connection; then
+            # Preserve an existing run failure, but never turn an otherwise
+            # successful browser/OTA run into a claimed pass when its owned
+            # NetworkManager connection could not be removed.
+            (( status != 0 )) || status=1
+        fi
     fi
     exit "$status"
 }
@@ -518,6 +745,9 @@ case "$command_name" in
         [[ -n "$client_interface" ]] || usage
         require_common
         wm_acquire_hardware_lock
+        # Doctor is read-only, but it must validate the same authorization
+        # path as a real portal command before it calls an adapter safe.
+        wm_prepare_networkmanager_authorization
         wm_require_client_adapter "$client_interface" "$takeover"
         wm_report_networkmanager_authorization
         printf 'Portal hardware prerequisites are ready. Main route is untouched; client adapter: %s\n' "$client_interface"
@@ -528,7 +758,10 @@ case "$command_name" in
     down)
         [[ -z "$platform$port$client_interface$station_env$output_dir" ]] || usage
         wm_acquire_hardware_lock
-        finish_portal_session
+        if ! finish_portal_session; then
+            trap - EXIT HUP INT TERM
+            exit 1
+        fi
         echo 'Portal client connection removed.'
         ;;
     run)
@@ -547,24 +780,36 @@ case "$command_name" in
         export PORTAL_PLATFORM="$platform"
         if [[ "$capture_readme_media" == "yes" ]]; then
             export PORTAL_CAPTURE_README_MEDIA=1
-            export PORTAL_CONTRACT_DOCKER_TARGET=media
+            export PORTAL_HARNESS_DOCKER_TARGET=media
         else
             export PORTAL_CAPTURE_README_MEDIA=0
-            export PORTAL_CONTRACT_DOCKER_TARGET=portal-contract
+            export PORTAL_HARNESS_DOCKER_TARGET=portal-harness
         fi
-        compose_files=(-f "$root/tests/portal-contract/compose.yaml")
+        compose_files=(-f "$root/tests/portal-harness/compose.yaml")
         if [[ -n "$station_env" ]]; then
-            export PORTAL_STATION_ENV_HOST="$(cd "$(dirname "$station_env")" && pwd)/$(basename "$station_env")"
-            compose_files+=(-f "$root/tests/portal-contract/compose.station.yaml")
+            prepare_station_handoff_env
+            compose_files+=(-f "$root/tests/portal-harness/compose.station.yaml")
+            # Once the browser can receive the private station credentials,
+            # every exit path must return the board to the fixture's clean
+            # portal-only state. The EXIT trap covers a browser failure; the
+            # explicit success-path call below keeps a cleanup failure from
+            # being announced as a passing test.
+            station_handoff_fixture_restore_needed=yes
         fi
-        # The contract source is copied into the image; rebuild with Docker cache so
+        # The test-harness source is copied into the image; rebuild with Docker cache so
         # this invocation always tests the checked-out files, not a stale image.
-        docker compose "${compose_files[@]}" build portal-contract
-        docker compose "${compose_files[@]}" run --rm portal-contract
+        docker compose "${compose_files[@]}" build portal-harness
+        docker compose "${compose_files[@]}" run --rm portal-harness
+        restore_station_handoff_fixture
+        remove_station_handoff_env
         if [[ "$capture_readme_media" == "yes" ]]; then
             write_readme_media_manifest
         fi
-        printf 'Portal contract passed. Artifacts: %s\n' "$output_dir"
+        if [[ "$keep" != "yes" ]] && ! finish_portal_session; then
+            trap - EXIT HUP INT TERM
+            exit 1
+        fi
+        printf 'Portal test harness passed. Artifacts: %s\n' "$output_dir"
         if [[ "$keep" == "yes" ]]; then
             printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
         fi
@@ -577,27 +822,38 @@ case "$command_name" in
         require_common
         wm_acquire_hardware_lock
         wm_require_no_active_session
-        wm_require_client_adapter "$client_interface" "$takeover"
         wm_prepare_networkmanager_authorization
+        wm_require_client_adapter "$client_interface" "$takeover"
+        require_ota_serial_capture
         prepare_output_dir
         prepare_ota_firmware
-        prepare_ota_contract_image
-        start_portal_session "$ota_environment_a" yes "$ota_firmware_a"
+        prepare_ota_harness_image
+        start_portal_session "$ota_environment_a" yes "$ota_firmware_a" yes
 
         # A must be visible through the real portal before a B upload can be
         # meaningful. On ESP8266 the marker also reports the actual active
         # sketch-space limit, which is checked before the browser sees B.
         wait_for_ota_marker A >/dev/null
         validate_running_ota_capacity
-        run_ota_contract
+        run_ota_harness
 
-        # The browser contract has already required an outage and two B
+        # The browser test harness has already required an outage and two B
         # observations. Repeat the host-side observation after the container
-        # exits so the named secondary adapter is also proven to see B.
+        # exits so the named secondary adapter is also proven to rediscover
+        # the returned AP and see B. This is AP routing, not a LAN IP shortcut.
+        wm_wait_for_portal_ssid "$client_interface" "$(wm_portal_ssid "$platform")"
+        wm_verify_portal_route "$client_interface"
         wait_for_ota_marker B >/dev/null
+        require_ota_serial_capture_running
         sleep 1
         wait_for_ota_marker B >/dev/null
-        printf 'Portal HTTP OTA contract passed. Artifacts: %s\n' "$output_dir"
+        require_ota_serial_capture_running
+        stop_ota_serial_capture
+        if [[ "$keep" != "yes" ]] && ! finish_portal_session; then
+            trap - EXIT HUP INT TERM
+            exit 1
+        fi
+        printf 'Portal HTTP OTA test harness passed. Artifacts: %s\n' "$output_dir"
         if [[ "$keep" == "yes" ]]; then
             printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
         fi

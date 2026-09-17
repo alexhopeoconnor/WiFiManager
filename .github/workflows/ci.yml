@@ -22,10 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash -n scripts/*.sh tools/check-ota-partitions.sh tools/portal-hardware tools/lib/*.sh tools/tests/*.sh
       - run: |
-          for spec in tests/portal-contract/tests/*.js; do
+          for spec in tests/portal-harness/tests/*.js; do
             node --check "$spec"
           done
-      - run: ./tools/tests/test-portal-hardware-cli.sh
+      - run: timeout 15s python3 tools/tests/test-capture-serial.py
       - run: ./tools/check-ota-partitions.sh
       - run: ./scripts/check-docs.sh
 
@@ -41,14 +41,6 @@ jobs:
             unity: true
           - platform: esp32
             examples: true
-            ota_fixtures: false
-            unity: true
-          - platform: esp32-current
-            examples: false
-            # Keep current A/B OTA builds in their own worker. PlatformIO uses
-            # one package-name directory for tool-esptoolpy, so mixing legacy
-            # 3.0.5 and current 3.3.11 graphs in a single cache is not a
-            # meaningful compatibility test.
             ota_fixtures: true
             unity: true
     steps:
@@ -60,8 +52,6 @@ jobs:
       - run: ./scripts/test.sh compile --platform ${{ matrix.platform }}
       - if: matrix.unity
         run: ./scripts/test.sh unity --platform ${{ matrix.platform }}
-      - if: matrix.platform == 'esp32-current'
-        run: ./scripts/test.sh packages --platform esp32-current
       - if: matrix.examples
         run: ./scripts/test.sh examples --platform ${{ matrix.platform }}
       - if: matrix.ota_fixtures

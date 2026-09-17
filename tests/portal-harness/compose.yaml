@@ -1,9 +1,13 @@
 services:
-  portal-contract:
+  portal-harness:
     build:
-      context: ../..
-      dockerfile: tests/portal-contract/Dockerfile
-      target: ${PORTAL_CONTRACT_DOCKER_TARGET:-portal-contract}
+      # Keep Docker's build context limited to the browser test harness. A
+      # developer may point --station-env or --output anywhere in the repo;
+      # neither source credentials nor the generated two-key file may cross
+      # the host-to-Docker boundary during image build.
+      context: .
+      dockerfile: Dockerfile
+      target: ${PORTAL_HARNESS_DOCKER_TARGET:-portal-harness}
       args:
         PLAYWRIGHT_VERSION: "1.63.0"
     network_mode: host

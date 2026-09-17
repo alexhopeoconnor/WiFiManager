@@ -63,4 +63,4 @@ if awk -F, '
     exit 1
 fi
 
-echo "ESP32 OTA partition contract passed: $table"
+echo "ESP32 OTA partition test-harness check passed: $table"

@@ -24,6 +24,8 @@ async function waitForCompletedScan(request) {
 
 test.describe('WiFiManager README media', () => {
   test.skip(process.env.PORTAL_CAPTURE_README_MEDIA !== '1', 'README capture was not requested.');
+  test.skip(Boolean(process.env.PORTAL_STATION_ENV),
+    'README recording is unavailable when a station hand-off carries local credentials.');
 
   test('records an approved ESP32 portal tour', async ({ browser, request }) => {
     const context = await browser.newContext({
@@ -43,7 +45,7 @@ test.describe('WiFiManager README media', () => {
     const video = page.video();
     await page.goto('/', { waitUntil: 'networkidle' });
     await expect(page.locator('#wm-reset-portal-timeout')).toBeVisible();
-    // These pauses exist only in the README recording. The ordinary contract
+    // These pauses exist only in the README recording. The ordinary test harness
     // remains timing-focused; this tour needs readable stable states.
     await page.waitForTimeout(1200);
     await page.screenshot({ path: mediaPath('portal-overview.png'), fullPage: true });

@@ -6,7 +6,7 @@ Apply presentation before autoConnect(), startConfigPortal(), or startWebPortal(
 
 ## Portal views
 
-These ESP32 captures use the same real-board portal contract described in
+These ESP32 captures use the same real-board portal test harness described in
 [Testing](TESTING.md). The nearby networks shown are the networks visible to
 the capture device when the portal scans.
 
@@ -61,7 +61,7 @@ void setup() {
 void loop() { wifi.process(); }
 ~~~
 
-The complete buildable example is [Branded Portal](../examples/BrandedPortal/BrandedPortal.ino). The compile fixture exercises this API on ESP8266 and ESP32.
+The complete buildable example is [Branded Portal](../examples/BrandedPortal/BrandedPortal.ino). The compile fixture exercises this API on ESP8266 and the maintained ESP32 3.3.11 baseline.
 
 ## Presentation reference
 

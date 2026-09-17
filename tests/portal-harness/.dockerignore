@@ -1,0 +1,10 @@
+# The harness image needs only checked-in browser-test sources. Keep local
+# artifacts and any credential-shaped file out even when a developer chooses
+# an output path inside this directory.
+node_modules
+artifacts
+**/artifacts
+*.env
+**/*.env
+.portal-station.*
+**/.portal-station.*

@@ -40,7 +40,7 @@ TestCase tests[] = {
     TEST_ENTRY(test_get_config_portal_ssid),
     TEST_ENTRY(test_bootstrap_json_portal_feature_flags),
     TEST_ENTRY(test_portal_default_presentation),
-    TEST_ENTRY(test_bootstrap_json_contract_v3),
+    TEST_ENTRY(test_bootstrap_json_schema_v3),
     TEST_ENTRY(test_bootstrap_json_snapshot_consistency),
     TEST_ENTRY(test_root_render_interleaved_context_isolation),
     TEST_ENTRY(test_portal_presentation_configuration),

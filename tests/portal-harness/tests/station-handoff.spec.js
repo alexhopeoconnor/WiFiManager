@@ -1,3 +1,4 @@
+// Optional LAN handoff exercised by the portal test harness.
 const fs = require('fs');
 const { test, expect } = require('@playwright/test');
 

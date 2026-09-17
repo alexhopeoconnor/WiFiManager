@@ -87,13 +87,13 @@ function waitForOtaResponse(page) {
   });
 }
 
-test.describe('portal HTTP OTA contract', () => {
+test.describe('portal HTTP OTA test harness', () => {
   test('uploads B through the rendered portal form, requires automatic reboot, and observes B twice', async ({ page, request }) => {
     test.skip(!firmware, 'OTA firmware is mounted only for portal-hardware ota.');
     // Initial portal availability, an observed outage, and two fresh B
     // responses each have their own bounded waits. Keep the overall budget
     // larger than their sum so a valid slow reassociation is not killed by
-    // Playwright before the fixture contract has concluded.
+    // Playwright before the fixture test harness has concluded.
     test.setTimeout(300_000);
 
     const initial = await waitForMarker(request, initialMarker);

@@ -6,22 +6,59 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
+  documentation:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/*.sh tools/check-ota-partitions.sh tools/portal-hardware tools/lib/*.sh tools/tests/*.sh
+      - run: |
+          for spec in tests/portal-harness/tests/*.js; do
+            node --check "$spec"
+          done
+      - run: timeout 15s python3 tools/tests/test-capture-serial.py
+      - run: ./tools/check-ota-partitions.sh
+      - run: ./scripts/check-docs.sh
+
+  compile-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: esp8266
+            examples: true
+            ota_fixtures: true
+            unity: true
+          - platform: esp32
+            examples: true
+            ota_fixtures: true
+            unity: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: python -m pip install --upgrade platformio==6.1.19
-      - run: ./scripts/test.sh compile --platform esp8266
-      - run: ./scripts/test.sh examples --platform esp8266
-      - run: ./scripts/test.sh compile --platform esp32
-      - run: ./scripts/test.sh examples --platform esp32
-      - run: ./scripts/check-docs.sh
+      - run: ./scripts/test.sh compile --platform ${{ matrix.platform }}
+      - if: matrix.unity
+        run: ./scripts/test.sh unity --platform ${{ matrix.platform }}
+      - if: matrix.examples
+        run: ./scripts/test.sh examples --platform ${{ matrix.platform }}
+      - if: matrix.ota_fixtures
+        run: ./scripts/test.sh ota-fixtures --platform ${{ matrix.platform }}
+
+  publish:
+    needs:
+      - documentation
+      - compile-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
       - run: ./scripts/prepare-release.sh "$GITHUB_REF_NAME"
       - run: ./scripts/release-notes.sh "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
       - run: >-

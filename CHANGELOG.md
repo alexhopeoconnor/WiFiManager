@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.5
+
+- Prevent ESP8266 portal firmware uploads from yielding in ESPAsyncWebServer's
+  SYS callback. The updater now enters asynchronous mode before its first
+  erase or write, so the real browser upload can complete and restart into
+  the new firmware image.
+
 ## 3.2.4
 
 - Correct profile-backed Wi-Fi hand-off from the embedded web portal: the

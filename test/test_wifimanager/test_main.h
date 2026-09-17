@@ -39,7 +39,7 @@ void test_config_portal_already_active();
 void test_get_config_portal_ssid();
 void test_bootstrap_json_portal_feature_flags();
 void test_portal_default_presentation();
-void test_bootstrap_json_contract_v3();
+void test_bootstrap_json_schema_v3();
 void test_bootstrap_json_snapshot_consistency();
 void test_root_render_interleaved_context_isolation();
 void test_portal_presentation_configuration();

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# README-media renderer used by the portal test harness.
 set -euo pipefail
 
 artifact_dir="${ARTIFACT_DIR:?ARTIFACT_DIR is required}"

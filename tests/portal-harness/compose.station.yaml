@@ -1,5 +1,5 @@
 services:
-  portal-contract:
+  portal-harness:
     environment:
       PORTAL_STATION_ENV: /run/secrets/portal-station.env
     volumes:
