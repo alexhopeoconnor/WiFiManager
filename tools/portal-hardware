@@ -242,6 +242,7 @@ start_portal_session() {
     wm_acquire_hardware_lock
     wm_require_no_active_session
     wm_require_client_adapter "$client_interface" "$takeover"
+    wm_prepare_networkmanager_authorization
     prepare_output_dir
     ssid="$(wm_portal_ssid "$platform")"
 
@@ -490,6 +491,7 @@ run_ota_contract() {
 
 finish_portal_session() {
     wm_load_state
+    wm_prepare_networkmanager_authorization
     wm_remove_connection "$WM_PORTAL_CONNECTION_UUID" "$WM_PORTAL_CONNECTION_NAME"
     wm_clear_state
 }
@@ -517,6 +519,7 @@ case "$command_name" in
         require_common
         wm_acquire_hardware_lock
         wm_require_client_adapter "$client_interface" "$takeover"
+        wm_report_networkmanager_authorization
         printf 'Portal hardware prerequisites are ready. Main route is untouched; client adapter: %s\n' "$client_interface"
         ;;
     up)
@@ -575,6 +578,7 @@ case "$command_name" in
         wm_acquire_hardware_lock
         wm_require_no_active_session
         wm_require_client_adapter "$client_interface" "$takeover"
+        wm_prepare_networkmanager_authorization
         prepare_output_dir
         prepare_ota_firmware
         prepare_ota_contract_image

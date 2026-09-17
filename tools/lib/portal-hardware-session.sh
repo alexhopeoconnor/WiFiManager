@@ -13,6 +13,107 @@ wm_require() {
     }
 }
 
+wm_nmcli_permission() {
+    local permission="$1"
+    awk -F: -v permission="$permission" '$1 == permission { print $2; exit }' \
+        <<<"${WM_NMCLI_PERMISSIONS:-}"
+}
+
+wm_prepare_networkmanager_authorization() {
+    # A GUI Polkit agent can authorize direct nmcli actions. An SSH/headless
+    # shell has no such agent on many Linux hosts, even for a sudo-capable
+    # developer. Resolve that host-side boundary before an erase/upload, then
+    # use one fixed command path rather than suppressing an unauthorized scan
+    # and later misreporting an SSID timeout.
+    local permission value direct=yes
+    case "${WM_NMCLI_AUTH:-auto}" in
+        auto|direct|sudo) ;;
+        *)
+            echo 'WM_NMCLI_AUTH must be auto, direct, or sudo.' >&2
+            return 2
+            ;;
+    esac
+    [[ "${WM_NMCLI_AUTH_READY:-no}" == yes ]] && return 0
+
+    WM_NMCLI_PERMISSIONS="$(nmcli -t -f PERMISSION,VALUE general permissions 2>/dev/null || true)"
+    for permission in \
+        org.freedesktop.NetworkManager.wifi.scan \
+        org.freedesktop.NetworkManager.network-control \
+        org.freedesktop.NetworkManager.settings.modify.system; do
+        value="$(wm_nmcli_permission "$permission")"
+        [[ "$value" == yes ]] || direct=no
+    done
+
+    case "${WM_NMCLI_AUTH:-auto}" in
+        direct)
+            WM_NMCLI_MODE=direct
+            ;;
+        sudo)
+            WM_NMCLI_MODE=sudo
+            ;;
+        auto)
+            if [[ "$direct" == yes ]]; then
+                WM_NMCLI_MODE=direct
+            elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+                WM_NMCLI_MODE=sudo
+            else
+                # Give a graphical Polkit agent the chance to authorize the
+                # action. A failure is reported verbatim by wm_nmcli.
+                WM_NMCLI_MODE=direct
+            fi
+            ;;
+    esac
+
+    if [[ "$WM_NMCLI_MODE" == sudo ]]; then
+        command -v sudo >/dev/null 2>&1 || {
+            echo 'NetworkManager requires authorization, but sudo is unavailable. Use a graphical Polkit session or install/configure sudo.' >&2
+            return 1
+        }
+        echo 'NetworkManager requires scoped authorization for the named portal adapter; validating sudo before the board is flashed.' >&2
+        sudo -v || {
+            echo 'Could not validate sudo for the scoped NetworkManager portal actions.' >&2
+            return 1
+        }
+    fi
+    WM_NMCLI_AUTH_READY=yes
+    export WM_NMCLI_MODE WM_NMCLI_AUTH_READY WM_NMCLI_PERMISSIONS
+}
+
+wm_report_networkmanager_authorization() {
+    local permission value direct=yes
+    WM_NMCLI_PERMISSIONS="$(nmcli -t -f PERMISSION,VALUE general permissions 2>/dev/null || true)"
+    for permission in \
+        org.freedesktop.NetworkManager.wifi.scan \
+        org.freedesktop.NetworkManager.network-control \
+        org.freedesktop.NetworkManager.settings.modify.system; do
+        value="$(wm_nmcli_permission "$permission")"
+        [[ "$value" == yes ]] || direct=no
+    done
+    if [[ "$direct" == yes ]]; then
+        echo 'NetworkManager portal authorization: direct.'
+    elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+        echo 'NetworkManager portal authorization: scoped sudo will be requested before a portal command flashes the board.'
+    else
+        echo 'NetworkManager portal authorization: graphical Polkit may authorize actions; set WM_NMCLI_AUTH=sudo to use scoped sudo instead.'
+    fi
+}
+
+wm_nmcli() {
+    # Only this small set of nmcli calls is elevated when the preflight selects
+    # sudo. The runner, artifacts, and session record remain owned by the
+    # invoking developer; every mutating call still names the guarded adapter
+    # or a generated temporary connection.
+    if [[ "${WM_NMCLI_MODE:-direct}" == sudo ]]; then
+        sudo -n true || {
+            echo 'The sudo authorization for scoped NetworkManager actions expired; run sudo -v and retry the portal command.' >&2
+            return 1
+        }
+        sudo -n -- nmcli "$@"
+    else
+        nmcli "$@"
+    fi
+}
+
 wm_default_route_interface() {
     ip route show default 2>/dev/null | awk '/^default/{print $5; exit}'
 }
@@ -47,7 +148,7 @@ wm_require_client_adapter() {
         echo "Refusing to use the host default-route interface: $interface" >&2
         return 1
     }
-    active_connection="$(nmcli -g GENERAL.CONNECTION device show "$interface" 2>/dev/null || true)"
+    active_connection="$(wm_nmcli -g GENERAL.CONNECTION device show "$interface" 2>/dev/null || true)"
     if [[ -n "$active_connection" && "$active_connection" != "--" && "$allow_takeover" != "yes" ]]; then
         echo "Client adapter $interface already has connection '$active_connection'." >&2
         echo "Pass --take-over-client-adapter to replace only that adapter's connection." >&2
@@ -64,14 +165,24 @@ wm_portal_ssid() {
 }
 
 wm_wait_for_portal_ssid() {
-    local interface="$1" ssid="$2" attempt
-    nmcli device wifi rescan ifname "$interface" >/dev/null 2>&1 || true
+    local interface="$1" ssid="$2" attempt advertised
+    if ! wm_nmcli device wifi rescan ifname "$interface"; then
+        echo "NetworkManager could not scan the selected portal adapter: $interface" >&2
+        return 1
+    fi
     for attempt in $(seq 1 45); do
-        if nmcli -t -f SSID device wifi list ifname "$interface" | grep -Fxq "$ssid"; then
+        if ! advertised="$(wm_nmcli -t -f SSID device wifi list ifname "$interface")"; then
+            echo "NetworkManager could not read Wi-Fi scan results from $interface." >&2
+            return 1
+        fi
+        if grep -Fxq "$ssid" <<<"$advertised"; then
             return 0
         fi
         sleep 1
-        nmcli device wifi rescan ifname "$interface" >/dev/null 2>&1 || true
+        if ! wm_nmcli device wifi rescan ifname "$interface"; then
+            echo "NetworkManager could not refresh Wi-Fi scan results from $interface." >&2
+            return 1
+        fi
     done
     echo "Portal SSID not detected on $interface: $ssid" >&2
     return 1
@@ -80,8 +191,8 @@ wm_wait_for_portal_ssid() {
 wm_remove_connection_by_name() {
     local name="$1"
     [[ -n "$name" ]] || return 0
-    nmcli connection down "$name" >/dev/null 2>&1 || true
-    nmcli connection delete "$name" >/dev/null 2>&1 || true
+    wm_nmcli connection down "$name" >/dev/null 2>&1 || true
+    wm_nmcli connection delete "$name" >/dev/null 2>&1 || true
 }
 
 wm_create_portal_connection() {
@@ -102,12 +213,12 @@ wm_create_portal_connection() {
         unset WM_PORTAL_CONNECTION_UUID WM_PORTAL_CONNECTION_NAME
         return 1
     fi
-    nmcli device disconnect "$interface" >/dev/null 2>&1 || true
+    wm_nmcli device disconnect "$interface" >/dev/null 2>&1 || true
     if ! wm_wait_for_portal_ssid "$interface" "$ssid"; then
         wm_cleanup_created_connection
         return 1
     fi
-    if ! nmcli connection add type wifi ifname "$interface" con-name "$name" ssid "$ssid" \
+    if ! wm_nmcli connection add type wifi ifname "$interface" con-name "$name" ssid "$ssid" \
         ipv4.method auto ipv4.never-default yes ipv6.method ignore connection.autoconnect no >/dev/null; then
         wm_cleanup_created_connection
         return 1
@@ -115,7 +226,7 @@ wm_create_portal_connection() {
     # NetworkManager creates the UUID at `connection add`, before any later
     # configuration or association step.  Capture it immediately so cleanup
     # has an exact identifier throughout the remaining critical section.
-    uuid="$(nmcli -g connection.uuid connection show "$name")"
+    uuid="$(wm_nmcli -g connection.uuid connection show "$name")"
     if [[ -z "$uuid" || "$uuid" == "--" ]]; then
         wm_cleanup_created_connection
         echo "NetworkManager did not return a UUID for the portal connection." >&2
@@ -130,11 +241,11 @@ wm_create_portal_connection() {
         wm_cleanup_created_connection
         return 1
     fi
-    if ! nmcli connection modify "$name" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$password"; then
+    if ! wm_nmcli connection modify "$name" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$password"; then
         wm_cleanup_created_connection
         return 1
     fi
-    if ! nmcli connection up "$name" ifname "$interface"; then
+    if ! wm_nmcli connection up "$name" ifname "$interface"; then
         wm_cleanup_created_connection
         return 1
     fi
@@ -152,8 +263,8 @@ wm_verify_portal_route() {
 wm_remove_connection() {
     local uuid="${1:-}" name="${2:-}"
     if [[ -n "$uuid" ]]; then
-        nmcli connection down uuid "$uuid" >/dev/null 2>&1 || true
-        nmcli connection delete uuid "$uuid" >/dev/null 2>&1 || true
+        wm_nmcli connection down uuid "$uuid" >/dev/null 2>&1 || true
+        wm_nmcli connection delete uuid "$uuid" >/dev/null 2>&1 || true
     elif [[ -n "$name" ]]; then
         wm_remove_connection_by_name "$name"
     fi

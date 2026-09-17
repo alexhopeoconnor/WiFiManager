@@ -77,6 +77,27 @@ then PlatformIO's standard `~/.platformio/penv/bin/pio` installation. That
 makes the same command work from a non-interactive SSH shell without modifying
 the user's `PATH`.
 
+### NetworkManager authorization
+
+The portal adapter is a host-side resource, separate from fixture credentials.
+The runner never reads a sudo password from `test/.env`, an environment file,
+or source control. `doctor` reports whether the current session can use
+NetworkManager directly or will need scoped sudo. In a graphical desktop,
+Polkit normally authorizes the selected adapter directly. In an SSH or other
+headless session with no Polkit agent, the runner visibly validates `sudo -v`
+before it erases or flashes the board, then uses `sudo -n nmcli` only to scan,
+disconnect, join, and remove its generated connection on the named secondary
+adapter.
+
+The normal setting is `WM_NMCLI_AUTH=auto`. Use `WM_NMCLI_AUTH=sudo` to choose
+the same scoped path deliberately, or `WM_NMCLI_AUTH=direct` only when a
+working Polkit policy already grants the required actions. Do not run the whole
+runner under `sudo`: its state files and browser artifacts intentionally remain
+owned by the invoking developer. If the sudo ticket expires during a long run,
+the runner stops with an actionable message rather than silently treating an
+unauthorized rescan as a missing portal SSID. `down` uses the same scoped path
+to remove a retained connection.
+
 ```bash
 ./tools/portal-hardware doctor --client-interface wlx74da385d4165
 ./tools/portal-hardware run \

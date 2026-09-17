@@ -15,6 +15,14 @@ The ESP8266 portal SSID is `WM Contract ESP8266`; the ESP32 SSID is `WM Contract
 
 The runner cleans up only the temporary connection it creates on the named secondary interface. It refuses to run if that interface is the system default route.
 
+NetworkManager authority is a host prerequisite, not a fixture secret. A GUI
+Polkit session may authorize the adapter directly; a headless/SSH invocation
+validates sudo before flashing, then elevates only the generated portal
+connection actions. Leave the runner itself unprivileged so its private state
+and browser artifacts remain owned by the developer. See
+[`docs/TESTING.md`](../../docs/TESTING.md#networkmanager-authorization) for
+the `WM_NMCLI_AUTH` options.
+
 ## A/B portal OTA fixture
 
 The same fixture has dedicated `*_ota_a` and `*_ota_b` PlatformIO environments

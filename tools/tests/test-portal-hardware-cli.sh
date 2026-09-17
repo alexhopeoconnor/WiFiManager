@@ -11,6 +11,9 @@ mkdir -p "$stub_bin"
 export CALL_LOG="$tmp/calls.log"
 export WM_HARDWARE_LOCK_FILE="$tmp/hardware.lock"
 export XDG_STATE_HOME="$tmp/state"
+# Most mock cases exercise the direct desktop-Polkit path. Individual cases
+# below explicitly select the headless scoped-sudo path.
+export WM_NMCLI_AUTH=direct
 
 printf '%s\n' '#!/usr/bin/env bash' \
 'if [[ "$1" == "link" && "$2" == "show" ]]; then exit 0; fi' \
@@ -18,12 +21,22 @@ printf '%s\n' '#!/usr/bin/env bash' \
 'echo "192.168.4.1 dev wlan-client src 192.168.4.2"' >"$stub_bin/ip"
 printf '%s\n' '#!/usr/bin/env bash' \
 'printf "%s\\n" "$*" >>"$CALL_LOG"' \
+'if [[ "${NMCLI_REQUIRE_SUDO:-}" == "yes" && "${RUN_AS_SUDO:-}" != "yes" ]]; then echo "Error: Insufficient privileges" >&2; exit 7; fi' \
+'if [[ "${NMCLI_FAIL_SCAN:-}" == "yes" && "$1" == "device" && "$2" == "wifi" && "$3" == "rescan" ]]; then echo "fixture scan failure" >&2; exit 7; fi' \
 'if [[ "${NMCLI_FAIL_ADD:-}" == "yes" && "$1" == "connection" && "$2" == "add" ]]; then exit 7; fi' \
 'if [[ "${NMCLI_SIGNAL_PARENT:-}" == "yes" && "$1" == "connection" && "$2" == "add" ]]; then kill -TERM "$PPID"; exit 0; fi' \
 'if [[ "${NMCLI_FAIL_UP:-}" == "yes" && "$1" == "connection" && "$2" == "up" ]]; then exit 7; fi' \
 'if [[ "$1" == "-t" && "$2" == "-f" && "$3" == "SSID" ]]; then echo "WM Contract ESP8266"; exit 0; fi' \
 'if [[ "$1" == "-g" && "$2" == "connection.uuid" ]]; then echo "stub-uuid"; exit 0; fi' \
 'if [[ "$1" == "-g" ]]; then echo "--"; fi' >"$stub_bin/nmcli"
+printf '%s\n' '#!/usr/bin/env bash' \
+'printf "sudo %s\\n" "$*" >>"$CALL_LOG"' \
+'if [[ "${SUDO_FAIL:-}" == "yes" ]]; then exit 1; fi' \
+'if [[ "$1" == "-v" ]]; then exit 0; fi' \
+'if [[ "$1" == "-n" ]]; then shift; fi' \
+'if [[ "$1" == "true" ]]; then exit 0; fi' \
+'[[ "$1" == "--" ]] && shift' \
+'RUN_AS_SUDO=yes exec "$@"' >"$stub_bin/sudo"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$stub_bin/pio"
 printf '%s\n' '#!/usr/bin/env bash' \
 'printf "docker %s\n" "$*" >>"$CALL_LOG"' \
@@ -80,6 +93,23 @@ fi
 
 # A failed association must delete the only connection it just created.
 source "$root/tools/lib/portal-hardware-session.sh"
+# A NetworkManager failure must remain distinct from an absent portal SSID.
+: >"$CALL_LOG"
+export NMCLI_FAIL_SCAN=yes
+if scan_output="$(wm_wait_for_portal_ssid wlan-client 'fixture portal' 2>&1)"; then
+    echo 'failed Wi-Fi scan was reported as an SSID result' >&2
+    exit 1
+fi
+unset NMCLI_FAIL_SCAN
+[[ "$scan_output" == *'NetworkManager could not scan the selected portal adapter'* ]] || {
+    echo 'failed Wi-Fi scan did not report the NetworkManager error path' >&2
+    exit 1
+}
+if grep -Fq 'connection add' "$CALL_LOG"; then
+    echo 'failed Wi-Fi scan continued into connection creation' >&2
+    exit 1
+fi
+
 wm_wait_for_portal_ssid() { return 0; }
 export NMCLI_FAIL_UP=yes
 if wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266; then
@@ -102,10 +132,49 @@ if wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266;
 fi
 unset NMCLI_FAIL_ADD
 grep -Eq 'connection delete wifimanager-portal-' "$CALL_LOG"
+if grep -Fq 'sudo ' "$CALL_LOG"; then
+    echo 'generic NetworkManager failure unexpectedly retried with sudo' >&2
+    exit 1
+fi
 [[ ! -e "$(wm_state_file)" ]] || {
     echo 'failed connection creation left pending recovery state behind' >&2
     exit 1
 }
+
+# A non-graphical SSH shell often has no Polkit agent. Preflight the scoped
+# sudo path once, then use it for only the named portal adapter actions; never
+# require the developer to run the entire runner as root.
+: >"$CALL_LOG"
+export NMCLI_REQUIRE_SUDO=yes
+export WM_NMCLI_AUTH=sudo
+unset WM_NMCLI_AUTH_READY WM_NMCLI_MODE WM_NMCLI_PERMISSIONS
+wm_prepare_networkmanager_authorization
+wm_wait_for_portal_ssid() { return 0; }
+if ! wm_create_portal_connection wlan-client 'fixture portal' placeholder esp8266; then
+    echo 'authorization fallback did not create the portal connection' >&2
+    exit 1
+fi
+wm_cleanup_created_connection
+unset NMCLI_REQUIRE_SUDO
+export WM_NMCLI_AUTH=direct
+unset WM_NMCLI_AUTH_READY WM_NMCLI_MODE WM_NMCLI_PERMISSIONS
+grep -Fq 'sudo -n -- nmcli connection add' "$CALL_LOG"
+[[ ! -e "$(wm_state_file)" ]] || {
+    echo 'authorization fallback left portal recovery state behind' >&2
+    exit 1
+}
+
+# A failed sudo validation must stop before the runner can erase or flash a
+# board; it is not an SSID discovery failure.
+export WM_NMCLI_AUTH=sudo SUDO_FAIL=yes
+unset WM_NMCLI_AUTH_READY WM_NMCLI_MODE WM_NMCLI_PERMISSIONS
+if wm_prepare_networkmanager_authorization >/dev/null 2>&1; then
+    echo 'failed scoped sudo validation was accepted' >&2
+    exit 1
+fi
+unset SUDO_FAIL
+export WM_NMCLI_AUTH=direct
+unset WM_NMCLI_AUTH_READY WM_NMCLI_MODE WM_NMCLI_PERMISSIONS
 
 # A portal scan failure must stop before `connection add` and clear the
 # pre-add pending record, even though this helper is invoked in an `if`.

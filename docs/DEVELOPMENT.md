@@ -99,6 +99,12 @@ for browser/API testing:
   --client-interface wlx74da385d4165
 ```
 
+From an SSH/headless shell, the portal command may ask once for scoped
+NetworkManager sudo authorization before the selected board is erased. This is
+host setup, not a test secret; never add a sudo value to an env file or run the
+whole runner as root. See [Testing](TESTING.md#networkmanager-authorization)
+for the direct/Polkit and scoped-sudo behavior.
+
 See [Testing](TESTING.md#docker-portal-contract) for cleanup, artifacts, and
 optional station handoff credentials.
 
