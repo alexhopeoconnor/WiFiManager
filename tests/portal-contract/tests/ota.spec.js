@@ -46,6 +46,47 @@ async function requireRestartOutage(request) {
   throw new Error('The portal never became unavailable after a successful OTA response.');
 }
 
+function waitForOtaResponse(page) {
+  // `waitForResponse()` alone waits until the enclosing test timeout when an
+  // embedded server resets the upload connection. Treat that as an immediate
+  // transport failure so a hardware artifact names the real fault instead of
+  // implying that the rendered form never submitted.
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out waiting for the portal OTA POST /u response.'));
+    }, 90_000);
+
+    const isOtaRequest = (request) => {
+      const requestPath = new URL(request.url()).pathname;
+      return requestPath === '/u' && request.method() === 'POST';
+    };
+    const cleanup = () => {
+      clearTimeout(timeout);
+      page.off('response', onResponse);
+      page.off('requestfailed', onRequestFailed);
+    };
+    const onResponse = (response) => {
+      if (!isOtaRequest(response.request())) {
+        return;
+      }
+      cleanup();
+      resolve(response);
+    };
+    const onRequestFailed = (request) => {
+      if (!isOtaRequest(request)) {
+        return;
+      }
+      cleanup();
+      const failure = request.failure();
+      reject(new Error(`Portal OTA POST /u failed before a response: ${failure ? failure.errorText : 'unknown error'}`));
+    };
+
+    page.on('response', onResponse);
+    page.on('requestfailed', onRequestFailed);
+  });
+}
+
 test.describe('portal HTTP OTA contract', () => {
   test('uploads B through the rendered portal form, requires automatic reboot, and observes B twice', async ({ page, request }) => {
     test.skip(!firmware, 'OTA firmware is mounted only for portal-hardware ota.');
@@ -67,10 +108,7 @@ test.describe('portal HTTP OTA contract', () => {
     await expect(input).toBeVisible();
     await input.setInputFiles(firmware);
 
-    const updateResponse = page.waitForResponse((response) => {
-      const requestPath = new URL(response.url()).pathname;
-      return requestPath === '/u' && response.request().method() === 'POST';
-    });
+    const updateResponse = waitForOtaResponse(page);
     await page.locator('#wm-ota-form button[type="submit"]').click();
 
     const response = await updateResponse;

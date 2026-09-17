@@ -1004,8 +1004,12 @@ void WiFiManagerHandlers::handleUpdateDone(AsyncWebServerRequest *request) {
   }
 
   sendApiJson(request, 200, jsonApiOtaUpdateSuccess());
-  delay(1000);
-  ESP.restart();
+  // AsyncWebServer queues this response; restarting from the request callback
+  // tears down its TCP connection before the client can receive the success
+  // JSON.  Let the application's regular process() call perform the same
+  // delayed restart path used by the other restart-capable portal endpoints.
+  _wm->_rebootScheduled = true;
+  _wm->_rebootTime = millis() + _wm->REBOOT_DELAY_MS;
 }
 
 void WiFiManagerHandlers::sendApiJson(AsyncWebServerRequest *request, int code, const String& json) {
