@@ -17,6 +17,7 @@ services:
       PORTAL_CUSTOM_PARAMETER_STRESS: ${PORTAL_CUSTOM_PARAMETER_STRESS:-0}
       PORTAL_PLATFORM: ${PORTAL_PLATFORM:-}
       PORTAL_CAPTURE_README_MEDIA: ${PORTAL_CAPTURE_README_MEDIA:-0}
+      PORTAL_TEST_FILE: ${PORTAL_TEST_FILE:-}
       ARTIFACT_DIR: /artifacts
     volumes:
       - ${PORTAL_ARTIFACT_DIR:?portal artifact directory is required}:/artifacts

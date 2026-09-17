@@ -37,4 +37,4 @@ node_modules/
 # Local portal station handoff credentials and optional direct test artifacts
 /test/portal-station.env
 /tests/portal-contract/artifacts/
-/artifacts/readme-media/
+/artifacts/

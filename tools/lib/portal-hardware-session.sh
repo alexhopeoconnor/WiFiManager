@@ -19,11 +19,17 @@ wm_default_route_interface() {
 
 wm_acquire_hardware_lock() {
     local lock_file="${WM_HARDWARE_LOCK_FILE:-/tmp/wifimanager-hardware.lock}"
+    # `ota` deliberately acquires this before it builds firmware, then calls
+    # the shared portal-start helper which also acquires it. Keep that nested
+    # path idempotent so the lock covers the whole A/B contract rather than
+    # only the serial flash and adapter connection.
+    [[ "${WM_HARDWARE_LOCK_HELD:-no}" == "yes" ]] && return 0
     exec 9>"$lock_file"
     flock -n 9 || {
         echo "Another WiFiManager hardware task is already running; wait for it to finish." >&2
         return 1
     }
+    WM_HARDWARE_LOCK_HELD=yes
 }
 
 wm_require_client_adapter() {

@@ -9,3 +9,7 @@ the already-routed `192.168.4.1` portal; it never manages host Wi-Fi.
 The image pins the Playwright package to the matching official browser image.
 Artifacts, traces, screenshots, JSON results, and the HTML report are written
 to the output directory printed by the host command.
+
+`compose.ota.yaml` is an overlay used only by `portal-hardware ota`. It mounts
+the already-built B firmware read-only and enables the A/B browser contract.
+The ordinary portal contract never receives a firmware artifact.

@@ -9,19 +9,57 @@ lib_deps =
 
 ## Target pins
 
-The ESP32 test environments pin the pioarduino `51.03.05` platform package,
-which selects Arduino-ESP32 3.0.5 / ESP-IDF 5.1.4+. This is a test-target
-contract, not a library-manifest dependency: a consuming application chooses
-its own `platform` and must validate the complete framework/toolchain stack.
-Core 3 Wi-Fi builds need the C++14, `SOC_WIFI_SUPPORTED`, `Network/src`, and
-ESP8266-transport ignore settings in this repository's `platformio.ini`; keep
-those settings together when adding an ESP32 environment.
+WiFiManager currently has two explicit ESP32 test lanes:
+
+| Lane | pioarduino platform | Purpose |
+| --- | --- | --- |
+| `esp32` | `51.03.05` / Arduino-ESP32 3.0.5 | temporary compatibility contract |
+| `esp32_core_3_3_11` / CLI `esp32-current` | `55.03.311` / Arduino-ESP32 3.3.11 | maintained current validation lane |
+
+This is a test-target contract, not a library-manifest dependency: a consuming
+application chooses its own `platform` and must validate the complete
+framework/toolchain stack. Do not let a shared global PlatformIO cache choose
+framework metadata or a compiler implicitly, and do not override just the
+toolchain to repair a cache mismatch. Each pioarduino platform owns its
+matching framework, uploader, and compiler package set.
+
+Core 3 Wi-Fi builds need the C++14, `SOC_WIFI_SUPPORTED`, and `Network/src`
+settings in this repository's `platformio.ini`; keep those settings together
+when adding an ESP32 environment. The portal OTA fixture uses the current
+3.3.11 lane for ESP32 even while the 3.0.5 compatibility lane remains
+available.
 
 ESP8266 test environments pin framework commit `521ae60` for the upstream
 Postmortem large-jump linker fix. The exact rationale and update rule are in
 the shared [ESP8266 linker-workaround note](https://github.com/alexhopeoconnor/arduino-home-assistant/blob/main/docs/ESP8266-LINKER-WORKAROUND.md).
-For the pioarduino release-to-Core mapping and the scoped repair for a stale
-global PlatformIO tool package, see [DeviceFramework's toolchain guide](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/TOOLCHAINS.md).
+For the pioarduino release-to-Core mapping and cache-collision diagnosis, see
+[DeviceFramework's toolchain guide](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/TOOLCHAINS.md).
+
+`./scripts/test.sh` automatically places the `esp32-current` lane, and
+`./tools/portal-hardware ota --platform esp32` places its current A/B fixture,
+in a dedicated PlatformIO Core/cache directory, defaulting to
+`${XDG_CACHE_HOME:-$HOME/.cache}/wifimanager-platformio/core-3.3.11`. That
+keeps pioarduino's package-form `esptool` and generated environment separate
+from the legacy 3.0.5 `tool-esptoolpy` graph. Override the location with
+`WIFIMANAGER_PLATFORMIO_CORE_DIR`,
+`WIFIMANAGER_PLATFORMIO_PACKAGES_DIR`, and
+`WIFIMANAGER_PLATFORMIO_CACHE_DIR` when space belongs elsewhere. The first
+clean install is several GiB; reserve at least 4 GiB plus cache headroom. It
+is a deliberate quarantine, not a reason to delete or override packages in the
+shared PlatformIO installation.
+
+For a disposable cache investigation, point that variable at an exact temporary
+directory, run the affected command, inspect the resolved graph, then remove
+only that directory:
+
+```bash
+wm_pio_core="$(mktemp -d /tmp/wifimanager-pio-XXXXXX)"
+WIFIMANAGER_PLATFORMIO_CORE_DIR="$wm_pio_core" \
+  ./scripts/test.sh compile --platform esp32-current
+WIFIMANAGER_PLATFORMIO_CORE_DIR="$wm_pio_core" \
+  ./scripts/test.sh packages --platform esp32-current
+rm -rf -- "$wm_pio_core"
+```
 
 Start a release with `bump-version.sh`. It updates package metadata and canonical installation snippets, then creates the changelog section. Replace its generated TODO with the release summary and update any behavioural documentation before running:
 
@@ -31,8 +69,15 @@ Start a release with `bump-version.sh`. It updates package metadata and canonica
 ./scripts/check-docs.sh
 ./scripts/test.sh compile --platform esp8266
 ./scripts/test.sh compile --platform esp32
+./scripts/test.sh compile --platform esp32-current
+./scripts/test.sh unity --platform esp8266
+./scripts/test.sh unity --platform esp32
+./scripts/test.sh unity --platform esp32-current
+./scripts/test.sh packages --platform esp32-current
 ./scripts/test.sh examples --platform esp8266
 ./scripts/test.sh examples --platform esp32
+./scripts/test.sh ota-fixtures --platform esp8266
+./scripts/test.sh ota-fixtures --platform esp32-current
 ./scripts/prepare-release.sh vMAJOR.MINOR.PATCH --tag
 ```
 
@@ -56,6 +101,19 @@ for browser/API testing:
 
 See [Testing](TESTING.md#docker-portal-contract) for cleanup, artifacts, and
 optional station handoff credentials.
+
+Run the portal HTTP OTA A/B contract separately when a spare adapter and 4 MB
+test board are available. It erases the selected board's flash, serial-flashes
+A, and uses the real browser update form to upload B; do not replace its
+automatic-reboot assertion with a manual reset:
+
+```bash
+./tools/portal-hardware ota --platform esp8266 --port /dev/serial/by-id/usb-... \
+  --client-interface wlx74da385d4165
+```
+
+See [Portal HTTP OTA A/B contract](TESTING.md#portal-http-ota-ab-contract) for
+the partition, artifact, final-board-state, and adapter rules.
 
 Push the branch and annotated tag. GitHub Actions repeats the board-free compile checks, validates the package, and creates a GitHub Release using that version’s changelog section. The workflow does not publish to the PlatformIO Registry.
 

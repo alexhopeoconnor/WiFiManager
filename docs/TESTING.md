@@ -4,10 +4,19 @@ WiFiManager separates repeatable package checks from opt-in tests that flash a
 real board or join a captive portal. The normal commands never need a board,
 local Wi-Fi credentials, browser binary, or sibling checkout.
 
-## Clean consumer and example builds
+| Physical contract | Transport | Host adapter | Secret source | Required proof |
+| --- | --- | --- | --- | --- |
+| Portal lifecycle suite | Serial flash + captive-portal HTTP/browser | Named secondary adapter | safe fixture AP password | Unity/lifecycle checks and portal UI/API contract |
+| Portal HTTP OTA | WiFiManager multipart `POST /u` | Named secondary adapter | safe fixture AP password | A → rendered browser upload B → automatic reboot → B twice |
 
-The clean-consumer check builds a project that declares only WiFiManager. It
-proves the package manifest resolves DFTE, ESPAsyncWebServer, and the correct
+The selected secondary adapter is intentionally never used for normal LAN
+testing. It is `never-default`, so the host's ordinary route remains intact.
+
+## Board-free fixture, consumer, and example builds
+
+The Unity compile check builds WiFiManager's own fixture without a board. The
+clean-consumer check builds a project that declares only WiFiManager. Together
+they prove the package manifest resolves DFTE, ESPAsyncWebServer, and the correct
 ESP8266 or ESP32 TCP dependency without a sibling checkout. The runner removes
 a prior local package link before each check, so dependency resolution uses the
 current manifest rather than a stale `.pio` copy.
@@ -15,13 +24,24 @@ current manifest rather than a stale `.pio` copy.
 ```bash
 ./scripts/test.sh compile --platform esp8266
 ./scripts/test.sh compile --platform esp32
+./scripts/test.sh compile --platform esp32-current
+./scripts/test.sh unity --platform esp8266
+./scripts/test.sh unity --platform esp32
+./scripts/test.sh unity --platform esp32-current
 ./scripts/test.sh examples --platform esp8266
 ./scripts/test.sh examples --platform esp32
+./scripts/test.sh ota-fixtures --platform esp8266
+./scripts/test.sh ota-fixtures --platform esp32-current
 ```
 
 CI runs these board-free checks for pull requests and pushes to the maintained
-branch. It intentionally does not require attached hardware, a local network,
-or Docker.
+branch. `esp32` remains the explicit Arduino-ESP32 3.0.5 compatibility lane;
+`esp32-current` is the clean-consumer Arduino-ESP32 3.3.11 validation lane.
+The OTA fixture builds also use 3.3.11 for ESP32 and compile both immutable A
+and B images against their tracked OTA partition layout. CI rejects equal A/B
+artifacts, an ESP32 image larger than either 0x1F0000-byte app slot, or a
+partition-table edit that breaks the required two-slot/no-filesystem layout. These checks
+intentionally do not require attached hardware, a local network, or Docker.
 
 ## Local hardware lifecycle tests
 
@@ -154,5 +174,63 @@ duration and 6 fps so the
 README tour is readable; it does not change normal browser-contract timing.
 ESP8266 remains covered by the normal hardware and browser contract but does
 not produce duplicate README media.
+
+## Portal HTTP OTA A/B contract
+
+`portal-hardware ota` is a separate opt-in physical test for WiFiManager's
+built-in HTTP update path. It exercises the rendered firmware-update page and
+its real multipart `POST /u` request; it is not an ArduinoOTA/UDP test.
+
+```bash
+./tools/portal-hardware ota \
+  --platform esp8266 \
+  --port /dev/serial/by-id/usb-... \
+  --client-interface wlx74da385d4165
+```
+
+The selected `--client-interface` has exactly the same safety rules as the
+normal portal contract: it must be the explicitly named secondary adapter and
+cannot be the host default-route interface. The test never attaches that
+adapter to a normal station network. The fixture AP uses the safe local
+`default1` WPA password; this is an AP-access test, not a claim that `/u` has
+HTTP route authentication.
+
+The runner performs the following complete contract:
+
+1. Builds immutable A and B fixture images. Their marker is compiled into the
+   binary, not saved in WiFiManager settings or EEPROM.
+2. Checks both ESP32 images against the explicit matching `app0`/`app1` slots;
+   ESP8266 validates B after A has booted against the exact aligned capacity
+   passed to `Update.begin()`.
+3. Erases the explicitly selected test board's flash, then flashes A over
+   serial and starts its captive portal.
+4. Joins that portal only through the named secondary adapter and requires the
+   A marker at `/api/test/firmware-marker`.
+5. Mounts B read-only into the Playwright container, chooses it in the real
+   `#wm-ota-file` browser input, and submits the rendered form.
+6. Requires the real `POST /u` success response, an automatic portal outage,
+   automatic restart, and two independent B-marker responses.
+
+The fixture marker endpoint exists only in `test/portal-harness`; it is not a
+WiFiManager library route or a product-firmware pattern. The test does not
+issue a manual reset. A board which boots B only after intervention is a
+failure, even if B later appears.
+
+Both fixture images are built with explicit OTA-capable layouts:
+
+| Platform | Fixture layout | Capacity check |
+| --- | --- | --- |
+| ESP8266 | `eagle.flash.4m1m.ld` | A's live `ESP.getFreeSketchSpace()` response |
+| ESP32 | two `0x1F0000` A/B app slots, no filesystem | tracked CSV `app1` size |
+
+These are 4 MB fixture layouts (`d1_mini` for ESP8266 and `esp32dev` for
+ESP32). Do not run this command against a board with another flash size unless
+its matching explicit A/B layout and capacity checks have been added first.
+
+The final board state is firmware B in the portal-only fixture: it clears
+saved station settings on every boot and leaves no developer Wi-Fi credential
+on the device. By default the temporary NetworkManager connection is removed
+when the test exits. Pass `--keep` only for interactive diagnosis, then run
+`./tools/portal-hardware down` to remove that named temporary connection.
 
 Back to [documentation](README.md) · [project overview](../README.md).

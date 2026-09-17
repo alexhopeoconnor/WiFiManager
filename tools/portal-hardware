@@ -15,11 +15,20 @@ Usage:
       --client-interface IFACE [--take-over-client-adapter] [--keep] \
       [--browser auto|skip] [--station-env PATH] [--output DIRECTORY] \
       [--capture-readme-media] [--custom-parameter-stress]
+  ./tools/portal-hardware ota --platform esp8266|esp32 --port /dev/serial/by-id/... \
+      --client-interface IFACE [--take-over-client-adapter] [--keep] \
+      [--output DIRECTORY]
   ./tools/portal-hardware down
 
 Only the named client interface may be disconnected or reconfigured. The tool
 refuses the host default-route interface and preserves the created connection
-in a 0600 state file until `down` or normal `run` cleanup.
+in a 0600 state file until `down` or normal `run`/`ota` cleanup.
+
+`ota` is an opt-in physical A/B test. It erases the explicitly selected test
+board's flash, serial-flashes image A, then uses the real portal browser form
+to upload image B. It requires the automatic restart and two independent
+B-marker responses; a manual reset never makes the test pass. On success the
+selected board remains on B in the portal-only fixture.
 USAGE
     exit 2
 }
@@ -38,6 +47,11 @@ station_env=""
 output_dir=""
 capture_readme_media="no"
 custom_parameter_stress="no"
+ota_environment_a=""
+ota_environment_b=""
+ota_firmware_a=""
+ota_firmware_b=""
+ota_browser_prebuilt="no"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform) [[ $# -ge 2 ]] || usage; platform="$2"; shift 2 ;;
@@ -61,6 +75,32 @@ require_common() {
     wm_require docker
     wm_require curl
     docker compose version >/dev/null
+}
+
+pio_for_portal_environment() {
+    local environment="$1"
+    shift
+
+    case "$environment" in
+        # The ESP32 A/B fixture extends the 3.3.11 environment. Its package
+        # graph must not share a Core directory with the legacy 3.0.5 portal
+        # fixture, whose tool-esptoolpy package name collides with current
+        # pioarduino metadata.
+        esp32_core_3_3_11|esp32_ota_*)
+            ;;
+        *)
+            pio "$@"
+            return
+            ;;
+    esac
+
+    local core_dir packages_dir cache_dir
+    core_dir="${WIFIMANAGER_PLATFORMIO_CORE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/wifimanager-platformio/core-3.3.11}"
+    packages_dir="${WIFIMANAGER_PLATFORMIO_PACKAGES_DIR:-$core_dir/packages}"
+    cache_dir="${WIFIMANAGER_PLATFORMIO_CACHE_DIR:-$core_dir/cache}"
+    install -d -m 700 "$core_dir" "$packages_dir" "$cache_dir"
+    PLATFORMIO_CORE_DIR="$core_dir" PLATFORMIO_PACKAGES_DIR="$packages_dir" \
+        PLATFORMIO_CACHE_DIR="$cache_dir" pio "$@"
 }
 
 prepare_output_dir() {
@@ -107,6 +147,20 @@ validate_run_arguments() {
             exit 2
         }
     fi
+    if [[ "$command_name" == "ota" ]]; then
+        [[ "$browser" == "auto" ]] || {
+            echo "OTA coverage always uses the browser; --browser skip is not supported." >&2
+            exit 2
+        }
+        [[ -z "$station_env" ]] || {
+            echo "OTA coverage is portal-only and does not accept --station-env." >&2
+            exit 2
+        }
+        [[ "$capture_readme_media" == "no" && "$custom_parameter_stress" == "no" ]] || {
+            echo "OTA coverage cannot be combined with README media or parameter-stress modes." >&2
+            exit 2
+        }
+    fi
 }
 
 write_readme_media_manifest() {
@@ -145,7 +199,7 @@ wait_for_portal_ready() {
 }
 
 start_portal_session() {
-    local ssid
+    local environment="${1:-$platform}" erase_before_upload="${2:-no}" expected_a_artifact="${3:-}" ssid
     validate_run_arguments
     require_common
     wm_acquire_hardware_lock
@@ -154,7 +208,18 @@ start_portal_session() {
     prepare_output_dir
     ssid="$(wm_portal_ssid "$platform")"
 
-    pio run -d "$root/test/portal-harness" -e "$platform" -t upload --upload-port "$port"
+    if [[ "$erase_before_upload" == "yes" ]]; then
+        # OTA selection metadata must not survive from a previous fixture run:
+        # otherwise a bootloader could select a stale app slot instead of A.
+        pio_for_portal_environment "$environment" run -d "$root/test/portal-harness" -e "$environment" -t erase --upload-port "$port"
+    fi
+    if [[ -n "$expected_a_artifact" ]]; then
+        ota_assert_a_artifact_matches_build "$expected_a_artifact"
+    fi
+    pio_for_portal_environment "$environment" run -d "$root/test/portal-harness" -e "$environment" -t upload --upload-port "$port"
+    if [[ -n "$expected_a_artifact" ]]; then
+        ota_assert_a_artifact_matches_build "$expected_a_artifact"
+    fi
     if ! wm_create_portal_connection "$client_interface" "$ssid" "default1"; then
         return 1
     fi
@@ -171,6 +236,223 @@ start_portal_session() {
         return 1
     fi
     printf 'Portal connected on %s. Artifacts: %s\n' "$client_interface" "$output_dir"
+}
+
+ota_environment() {
+    local image="$1"
+    printf '%s_ota_%s\n' "$platform" "$image"
+}
+
+ota_marker_field() {
+    local response="$1" field="$2"
+    case "$field" in
+        marker)
+            sed -n 's/.*"marker"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$response"
+            ;;
+        freeSketchSpace)
+            sed -n 's/.*"freeSketchSpace"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$response"
+            ;;
+        *)
+            echo "Unknown OTA marker field: $field" >&2
+            return 2
+            ;;
+    esac
+}
+
+ota_fetch_marker() {
+    curl --interface "$client_interface" --connect-timeout 1 --max-time 2 \
+        --silent --show-error http://192.168.4.1/api/test/firmware-marker 2>/dev/null
+}
+
+wait_for_ota_marker() {
+    local expected="$1" deadline response marker
+    deadline=$((SECONDS + 75))
+    while (( SECONDS < deadline )); do
+        response="$(ota_fetch_marker || true)"
+        marker="$(ota_marker_field "$response" marker)"
+        if [[ "$marker" == "$expected" ]]; then
+            printf '%s\n' "$response"
+            return 0
+        fi
+        sleep 0.5
+    done
+    echo "Portal OTA fixture did not report marker '$expected' within 75 seconds." >&2
+    return 1
+}
+
+ota_esp32_partition_row() {
+    local partition="$1" table="$root/test/portal-harness/partitions/esp32_ota_4m_no_fs.csv"
+    [[ -r "$table" ]] || {
+        echo "ESP32 OTA partition table is unreadable: $table" >&2
+        return 1
+    }
+    awk -F, -v partition="$partition" '
+        function trim(value) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            return value
+        }
+        /^[[:space:]]*#/ || NF < 5 { next }
+        trim($1) == partition {
+            printf "%s\t%s\t%s\t%s\n", trim($2), trim($3), trim($4), trim($5)
+            exit
+        }
+    ' "$table"
+}
+
+ota_esp32_require_partition() {
+    local name="$1" expected_type="$2" expected_subtype="$3" expected_offset="$4" expected_size="$5"
+    local row type subtype offset size
+    row="$(ota_esp32_partition_row "$name")"
+    IFS=$'\t' read -r type subtype offset size <<<"$row"
+    [[ "$type" == "$expected_type" && "$subtype" == "$expected_subtype" && \
+       "$offset" == "$expected_offset" && "$size" == "$expected_size" ]] || {
+        echo "ESP32 OTA partition '$name' must be $expected_type/$expected_subtype at $expected_offset with size $expected_size; found '${row:-missing}'." >&2
+        return 1
+    }
+}
+
+ota_esp32_slot_size() {
+    local table="$root/test/portal-harness/partitions/esp32_ota_4m_no_fs.csv"
+    local value_a value_b
+    [[ -r "$table" ]] || {
+        echo "ESP32 OTA partition table is unreadable: $table" >&2
+        return 1
+    }
+    ota_esp32_require_partition nvs data nvs 0x9000 0x5000
+    ota_esp32_require_partition otadata data ota 0xe000 0x2000
+    ota_esp32_require_partition app0 app ota_0 0x10000 0x1F0000
+    ota_esp32_require_partition app1 app ota_1 0x200000 0x1F0000
+    value_a="$(ota_esp32_partition_row app0 | awk -F '\t' '{ print $4 }')"
+    value_b="$(ota_esp32_partition_row app1 | awk -F '\t' '{ print $4 }')"
+    [[ "$value_a" =~ ^0x[0-9A-Fa-f]+$ && "$value_a" == "$value_b" ]] || {
+        echo "ESP32 OTA app slots must have equal hexadecimal capacities: app0=$value_a app1=$value_b" >&2
+        return 1
+    }
+    printf '%d\n' "$((value_b))"
+}
+
+ota_assert_firmware_fits() {
+    local firmware="$1" capacity="$2" label="$3" image_size
+    [[ -n "$firmware" && -s "$firmware" ]] || {
+        echo "OTA $label firmware artifact is missing." >&2
+        return 1
+    }
+    [[ "$capacity" =~ ^[0-9]+$ && "$capacity" -gt 0 ]] || {
+        echo "OTA capacity is invalid: $capacity" >&2
+        return 1
+    }
+    image_size="$(wc -c < "$firmware")"
+    if (( image_size > capacity )); then
+        echo "OTA $label image is too large: ${image_size} bytes exceeds ${capacity} bytes." >&2
+        return 1
+    fi
+    printf 'OTA %s image fits the available update space: %s <= %s bytes\n' "$label" "$image_size" "$capacity"
+}
+
+prepare_ota_firmware() {
+    local source_a source_b capacity
+    ota_environment_a="$(ota_environment a)"
+    ota_environment_b="$(ota_environment b)"
+
+    # Build and preserve both identities before touching the board. The
+    # browser mounts B read-only; the A artifact is compared against the
+    # PlatformIO build used for serial flashing so a later build cannot turn
+    # the A/B proof into an unrecorded input change.
+    pio_for_portal_environment "$ota_environment_a" run -d "$root/test/portal-harness" -e "$ota_environment_a"
+    pio_for_portal_environment "$ota_environment_b" run -d "$root/test/portal-harness" -e "$ota_environment_b"
+    source_a="$root/test/portal-harness/.pio/build/$ota_environment_a/firmware.bin"
+    source_b="$root/test/portal-harness/.pio/build/$ota_environment_b/firmware.bin"
+    [[ -s "$source_a" && -s "$source_b" ]] || {
+        echo "PlatformIO did not produce both OTA fixture images." >&2
+        return 1
+    }
+    if cmp -s "$source_a" "$source_b"; then
+        echo "PlatformIO produced identical OTA A and B images." >&2
+        return 1
+    fi
+    ota_firmware_a="$output_dir/${platform}-portal-ota-a.bin"
+    ota_firmware_b="$output_dir/${platform}-portal-ota-b.bin"
+    install -m 600 "$source_a" "$ota_firmware_a"
+    install -m 600 "$source_b" "$ota_firmware_b"
+
+    if [[ "$platform" == "esp32" ]]; then
+        "$root/tools/check-ota-partitions.sh"
+        capacity="$(ota_esp32_slot_size)"
+        ota_assert_firmware_fits "$ota_firmware_a" "$capacity" A
+        ota_assert_firmware_fits "$ota_firmware_b" "$capacity" B
+    fi
+}
+
+ota_assert_a_artifact_matches_build() {
+    local expected_artifact="$1" source
+    source="$root/test/portal-harness/.pio/build/$ota_environment_a/firmware.bin"
+    [[ -s "$expected_artifact" && -s "$source" ]] || {
+        echo "Prepared OTA A artifact or PlatformIO build output is missing." >&2
+        return 1
+    }
+    cmp -s "$expected_artifact" "$source" || {
+        echo "PlatformIO's A build no longer matches the immutable artifact prepared before serial flashing." >&2
+        return 1
+    }
+}
+
+validate_running_ota_capacity() {
+    local marker_response free_sketch_space capacity
+    [[ "$platform" == "esp8266" ]] || return 0
+    marker_response="$(wait_for_ota_marker A)"
+    free_sketch_space="$(ota_marker_field "$marker_response" freeSketchSpace)"
+    [[ "$free_sketch_space" =~ ^[0-9]+$ && "$free_sketch_space" -gt 4096 ]] || {
+        echo "ESP8266 fixture did not report usable free sketch space." >&2
+        return 1
+    }
+    # Match WiFiManagerHandlers::handleUpdating(): Update.begin receives this
+    # aligned value, not the raw ESP.getFreeSketchSpace() number.
+    capacity=$(( (free_sketch_space - 0x1000) & 0xFFFFF000 ))
+    ota_assert_firmware_fits "$ota_firmware_b" "$capacity" B
+}
+
+configure_ota_contract_environment() {
+    export PORTAL_ARTIFACT_DIR="$output_dir"
+    export LOCAL_UID="$(id -u)"
+    export LOCAL_GID="$(id -g)"
+    export PORTAL_BROWSER_MODE=auto
+    # OTA is its own contract. Do not inherit a developer's unrelated media,
+    # stress, target, or test-selection setting into a physical firmware run.
+    export PORTAL_CONTRACT_DOCKER_TARGET=portal-contract
+    export PORTAL_CAPTURE_README_MEDIA=0
+    export PORTAL_CUSTOM_PARAMETER_STRESS=0
+    export PORTAL_TEST_FILE=tests/ota.spec.js
+    export PORTAL_PLATFORM="$platform"
+    export PORTAL_OTA_FIRMWARE_HOST="$ota_firmware_b"
+    export PORTAL_OTA_INITIAL_MARKER=A
+    export PORTAL_OTA_EXPECTED_MARKER=B
+}
+
+ota_compose_files() {
+    printf '%s\n' \
+        -f "$root/tests/portal-contract/compose.yaml" \
+        -f "$root/tests/portal-contract/compose.ota.yaml"
+}
+
+prepare_ota_contract_image() {
+    local -a compose_files
+    configure_ota_contract_environment
+    mapfile -t compose_files < <(ota_compose_files)
+    # Build before A is flashed. A cold Playwright build can otherwise consume
+    # the finite portal window before the browser has connected.
+    docker compose "${compose_files[@]}" build portal-contract
+    ota_browser_prebuilt=yes
+}
+
+run_ota_contract() {
+    local -a compose_files
+    configure_ota_contract_environment
+    mapfile -t compose_files < <(ota_compose_files)
+    [[ "$ota_browser_prebuilt" == yes ]] || {
+        echo "Portal OTA browser image was not prepared before A was flashed." >&2
+        return 1
+    }
+    docker compose "${compose_files[@]}" run --rm portal-contract
 }
 
 finish_portal_session() {
@@ -208,6 +490,9 @@ case "$command_name" in
         export LOCAL_UID="$(id -u)"
         export LOCAL_GID="$(id -g)"
         export PORTAL_BROWSER_MODE="$browser"
+        # A normal run is the full portal suite; do not let a prior OTA shell
+        # environment restrict it to one spec.
+        export PORTAL_TEST_FILE=''
         export PORTAL_CUSTOM_PARAMETER_STRESS=0
         if [[ "$custom_parameter_stress" == "yes" ]]; then
             export PORTAL_CUSTOM_PARAMETER_STRESS=1
@@ -233,6 +518,44 @@ case "$command_name" in
             write_readme_media_manifest
         fi
         printf 'Portal contract passed. Artifacts: %s\n' "$output_dir"
+        if [[ "$keep" == "yes" ]]; then
+            printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
+        fi
+        ;;
+    ota)
+        # Acquire the same board/adapter lock before *any* A/B preparation.
+        # Otherwise two OTA invocations can collide in .pio or create a
+        # same-second artifact directory before either reaches serial flash.
+        validate_run_arguments
+        require_common
+        wm_acquire_hardware_lock
+        wm_require_no_active_session
+        wm_require_client_adapter "$client_interface" "$takeover"
+        prepare_output_dir
+        prepare_ota_firmware
+        prepare_ota_contract_image
+        start_portal_session "$ota_environment_a" yes "$ota_firmware_a"
+        cleanup() {
+            if [[ "$keep" != "yes" ]]; then
+                finish_portal_session || true
+            fi
+        }
+        trap cleanup EXIT INT TERM
+
+        # A must be visible through the real portal before a B upload can be
+        # meaningful. On ESP8266 the marker also reports the actual active
+        # sketch-space limit, which is checked before the browser sees B.
+        wait_for_ota_marker A >/dev/null
+        validate_running_ota_capacity
+        run_ota_contract
+
+        # The browser contract has already required an outage and two B
+        # observations. Repeat the host-side observation after the container
+        # exits so the named secondary adapter is also proven to see B.
+        wait_for_ota_marker B >/dev/null
+        sleep 1
+        wait_for_ota_marker B >/dev/null
+        printf 'Portal HTTP OTA contract passed. Artifacts: %s\n' "$output_dir"
         if [[ "$keep" == "yes" ]]; then
             printf 'Portal session remains connected; run ./tools/portal-hardware down when finished.\n'
         fi

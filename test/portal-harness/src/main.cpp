@@ -3,6 +3,14 @@
 
 namespace {
 
+// These markers belong only to the portal hardware fixture. They are compiled
+// into the image rather than stored in Wi-FiManager settings, so an A -> B
+// assertion proves that the new firmware booted after the updater restarted
+// the board. Normal portal-contract builds retain a descriptive fixture value.
+#ifndef WM_OTA_TEST_IMAGE
+#define WM_OTA_TEST_IMAGE "portal-contract"
+#endif
+
 #if defined(ESP8266)
 constexpr char kPortalSsid[] = "WM Contract ESP8266";
 #else
@@ -57,6 +65,28 @@ WiFiManagerParameter* const kPortalParameters[] = {
     &kNotes,
 };
 
+void registerOtaTestMarker() {
+    // setWebServerCallback runs after WiFiManager creates its server and
+    // before it registers built-in routes. This private fixture endpoint is
+    // intentionally not a WiFiManager product API.
+    wifi.setWebServerCallback([]() {
+        AsyncWebServer* const server = wifi.getServer();
+        if (server == nullptr) {
+            return;
+        }
+
+        server->on("/api/test/firmware-marker", HTTP_GET,
+                   [](AsyncWebServerRequest* request) {
+                       String response = F("{\"marker\":\"");
+                       response += WM_OTA_TEST_IMAGE;
+                       response += F("\",\"freeSketchSpace\":");
+                       response += String(ESP.getFreeSketchSpace());
+                       response += F("}");
+                       request->send(200, "application/json", response);
+                   });
+    });
+}
+
 }  // namespace
 
 void setup() {
@@ -75,6 +105,7 @@ void setup() {
         IPAddress(192, 168, 4, 1),
         IPAddress(192, 168, 4, 1),
         IPAddress(255, 255, 255, 0));
+    registerOtaTestMarker();
     // Keep custom parameters on their own native Save parameters page. This
     // lets the browser contract exercise a parameter-only submit without
     // starting a station connection as part of the regression test.

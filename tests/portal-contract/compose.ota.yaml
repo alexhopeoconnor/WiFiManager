@@ -1,0 +1,11 @@
+# OTA-only overlay. The normal portal contract neither builds nor mounts a
+# firmware image. portal-hardware supplies this absolute path after it has
+# built B and copied it into the run's private artifact directory.
+services:
+  portal-contract:
+    environment:
+      PORTAL_OTA_FIRMWARE: /firmware/portal-ota-b.bin
+      PORTAL_OTA_INITIAL_MARKER: ${PORTAL_OTA_INITIAL_MARKER:-A}
+      PORTAL_OTA_EXPECTED_MARKER: ${PORTAL_OTA_EXPECTED_MARKER:-B}
+    volumes:
+      - ${PORTAL_OTA_FIRMWARE_HOST:?OTA firmware path is required}:/firmware/portal-ota-b.bin:ro

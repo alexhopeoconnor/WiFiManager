@@ -61,6 +61,20 @@ if "$root/tools/portal-hardware" run --platform esp8266 --port /dev/null \
     echo 'browser-skipped custom-parameter stress was accepted' >&2
     exit 1
 fi
+if "$root/tools/portal-hardware" ota --platform esp8266 --port /dev/null \
+    --client-interface wlan-client --browser skip >/dev/null 2>&1; then
+    echo 'browser-skipped OTA was accepted' >&2
+    exit 1
+fi
+if "$root/tools/portal-hardware" ota --platform esp8266 --port /dev/null \
+    --client-interface wlan-client --station-env "$root/test/portal-station.env.example" >/dev/null 2>&1; then
+    echo 'station handoff inputs were accepted by portal OTA' >&2
+    exit 1
+fi
+if "$root/scripts/test.sh" ota-fixtures --platform esp32 >/dev/null 2>&1; then
+    echo 'legacy-cache ESP32 OTA-fixture selector was accepted' >&2
+    exit 1
+fi
 
 # A failed association must delete the only connection it just created.
 source "$root/tools/lib/portal-hardware-session.sh"
@@ -102,6 +116,14 @@ run_line="$(grep -n " run --rm portal-contract$" "$CALL_LOG" | tail -1 | cut -d:
 grep -Fq 'wait_for_portal_ready' "$root/tools/portal-hardware"
 grep -Fq 'api/wifi/scan-status' "$root/tools/portal-hardware"
 grep -Fq 'PORTAL_CUSTOM_PARAMETER_STRESS' "$root/tools/portal-hardware"
+grep -Fq 'compose.ota.yaml' "$root/tools/portal-hardware"
+grep -Fq 'wait_for_ota_marker B' "$root/tools/portal-hardware"
+grep -Fq 'pio_for_portal_environment "$ota_environment_a"' "$root/tools/portal-hardware"
+grep -Fq 'WIFIMANAGER_PLATFORMIO_CORE_DIR' "$root/tools/portal-hardware"
+grep -Fq 'assert_ota_fixture_pair' "$root/scripts/test.sh"
+grep -Fq 'WiFiManager Unity compile check passed' "$root/scripts/test.sh"
+grep -Fq 'eagle.flash.4m1m.ld' "$root/test/portal-harness/platformio.ini"
+grep -Fq 'esp32_ota_4m_no_fs.csv' "$root/test/portal-harness/platformio.ini"
 grep -Fq 'README media GIF exceeds its 2 MiB documentation budget' \
     "$root/tests/portal-contract/render-readme-media.sh"
 

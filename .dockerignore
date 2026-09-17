@@ -1,0 +1,14 @@
+# Keep local credentials, build output, and test artifacts out of the Docker
+# build context. OTA firmware is mounted read-only by compose.ota.yaml instead
+# of copied into an image.
+.git
+.github
+.pio
+**/.pio
+node_modules
+**/node_modules
+artifacts
+test/portal-station.env
+test/.env
+platformio.local.ini*
+**/platformio.local.ini*
