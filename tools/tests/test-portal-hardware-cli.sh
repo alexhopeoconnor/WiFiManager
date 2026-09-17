@@ -21,6 +21,7 @@ printf '%s\n' '#!/usr/bin/env bash' \
 'echo "192.168.4.1 dev wlan-client src 192.168.4.2"' >"$stub_bin/ip"
 printf '%s\n' '#!/usr/bin/env bash' \
 'printf "%s\\n" "$*" >>"$CALL_LOG"' \
+'if [[ "${NMCLI_PERMISSION_MODE:-}" == "auth" && "$1" == "-t" && "$2" == "-f" && "$3" == "PERMISSION,VALUE" ]]; then printf "%s\\n" "org.freedesktop.NetworkManager.wifi.scan:auth" "org.freedesktop.NetworkManager.network-control:auth" "org.freedesktop.NetworkManager.settings.modify.system:auth"; exit 0; fi' \
 'if [[ "${NMCLI_REQUIRE_SUDO:-}" == "yes" && "${RUN_AS_SUDO:-}" != "yes" ]]; then echo "Error: Insufficient privileges" >&2; exit 7; fi' \
 'if [[ "${NMCLI_FAIL_SCAN:-}" == "yes" && "$1" == "device" && "$2" == "wifi" && "$3" == "rescan" ]]; then echo "fixture scan failure" >&2; exit 7; fi' \
 'if [[ "${NMCLI_FAIL_ADD:-}" == "yes" && "$1" == "connection" && "$2" == "add" ]]; then exit 7; fi' \
@@ -175,6 +176,22 @@ fi
 unset SUDO_FAIL
 export WM_NMCLI_AUTH=direct
 unset WM_NMCLI_AUTH_READY WM_NMCLI_MODE WM_NMCLI_PERMISSIONS
+
+# A session D-Bus socket alone is not a graphical Polkit agent. This models
+# the SSH environment that exposes DBUS_SESSION_BUS_ADDRESS but no display.
+: >"$CALL_LOG"
+if ! ROOT="$root" PATH="$stub_bin:$PATH" WM_NMCLI_AUTH=auto \
+    NMCLI_PERMISSION_MODE=auth NMCLI_REQUIRE_SUDO=yes \
+    DBUS_SESSION_BUS_ADDRESS='unix:path=/run/user/1000/bus' DISPLAY='' WAYLAND_DISPLAY='' \
+    bash -c '
+        source "$ROOT/tools/lib/portal-hardware-session.sh"
+        wm_prepare_networkmanager_authorization
+        [[ "$WM_NMCLI_MODE" == sudo ]]
+    '; then
+    echo 'headless session D-Bus path did not select scoped sudo' >&2
+    exit 1
+fi
+grep -Fq 'sudo -v' "$CALL_LOG"
 
 # A portal scan failure must stop before `connection add` and clear the
 # pre-add pending record, even though this helper is invoked in an `if`.

@@ -54,7 +54,9 @@ wm_prepare_networkmanager_authorization() {
         auto)
             if [[ "$direct" == yes ]]; then
                 WM_NMCLI_MODE=direct
-            elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+            # A session D-Bus socket is common over SSH but does not itself
+            # provide a graphical Polkit agent, so require an actual display.
+            elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
                 WM_NMCLI_MODE=sudo
             else
                 # Give a graphical Polkit agent the chance to authorize the
@@ -91,7 +93,7 @@ wm_report_networkmanager_authorization() {
     done
     if [[ "$direct" == yes ]]; then
         echo 'NetworkManager portal authorization: direct.'
-    elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    elif [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
         echo 'NetworkManager portal authorization: scoped sudo will be requested before a portal command flashes the board.'
     else
         echo 'NetworkManager portal authorization: graphical Polkit may authorize actions; set WM_NMCLI_AUTH=sudo to use scoped sudo instead.'
