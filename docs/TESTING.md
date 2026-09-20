@@ -7,7 +7,7 @@ local Wi-Fi credentials, browser binary, or sibling checkout.
 | Physical test harness | Transport | Host adapter | Secret source | Required proof |
 | --- | --- | --- | --- | --- |
 | Portal lifecycle suite | Serial flash + captive-portal HTTP/browser | Named secondary adapter | safe fixture AP password | Unity/lifecycle checks and portal UI/API coverage |
-| Portal HTTP OTA | WiFiManager multipart `POST /u` | Named secondary adapter | safe fixture AP password | serial A → updater accepts/completes B → serial B, plus browser automatic-reboot/B-twice proof |
+| Portal HTTP OTA | WiFiManager multipart `POST /u` | Named secondary adapter | safe fixture AP password | rendered upload succeeds, portal restarts automatically, and fixture marker changes A → B twice |
 
 The selected secondary adapter is intentionally never used for normal LAN
 testing. It is `never-default`, so the host's ordinary route remains intact.
@@ -39,6 +39,16 @@ and B images against their tracked OTA partition layout. CI rejects equal A/B
 artifacts, an ESP32 image larger than either 0x1F0000-byte app slot, or a
 partition-table edit that breaks the required two-slot/no-filesystem layout. These checks
 intentionally do not require attached hardware, a local network, or Docker.
+
+Direct PlatformIO test-harness commands default to two compiler jobs. Set
+`PLATFORMIO_RUN_JOBS=3` only for an explicit local run on an otherwise idle
+host.
+
+Physical portal commands lock the shared `192.168.4.0/24` portal network, the
+selected secondary adapter, and the named serial device. These non-secret
+resource locks are shared with DeviceFramework's portal harness, so a collision
+fails before either runner changes a board or adapter while unrelated station
+tests can use their own resources.
 
 ## Local hardware lifecycle tests
 
@@ -242,8 +252,10 @@ HTTP route authentication.
 
 The test harness performs the following complete run:
 
-1. Builds immutable A and B fixture images. Their marker is compiled into the
-   binary, not saved in WiFiManager settings or EEPROM.
+1. Builds immutable A and B fixture images from one platform environment. A
+   generated harness-only header in an ignored, per-run private directory is
+   the only changed input, so their marker is compiled into the binary rather
+   than saved in WiFiManager settings or EEPROM.
 2. Checks both ESP32 images against the explicit matching `app0`/`app1` slots;
    ESP8266 validates B after A has booted against the exact aligned capacity
    passed to `Update.begin()`.
@@ -261,10 +273,10 @@ The OTA command additionally requires Python with PySerial (the
 no-reset `serial-ota.log` beside the browser artifacts. It attaches immediately
 after serial-flashing A releases the port—before portal association and the A
 marker check—and remains attached through the two B checks. A passing run
-requires the log's ordered immutable A marker, WiFiManager's update-start and
-update-complete lines, then immutable B marker. This preserves firmware-side
-portal-start and DHCP evidence as well as OTA evidence, without manufacturing a
-reset. OTA-only fixture images wait five seconds after their upload reset so
+requires a healthy recorder, but its contents are diagnostic evidence rather
+than a pass/fail comparison against product log strings. This preserves
+firmware-side portal-start and DHCP evidence without manufacturing a reset.
+OTA-only fixture images wait five seconds after their upload reset so
 the passive recorder can attach before A/B boot evidence is emitted; ordinary
 portal test-harness startup remains fast.
 

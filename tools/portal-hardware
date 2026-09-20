@@ -2,8 +2,17 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=tools/lib/platformio.sh
+source "$root/tools/lib/platformio.sh"
 # shellcheck source=tools/lib/portal-hardware-session.sh
 source "$root/tools/lib/portal-hardware-session.sh"
+# shellcheck source=tools/lib/ota-fixture-identity.sh
+source "$root/tools/lib/ota-fixture-identity.sh"
+
+# Portal tests exclusively own their portal network, selected Wi-Fi adapter,
+# and named serial port. Avoid consuming every host core unless the developer
+# explicitly opts in.
+export PLATFORMIO_RUN_JOBS="${PLATFORMIO_RUN_JOBS:-2}"
 
 usage() {
     cat <<'USAGE' >&2
@@ -47,8 +56,7 @@ station_env=""
 output_dir=""
 capture_readme_media="no"
 custom_parameter_stress="no"
-ota_environment_a=""
-ota_environment_b=""
+ota_environment_name=""
 ota_firmware_a=""
 ota_firmware_b=""
 ota_browser_prebuilt="no"
@@ -97,37 +105,6 @@ require_ota_serial_capture() {
     }
 }
 
-wm_pio_executable() {
-    # Hardware runners are commonly launched over non-interactive SSH, where
-    # a normal PlatformIO installation is not necessarily on PATH.  Honor an
-    # explicit override first, then PATH, then PlatformIO's standard venv.
-    # This mirrors DeviceFramework's resolver without changing a user's PATH.
-    local executable
-    if [[ -n "${WIFIMANAGER_PIO_EXECUTABLE:-}" ]]; then
-        executable="$WIFIMANAGER_PIO_EXECUTABLE"
-    else
-        executable="$(command -v pio 2>/dev/null || true)"
-        if [[ -z "$executable" && -x "$HOME/.platformio/penv/bin/pio" ]]; then
-            executable="$HOME/.platformio/penv/bin/pio"
-        fi
-    fi
-    [[ -n "$executable" && -x "$executable" ]] || {
-        echo "PlatformIO is required; install it or set WIFIMANAGER_PIO_EXECUTABLE." >&2
-        return 1
-    }
-    printf '%s\n' "$executable"
-}
-
-wm_pio_available() {
-    wm_pio_executable >/dev/null
-}
-
-wm_pio() {
-    local executable
-    executable="$(wm_pio_executable)" || return
-    "$executable" "$@"
-}
-
 pio_for_portal_environment() {
     local environment="$1"
     shift
@@ -135,7 +112,7 @@ pio_for_portal_environment() {
     case "$environment" in
         # Keep the maintained Core 3.3.11 graph in the same persistent cache
         # as the ESP32 A/B fixture. It is never cleared by this test harness.
-        esp32|esp32_ota_*)
+        esp32|esp32_ota)
             ;;
         *)
             wm_pio "$@"
@@ -144,7 +121,7 @@ pio_for_portal_environment() {
     esac
 
     local core_dir packages_dir cache_dir
-    core_dir="${WIFIMANAGER_PLATFORMIO_CORE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/wifimanager-platformio/core-3.3.11}"
+    core_dir="${WIFIMANAGER_PLATFORMIO_CORE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arduino-framework-platformio/core-3.3.11}"
     packages_dir="${WIFIMANAGER_PLATFORMIO_PACKAGES_DIR:-$core_dir/packages}"
     cache_dir="${WIFIMANAGER_PLATFORMIO_CACHE_DIR:-$core_dir/cache}"
     install -d -m 700 "$core_dir" "$packages_dir" "$cache_dir"
@@ -162,6 +139,13 @@ prepare_output_dir() {
     fi
     install -d -m 700 "$output_dir"
     output_dir="$(cd "$output_dir" && pwd)"
+}
+
+prepare_ota_identity_input() {
+    # The generated A/B marker belongs to this run, never to shared fixture
+    # source. Keeping it with the private artifacts prevents cross-run drift.
+    export WIFIMANAGER_OTA_IDENTITY_DIR="$output_dir/ota-fixture-input"
+    install -d -m 700 "$WIFIMANAGER_OTA_IDENTITY_DIR"
 }
 
 validate_run_arguments() {
@@ -309,7 +293,7 @@ restore_station_handoff_fixture() {
     ssid="$(wm_portal_ssid "$platform")" || return 1
     if ! wm_wait_for_portal_ssid "$client_interface" "$ssid" || \
         ! wm_verify_portal_route "$client_interface" || \
-        ! wait_for_portal_ready; then
+        ! wait_for_portal_scan_ready; then
         echo 'The clean portal-only fixture did not return after station hand-off cleanup.' >&2
         return 1
     fi
@@ -330,14 +314,33 @@ write_readme_media_manifest() {
     chmod 600 "$media_dir/manifest.json"
 }
 
-wait_for_portal_ready() {
-    # A portal SSID can be visible before its first background scan has
-    # completed. Wait for that normal portal-start work before the browser
-    # test harness asks the device to perform a second, user-initiated refresh.
+portal_scan_status() {
+    curl --interface "$client_interface" --connect-timeout 3 --max-time 5 \
+        --silent --show-error --fail http://192.168.4.1/api/wifi/scan-status 2>/dev/null
+}
+
+wait_for_portal_http_ready() {
+    # The AP can be visible before the portal server has completed startup.
+    # OTA requires the update UI and its HTTP route; it does not require an
+    # unrelated background scan to have succeeded.
     local attempt response
     for attempt in $(seq 1 45); do
-        response="$(curl --interface "$client_interface" --connect-timeout 3 --max-time 5 \
-            --silent --show-error --fail http://192.168.4.1/api/wifi/scan-status 2>/dev/null || true)"
+        response="$(portal_scan_status || true)"
+        if [[ "$response" == *'"state"'* ]]; then
+            return 0
+        fi
+        sleep 1
+    done
+    echo 'Portal HTTP API did not become ready within 45 seconds.' >&2
+    return 1
+}
+
+wait_for_portal_scan_ready() {
+    # The normal portal UI suite exercises the automatic scan and still
+    # requires a usable result. Keep that coverage separate from HTTP OTA.
+    local attempt response
+    for attempt in $(seq 1 45); do
+        response="$(portal_scan_status || true)"
         if [[ "$response" == *'"state":"complete"'* && "$response" == *'"results_valid":true'* ]]; then
             return 0
         fi
@@ -351,8 +354,18 @@ wait_for_portal_ready() {
     return 1
 }
 
+report_initial_portal_scan_status() {
+    local response
+    response="$(portal_scan_status || true)"
+    if [[ -n "$response" ]]; then
+        printf 'Initial portal scan status: %s\n' "$response"
+    else
+        echo 'Initial portal scan status was unavailable after portal startup.' >&2
+    fi
+}
+
 start_portal_session() {
-    local environment="${1:-$platform}" erase_before_upload="${2:-no}" expected_a_artifact="${3:-}" capture_ota_serial="${4:-no}" ssid reconnect_after_drop="no"
+    local environment="${1:-$platform}" erase_before_upload="${2:-no}" expected_a_artifact="${3:-}" capture_ota_serial="${4:-no}" require_scan="${5:-yes}" ssid reconnect_after_drop="no"
     validate_run_arguments
     require_common
     wm_acquire_hardware_lock
@@ -362,9 +375,17 @@ start_portal_session() {
     # for an idle adapter and then replace a connection it does not own.
     wm_prepare_networkmanager_authorization
     wm_require_client_adapter "$client_interface" "$takeover"
+    wm_harness_lock_serial_port "$port"
     prepare_output_dir
     ssid="$(wm_portal_ssid "$platform")"
 
+    if [[ -n "$expected_a_artifact" ]]; then
+        # B was built most recently. Restore the generated A identity before
+        # PlatformIO verifies and serial-flashes the immutable A artifact.
+        wm_write_ota_fixture_identity A
+        pio_for_portal_environment "$environment" run -d "$root/test/portal-harness" -e "$environment"
+        ota_assert_a_artifact_matches_build "$expected_a_artifact"
+    fi
     if [[ "$erase_before_upload" == "yes" ]]; then
         # OTA selection metadata must not survive from a previous fixture run:
         # otherwise a bootloader could select a stale app slot instead of A.
@@ -397,26 +418,43 @@ start_portal_session() {
         wm_cleanup_created_connection
         return 1
     fi
-    if ! wait_for_portal_ready; then
+    if [[ "$require_scan" == yes ]]; then
+        wait_for_portal_scan_ready || {
+            wm_cleanup_created_connection
+            return 1
+        }
+    elif ! wait_for_portal_http_ready; then
         wm_cleanup_created_connection
         return 1
     fi
+    [[ "$require_scan" == yes ]] || report_initial_portal_scan_status
     printf 'Portal connected on %s. Artifacts: %s\n' "$client_interface" "$output_dir"
 }
 
 ota_environment() {
-    local image="$1"
-    printf '%s_ota_%s\n' "$platform" "$image"
+    printf '%s_ota\n' "$platform"
 }
 
 ota_marker_field() {
     local response="$1" field="$2"
     case "$field" in
-        marker)
-            sed -n 's/.*"marker"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$response"
-            ;;
-        freeSketchSpace)
-            sed -n 's/.*"freeSketchSpace"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$response"
+        marker|freeSketchSpace)
+            # The marker endpoint is deliberately fixture-only JSON. Parse it
+            # as JSON instead of maintaining a second, fragile copy of its
+            # wire format in a regular expression.
+            python3 -c '
+import json
+import sys
+
+try:
+    value = json.load(sys.stdin)[sys.argv[1]]
+except (json.JSONDecodeError, KeyError, TypeError):
+    raise SystemExit(1)
+
+if isinstance(value, bool) or not isinstance(value, (str, int)):
+    raise SystemExit(1)
+print(value)
+' "$field" <<<"$response" 2>/dev/null || true
             ;;
         *)
             echo "Unknown OTA marker field: $field" >&2
@@ -515,31 +553,46 @@ ota_assert_firmware_fits() {
     printf 'OTA %s image fits the available update space: %s <= %s bytes\n' "$label" "$image_size" "$capacity"
 }
 
-prepare_ota_firmware() {
-    local source_a source_b capacity
-    ota_environment_a="$(ota_environment a)"
-    ota_environment_b="$(ota_environment b)"
-
-    # Build and preserve both identities before touching the board. The
-    # browser mounts B read-only; the A artifact is compared against the
-    # PlatformIO build used for serial flashing so a later build cannot turn
-    # the A/B proof into an unrecorded input change.
-    pio_for_portal_environment "$ota_environment_a" run -d "$root/test/portal-harness" -e "$ota_environment_a"
-    pio_for_portal_environment "$ota_environment_b" run -d "$root/test/portal-harness" -e "$ota_environment_b"
-    source_a="$root/test/portal-harness/.pio/build/$ota_environment_a/firmware.bin"
-    source_b="$root/test/portal-harness/.pio/build/$ota_environment_b/firmware.bin"
-    [[ -s "$source_a" && -s "$source_b" ]] || {
-        echo "PlatformIO did not produce both OTA fixture images." >&2
+build_ota_image() {
+    local image="$1" source artifact
+    case "$image" in
+        A)
+            artifact="$output_dir/${platform}-portal-ota-a.bin"
+            ota_firmware_a="$artifact"
+            ;;
+        B)
+            artifact="$output_dir/${platform}-portal-ota-b.bin"
+            ota_firmware_b="$artifact"
+            ;;
+        *)
+            echo "Unknown portal OTA fixture image: $image" >&2
+            return 2
+            ;;
+    esac
+    wm_write_ota_fixture_identity "$image"
+    pio_for_portal_environment "$ota_environment_name" run -d "$root/test/portal-harness" -e "$ota_environment_name"
+    source="$root/test/portal-harness/.pio/build/$ota_environment_name/firmware.bin"
+    [[ -s "$source" ]] || {
+        echo "PlatformIO did not produce portal OTA image $image." >&2
         return 1
     }
-    if cmp -s "$source_a" "$source_b"; then
+    install -m 600 "$source" "$artifact"
+}
+
+prepare_ota_firmware() {
+    local capacity
+    ota_environment_name="$(ota_environment)"
+    wm_lock_ota_fixture_environment "$ota_environment_name"
+
+    # Capture immutable A before rebuilding the same environment as B. The
+    # generated header is the only changed input, so PlatformIO reuses library
+    # objects while the browser still mounts a distinct B artifact read-only.
+    build_ota_image A
+    build_ota_image B
+    if cmp -s "$ota_firmware_a" "$ota_firmware_b"; then
         echo "PlatformIO produced identical OTA A and B images." >&2
         return 1
     fi
-    ota_firmware_a="$output_dir/${platform}-portal-ota-a.bin"
-    ota_firmware_b="$output_dir/${platform}-portal-ota-b.bin"
-    install -m 600 "$source_a" "$ota_firmware_a"
-    install -m 600 "$source_b" "$ota_firmware_b"
 
     if [[ "$platform" == "esp32" ]]; then
         "$root/tools/check-ota-partitions.sh"
@@ -551,7 +604,7 @@ prepare_ota_firmware() {
 
 ota_assert_a_artifact_matches_build() {
     local expected_artifact="$1" source
-    source="$root/test/portal-harness/.pio/build/$ota_environment_a/firmware.bin"
+    source="$root/test/portal-harness/.pio/build/$ota_environment_name/firmware.bin"
     [[ -s "$expected_artifact" && -s "$source" ]] || {
         echo "Prepared OTA A artifact or PlatformIO build output is missing." >&2
         return 1
@@ -633,6 +686,7 @@ start_ota_serial_capture() {
         --port "$port" \
         --output "$ota_serial_capture_log" \
         --ready-file "$ota_serial_capture_ready" \
+        --deadline-seconds 600 \
         >>"$ota_serial_capture_status" 2>&1 &
     ota_serial_capture_pid=$!
 
@@ -658,30 +712,6 @@ require_ota_serial_capture_running() {
     }
 }
 
-assert_ota_serial_sequence() {
-    python3 - "$ota_serial_capture_log" <<'PY'
-import sys
-
-path = sys.argv[1]
-with open(path, "r", encoding="utf-8", errors="replace") as source:
-    lines = source.readlines()
-
-def first_after(marker, start=0):
-    for index in range(start, len(lines)):
-        if marker in lines[index]:
-            return index
-    return None
-
-a = first_after("WiFiManager portal OTA fixture image: A")
-upload_started = first_after("[OTA] Update file:", (a or 0) + 1)
-upload_completed = first_after("[OTA] OTA FILE END bytes:", (upload_started or 0) + 1)
-b = first_after("WiFiManager portal OTA fixture image: B", (upload_completed or 0) + 1)
-
-if None in (a, upload_started, upload_completed, b):
-    raise SystemExit("Serial portal-OTA evidence is missing its required A/upload/B ordering.")
-PY
-}
-
 stop_ota_serial_capture() {
     local status=0
     [[ -n "$ota_serial_capture_pid" ]] || return 0
@@ -693,10 +723,6 @@ stop_ota_serial_capture() {
     fi
     ota_serial_capture_pid=""
     (( status == 0 )) || return "$status"
-    if ! assert_ota_serial_sequence; then
-        echo "Serial portal-OTA evidence did not observe ordered A/upload/B markers: $ota_serial_capture_log" >&2
-        return 1
-    fi
 }
 
 finish_portal_session() {
@@ -717,6 +743,7 @@ cleanup_portal_session() {
     # a recursive EXIT trap must not obscure the original status.
     trap - EXIT HUP INT TERM
     stop_ota_serial_capture || true
+    wm_remove_ota_fixture_identity
     if ! restore_station_handoff_fixture; then
         (( status != 0 )) || status=1
     fi
@@ -826,9 +853,10 @@ case "$command_name" in
         wm_require_client_adapter "$client_interface" "$takeover"
         require_ota_serial_capture
         prepare_output_dir
+        prepare_ota_identity_input
         prepare_ota_firmware
         prepare_ota_harness_image
-        start_portal_session "$ota_environment_a" yes "$ota_firmware_a" yes
+        start_portal_session "$ota_environment_name" yes "$ota_firmware_a" yes no
 
         # A must be visible through the real portal before a B upload can be
         # meaningful. On ESP8266 the marker also reports the actual active

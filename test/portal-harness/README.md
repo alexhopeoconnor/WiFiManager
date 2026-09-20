@@ -25,12 +25,14 @@ the `WM_NMCLI_AUTH` options.
 
 ## A/B portal OTA fixture
 
-The same fixture has dedicated `*_ota_a` and `*_ota_b` PlatformIO environments
-for the physical portal HTTP OTA test harness. A and B differ only by a compiled
-marker served from the fixture-only `/api/test/firmware-marker` endpoint and an
-immutable serial boot marker. The test harness requires serial A, updater
-start/completion, then serial B, so it proves a B boot without trusting saved
-portal values, EEPROM, or a filename.
+The physical portal HTTP OTA test harness uses one `*_ota` environment per
+platform. It writes a harness-only A/B identity header to an ignored, owner-only
+directory unique to that run before each build, so PlatformIO reuses dependency
+objects while the fixture-only `/api/test/firmware-marker` endpoint still proves
+the newly booted image. The test harness requires the real form's successful response, its automatic
+restart, and two fresh B-marker responses. Passive serial capture is retained
+for failure diagnosis, but a product log-message wording change cannot turn a
+successful A-to-B update into a failed test.
 
 ```bash
 ./tools/portal-hardware ota \

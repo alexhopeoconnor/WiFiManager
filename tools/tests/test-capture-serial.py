@@ -73,6 +73,26 @@ class FakeSerial:
         self.close()
 
 
+class FakeClock:
+    def __init__(self):
+        self.value = 0.0
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, seconds):
+        self.value += seconds
+
+
+class BlockingEmptySerial(FakeSerial):
+    clock = None
+
+    def read(self, _size):
+        type(self).read_calls += 1
+        type(self).clock.advance(0.25)
+        return b""
+
+
 def load_capture_module():
     fake_serial_module = types.ModuleType("serial")
     fake_serial_module.Serial = FakeSerial
@@ -126,6 +146,57 @@ def main():
     assert ("open", False, False, "/dev/fake") in FakeSerial.events
     assert ("close",) in FakeSerial.events
     assert FakeSerial.read_calls == 2
+
+    # An immediate empty-return backend must back off progressively instead of
+    # spinning. This takes no real sleep because the sleeper is injected.
+    FakeSerial.read_calls = 0
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        output = Path(temporary_directory) / "serial-ota.log"
+        ready = Path(temporary_directory) / "serial-ota.ready"
+        empty_sleeps = []
+        assert module.capture(
+            "/dev/fake",
+            output,
+            ready,
+            should_stop=lambda: FakeSerial.read_calls >= 5,
+            sleep=empty_sleeps.append,
+        ) == 0
+        assert empty_sleeps == [0.01, 0.02, 0.04, 0.08]
+
+    # A normal 250 ms serial timeout is already rate-limited by the device
+    # driver, so it must not receive an additional backoff sleep.
+    module.serial.Serial = BlockingEmptySerial
+    BlockingEmptySerial.events = []
+    BlockingEmptySerial.read_calls = 0
+    clock = FakeClock()
+    BlockingEmptySerial.clock = clock
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        output = Path(temporary_directory) / "serial-ota.log"
+        ready = Path(temporary_directory) / "serial-ota.ready"
+        empty_sleeps = []
+        assert module.capture(
+            "/dev/fake",
+            output,
+            ready,
+            should_stop=lambda: BlockingEmptySerial.read_calls >= 2,
+            clock=clock,
+            sleep=empty_sleeps.append,
+        ) == 0
+        assert empty_sleeps == []
+    module.serial.Serial = FakeSerial
+
+    FakeSerial.read_calls = 0
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        output = Path(temporary_directory) / "serial-ota.log"
+        ready = Path(temporary_directory) / "serial-ota.ready"
+        assert module.capture(
+            "/dev/fake",
+            output,
+            ready,
+            should_stop=lambda: False,
+            deadline_seconds=0.0,
+        ) == 2
+
     print("WiFiManager passive OTA serial-capture test-harness check passed")
 
 

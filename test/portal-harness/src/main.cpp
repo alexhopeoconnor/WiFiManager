@@ -3,19 +3,21 @@
 
 namespace {
 
-// These markers belong only to the portal hardware fixture. They are compiled
-// into the image rather than stored in Wi-FiManager settings, so an A -> B
-// assertion proves that the new firmware booted after the updater restarted
-// the board. Normal portal test-harness builds retain a descriptive fixture
-// value.
-#if defined(WM_OTA_TEST_IMAGE)
+// These markers belong only to the portal OTA fixture. The hardware runner
+// writes the ignored header immediately before each A/B build, so the marker
+// is compiled into firmware rather than saved in WiFiManager settings.
+#if defined(WM_PORTAL_OTA_TEST)
+    #include <ota_fixture_identity.h>
+    #ifndef WM_OTA_FIXTURE_IMAGE
+        #error "Portal OTA fixture identity is missing."
+    #endif
 // PlatformIO releases the serial port only after the upload-triggered reset.
 // The physical OTA test harness then attaches passively, so give it the same
 // explicit window as the DeviceFramework A/B fixtures before boot evidence or
 // portal work begins. Normal portal test-harness builds keep the short delay.
 constexpr unsigned long kSerialMonitorAttachDelayMs = 5000UL;
 #else
-#define WM_OTA_TEST_IMAGE "portal-harness"
+#define WM_OTA_FIXTURE_IMAGE "portal-harness"
 constexpr unsigned long kSerialMonitorAttachDelayMs = 300UL;
 #endif
 
@@ -87,7 +89,7 @@ void registerOtaTestMarker() {
         server->on("/api/test/firmware-marker", HTTP_GET,
                    [](AsyncWebServerRequest* request) {
                        String response = F("{\"marker\":\"");
-                       response += WM_OTA_TEST_IMAGE;
+                       response += WM_OTA_FIXTURE_IMAGE;
                        response += F("\",\"freeSketchSpace\":");
                        response += String(ESP.getFreeSketchSpace());
                        response += F("}");
@@ -105,7 +107,7 @@ void setup() {
     // and after its browser upload. It cannot be faked by saved portal values
     // or an HTTP response from a stale image.
     Serial.print(F("WiFiManager portal OTA fixture image: "));
-    Serial.println(WM_OTA_TEST_IMAGE);
+    Serial.println(WM_OTA_FIXTURE_IMAGE);
 
     // This fixture must be independent of whichever sketch was previously
     // flashed to the board. Clear saved station credentials before starting

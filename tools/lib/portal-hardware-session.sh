@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=tools/lib/harness-locks.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/harness-locks.sh"
 # Shared host-side helpers for the WiFiManager portal hardware test harness.
 # They never modify a network interface other than the explicit client adapter.
 
@@ -121,22 +123,9 @@ wm_default_route_interface() {
 }
 
 wm_acquire_hardware_lock() {
-    # First-party runners deliberately share this lock: a WiFiManager portal
-    # test and a DeviceFramework hardware test can otherwise serial-flash the
-    # same selected board concurrently.  Keep the WiFiManager override for
-    # isolated tests and let callers redirect the common lock with TMPDIR.
-    local lock_file="${WM_HARDWARE_LOCK_FILE:-${TMPDIR:-/tmp}/deviceframework-hardware-test.lock}"
-    # `ota` deliberately acquires this before it builds firmware, then calls
-    # the shared portal-start helper which also acquires it. Keep that nested
-    # path idempotent so the lock covers the whole A/B test harness rather than
-    # only the serial flash and adapter connection.
-    [[ "${WM_HARDWARE_LOCK_HELD:-no}" == "yes" ]] && return 0
-    exec 9>"$lock_file"
-    flock -n 9 || {
-        echo "Another WiFiManager hardware task is already running; wait for it to finish." >&2
-        return 1
-    }
-    WM_HARDWARE_LOCK_HELD=yes
+    # All ordinary ESP portals use this gateway/subnet. Keep portal commands
+    # mutually exclusive even when they name different boards or adapters.
+    wm_harness_lock_portal_network
 }
 
 wm_require_client_adapter() {
@@ -162,6 +151,7 @@ wm_require_client_adapter() {
         echo "Client adapter is not Wi-Fi: $interface ($device_type)." >&2
         return 1
     }
+    wm_harness_lock_wifi_adapter "$interface"
     if ! active_connection="$(wm_nmcli -g GENERAL.CONNECTION device show "$interface" 2>/dev/null)"; then
         echo "NetworkManager could not inspect the selected portal adapter: $interface" >&2
         return 1

@@ -6,6 +6,10 @@
   SYS callback. The updater now enters asynchronous mode before its first
   erase or write, so the real browser upload can complete and restart into
   the new firmware image.
+- Send the successful portal OTA response before scheduling the restart, so
+  browsers can observe a completed HTTP exchange on both ESP8266 and ESP32.
+- Give ESP32's Wi-Fi radio a five-second hand-off interval before a user scan
+  retry, avoiding transient scan failures immediately after completion.
 
 ## 3.2.4
 

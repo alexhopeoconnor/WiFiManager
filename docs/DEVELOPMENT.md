@@ -33,17 +33,19 @@ the shared [ESP8266 linker-workaround note](https://github.com/alexhopeoconnor/a
 For the pioarduino release-to-Core mapping and cache-collision diagnosis, see
 [DeviceFramework's toolchain guide](https://github.com/alexhopeoconnor/DeviceFramework/blob/main/docs/TOOLCHAINS.md).
 
-`./scripts/test.sh` and `./tools/portal-hardware ota --platform esp32` place
-the ESP32 A/B fixture,
-in a dedicated PlatformIO Core/cache directory, defaulting to
-`${XDG_CACHE_HOME:-$HOME/.cache}/wifimanager-platformio/core-3.3.11`. That
-keeps pioarduino's package-form `esptool` and generated environment separate
+`./scripts/test.sh` and `./tools/portal-hardware ota --platform esp32` use the
+PlatformIO Core/cache shared by the maintained framework repositories,
+defaulting to `${XDG_CACHE_HOME:-$HOME/.cache}/arduino-framework-platformio/core-3.3.11`.
+WiFiManager, DeviceFramework, DFTE, and ArduinoHA pin this same graph, so this
+avoids downloading the same Core 3.3.11 inputs for each repository while
+keeping pioarduino's package-form `esptool` and generated environment separate
 from stale global `tool-esptoolpy` metadata. Override the location with
 `WIFIMANAGER_PLATFORMIO_CORE_DIR`,
 `WIFIMANAGER_PLATFORMIO_PACKAGES_DIR`, and
-`WIFIMANAGER_PLATFORMIO_CACHE_DIR` when space belongs elsewhere. The first
-first install is several GiB; reserve at least 4 GiB plus cache headroom. It is
-persistent and is never cleared by normal test commands.
+`WIFIMANAGER_PLATFORMIO_CACHE_DIR` when space belongs elsewhere or an isolated
+diagnosis is needed. The first shared install is several GiB; reserve at least
+4 GiB plus cache headroom. It is persistent and is never cleared by normal test
+commands.
 
 For a disposable cache investigation, point that variable at an exact temporary
 directory, run the affected command, inspect the resolved graph, then remove

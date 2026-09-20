@@ -106,7 +106,7 @@ The [Branded Portal](examples/BrandedPortal/) example includes a static SVG, acc
 ```ini
 [common]
 lib_deps =
-    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.4
+    WiFiManager=https://github.com/alexhopeoconnor/WiFiManager.git#v3.2.5
 ```
 
 The suffix after `#` is a Git ref. PlatformIO clones the repository and checks out that release tag; GitHub Release assets are unrelated. Arduino IDE users can install this repository as a library checkout.

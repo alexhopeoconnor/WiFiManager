@@ -11,6 +11,8 @@ tag="${1:-}"
 [[ "${2:-}" == "" || "${2:-}" == "--tag" ]] || usage
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=tools/lib/platformio.sh
+source "$root/tools/lib/platformio.sh"
 version="${tag#v}"
 manifest_version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$root/library.json" | head -n 1)"
 
@@ -54,7 +56,7 @@ validate_reference docs/GETTING_STARTED.md
 git -C "$root" diff --check
 package_dir="$(mktemp -d)"
 trap 'rm -rf "$package_dir"' EXIT
-pio pkg pack "$root" --output "$package_dir/package.tar.gz" >/dev/null
+wm_pio pkg pack "$root" --output "$package_dir/package.tar.gz" >/dev/null
 echo "Validated release metadata and PlatformIO package for $tag"
 
 if [[ "${2:-}" == "--tag" ]]; then

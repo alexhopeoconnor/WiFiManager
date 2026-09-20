@@ -16,6 +16,9 @@ import serial
 
 
 _stop_requested = False
+IMMEDIATE_EMPTY_READ_SECONDS = 0.01
+EMPTY_READ_BACKOFF_INITIAL_SECONDS = 0.01
+EMPTY_READ_BACKOFF_MAX_SECONDS = 0.25
 
 
 def request_stop(_signum, _frame):
@@ -50,7 +53,15 @@ def write_ready(path):
         os.close(descriptor)
 
 
-def capture(port, output, ready_file, should_stop=None):
+def capture(
+    port,
+    output,
+    ready_file,
+    should_stop=None,
+    deadline_seconds=None,
+    clock=time.monotonic,
+    sleep=time.sleep,
+):
     """Append serial bytes until terminated by the owning hardware runner."""
     global _stop_requested
     _stop_requested = False
@@ -64,15 +75,34 @@ def capture(port, output, ready_file, should_stop=None):
         ):
             os.fchmod(output_file.fileno(), 0o600)
             write_ready(ready_file)
+            deadline = None
+            if deadline_seconds is not None:
+                deadline = clock() + deadline_seconds
+            empty_read_backoff = EMPTY_READ_BACKOFF_INITIAL_SECONDS
             while not should_stop():
+                if deadline is not None and clock() >= deadline:
+                    print("Passive serial capture reached its deadline.", file=sys.stderr)
+                    return 2
+                read_started = clock()
                 data = serial_port.read(4096)
                 if data:
+                    empty_read_backoff = EMPTY_READ_BACKOFF_INITIAL_SECONDS
                     output_file.write(data)
+                    continue
+
+                # A real serial port blocks for its configured timeout. A
+                # broken or detached backend can return an empty read
+                # immediately. Back off only in that pathological case, and
+                # reset after real data, so the recorder cannot become a
+                # CPU-bound loop without penalising normal serial timeouts.
+                if clock() - read_started < IMMEDIATE_EMPTY_READ_SECONDS:
+                    sleep(empty_read_backoff)
+                    empty_read_backoff = min(
+                        empty_read_backoff * 2,
+                        EMPTY_READ_BACKOFF_MAX_SECONDS,
+                    )
                 else:
-                    # PySerial normally blocks for its configured timeout. A
-                    # broken backend or test double can return immediately;
-                    # never let that turn a detached recorder into a CPU loop.
-                    time.sleep(0.01)
+                    empty_read_backoff = EMPTY_READ_BACKOFF_INITIAL_SECONDS
     except (OSError, serial.SerialException) as error:
         print(f"Passive serial capture failed: {error}", file=sys.stderr)
         return 1
@@ -84,11 +114,15 @@ def main():
     parser.add_argument("--port", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--ready-file", required=True)
+    parser.add_argument("--deadline-seconds", type=float)
     args = parser.parse_args()
+
+    if args.deadline_seconds is not None and args.deadline_seconds <= 0:
+        parser.error("--deadline-seconds must be greater than zero")
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    return capture(args.port, args.output, args.ready_file)
+    return capture(args.port, args.output, args.ready_file, deadline_seconds=args.deadline_seconds)
 
 
 if __name__ == "__main__":
