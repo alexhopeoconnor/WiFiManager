@@ -21,7 +21,7 @@ wm_write_ota_fixture_identity A
 identity_file="$WIFIMANAGER_OTA_IDENTITY_DIR/ota_fixture_identity.h"
 [[ "$(stat -c '%a' "$WIFIMANAGER_OTA_IDENTITY_DIR")" == 700 ]]
 [[ "$(stat -c '%a' "$identity_file")" == 600 ]]
-rg -Fqx '#define WM_OTA_FIXTURE_IMAGE "A"' "$identity_file"
+grep -Fqx '#define WM_OTA_FIXTURE_IMAGE "A"' "$identity_file"
 
 wm_lock_ota_fixture_environment esp8266_ota
 collision_output="$temporary_root/lock-collision.log"
@@ -35,7 +35,7 @@ if (
     echo "A second test-harness process unexpectedly acquired the same OTA environment lock." >&2
     exit 1
 fi
-rg -Fqx "OTA fixture environment 'esp8266_ota' is already in use by another local test-harness run." "$collision_output"
+grep -Fqx "OTA fixture environment 'esp8266_ota' is already in use by another local test-harness run." "$collision_output"
 
 wm_harness_lock_resource "test resource" "identity-test:shared-resource"
 if (
@@ -46,7 +46,7 @@ if (
     echo "A second test-harness process unexpectedly acquired the same resource lock." >&2
     exit 1
 fi
-rg -Fqx 'Cannot start: test resource is already in use by another local test-harness process.' "$collision_output"
+grep -Fqx 'Cannot start: test resource is already in use by another local test-harness process.' "$collision_output"
 
 wm_remove_ota_fixture_identity
 [[ ! -e "$identity_file" ]]
